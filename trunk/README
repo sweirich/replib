@@ -1,0 +1,44 @@
+-----------------------------------------------------------------------------
+-- |
+-- 
+-- Copyright   :  (c) The University of Pennsylvania, 2006
+-- License     :  BSD
+-- 
+-- Maintainer  :  sweirich@cis.upenn.edu, byorgey@cis.upenn.edu
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-- RepLib 
+--    a library of derivable type classes based on representation types
+--
+--  See http://www.cis.upenn.edu/~sweirich/RepLib for more information.
+-----------------------------------------------------------------------------
+
+RepLib has been tested with GHC 6.8.3 and 6.10.3.
+
+This library contains the following modules:
+
+RepLib.R           - Basic type representations
+RepLib.R1          - Parameterized type representations
+RepLib.Derive      - Template Haskell code to automatically derive 
+                     representations of datatypes.
+RepLIb.PreludeReps - Reps of Prelude types
+RepLib.RepAux      - Helper functions to define type-indexed functions
+
+RepLib.Lib         - Examples of specializable type-indexed functions
+RepLib.PreludeLib  - Examples type-indexed functions from prelude
+
+RepLib.SYB.Aliases - SYB: Port of Data.Generics.Aliases
+RepLib.SYB.Schemes - SYB: Port of Data.Generics.Schemes
+
+RepLib   - Toplevel module that imports all of the above
+
+To use this library, import RepLib and derive representations of your
+datatypes. The "Lib" module contains a number of type-indexed
+operations that have been predefined.  To see an example of
+automatically deriving the representation of a datatype, see the file
+Main.hs.
+
+Currently, the representations of datatypes with record components,
+GADTs and nested datatypes cannot be automatically derived.
+
