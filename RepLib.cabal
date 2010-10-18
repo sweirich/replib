@@ -1,0 +1,34 @@
+name:           RepLib
+version:        0.2.2
+license:        LGPL
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.2.3
+tested-with:    GHC == 6.12.1
+author:         Stephanie Weirich
+maintainer:     Chris Casinghino <ccasin@cis.upenn.edu>
+                Brent Yorgey <byorgey@cis.upenn.edu>
+                Stephanie Weirich <sweirich@cis.upenn.edu>
+homepage:       http://www.cis.upenn.edu/~sweirich/RepLib
+category:       Data
+extra-source-files: README, examples/Main.hs, examples/UnifyExp.hs
+synopsis:       Generic programming library with representation types
+description:    Generic programming library providing structural
+                polymorphism and other features.
+
+Library
+  build-depends: base >= 4.2 && < 5, haskell98 >= 1.0 && < 1.1, 
+                 template-haskell >= 2.4 && < 2.5, mtl >= 1.1 && < 1.2
+  exposed-modules:
+    Data.RepLib,
+    Data.RepLib.R,
+    Data.RepLib.R1,
+    Data.RepLib.Lib,
+    Data.RepLib.PreludeReps,
+    Data.RepLib.PreludeLib,
+    Data.RepLib.RepAux,
+    Data.RepLib.Derive,
+    Data.RepLib.SYB.Aliases,
+    Data.RepLib.SYB.Schemes,
+    Data.RepLib.Unify
+  extensions: GADTs
