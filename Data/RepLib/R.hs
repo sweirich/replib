@@ -33,11 +33,12 @@ data R a where
    Arrow   :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
    Data    :: DT -> [Con R a] -> R a 
 
+
 data Emb l a  = Emb { to     :: l -> a, 
                       from   :: a -> Maybe l, 
                       labels :: Maybe [String],  
                       name   :: String,
-							 fixity :: Fixity
+		      fixity :: Fixity
                      }
 
 data Fixity =  Nonfix
@@ -46,7 +47,7 @@ data Fixity =  Nonfix
                 | Infixr     { prec      :: Int }
 
 
-data DT       = forall l. DT String (MTup R l)
+data DT       = forall l. DT String (MTup R l) 
 data Con r a  = forall l. Con (Emb l a) (MTup r l)
 
 
@@ -101,30 +102,6 @@ instance Rep Integer where rep = Integer
 instance Rep a => Rep (IO a) where rep = IO rep
 instance Rep IOError where rep = IOError
 instance (Rep a, Rep b) => Rep (a -> b) where rep = Arrow rep rep
-
--- Booleans
-{-
-rTrueEmb :: Emb Nil Bool
-rTrueEmb =  Emb { to = \Nil -> True,
-                  from = \x -> if x then Just Nil else Nothing,
-                  labels = Nothing,
-                  name = "True",
-						fixity = Nonfix
-                 }
-
-rFalseEmb :: Emb Nil Bool
-rFalseEmb =  Emb { to = \Nil -> False,
-                   from = \x -> if x then Nothing else Just Nil,
-                   labels = Nothing,
-                   name = "False",
-						 fixity = Nonfix
-                  }
-
-rBool :: R Bool
-rBool = Data (DT "Bool" MNil) [Con rTrueEmb, Con rFalseEmb]
-
-instance Rep Bool where rep = rBool
- -}
       
 -- Unit
 
@@ -156,7 +133,7 @@ rPairEmb =
         from = \(a,b) -> Just (a :*: b :*: Nil),
         labels = Nothing, 
         name = "(,)",
-		  fixity = Nonfix -- ???
+        fixity = Nonfix -- ???
       }
 
 -- Lists
@@ -171,7 +148,7 @@ rNilEmb = Emb {   to   = \Nil -> [],
                            []     ->  Just Nil,
                   labels = Nothing, 
                   name = "[]",
-						fixity = Nonfix
+		  fixity = Nonfix
 					
                  }
 
@@ -184,48 +161,9 @@ rConsEmb =
                     []        -> Nothing,
             labels = Nothing, 
             name = ":",
-				fixity = Nonfix -- ???
+	    fixity = Nonfix -- ???
           }
 
 instance Rep a => Rep [a] where
    rep = rList 
-
-{-
--- Maybe representation
-
-rJust :: Rep a => Con (Maybe a)
-rJust = Con (rJustEmb)
-
-rJustEmb :: Emb (a :*: Nil) (Maybe a)
-rJustEmb = Emb 
-  { to   = (\(x :*: Nil) -> Just x),
-    from  = \x -> case x of 
-            (Just y) -> Just (y :*: Nil)
-            Nothing  -> Nothing,
-    labels = Nothing, 
-    name = "Just"
-   }
-
-rNothing :: Con (Maybe a)
-rNothing = Con rNothingEmb
-
-rNothingEmb :: Emb Nil (Maybe a)
-rNothingEmb = Emb 
-  { to   = \Nil -> Nothing,
-    from  = \x -> case x of 
-             Nothing -> Just Nil
-             _       -> Nothing,
-    labels = Nothing,
-    name = "Nothing"
-  }
-
-rMaybe :: forall a. Rep a => R (Maybe a)
-rMaybe = Data (DT "Maybe" ((rep :: R a) :+: MNil))
-              [rJust, rNothing]
-
-instance Rep a => Rep (Maybe a) where
-   rep = rMaybe
--}
--- Ordering
--- Either
 
