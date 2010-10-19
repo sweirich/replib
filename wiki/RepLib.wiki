@@ -1,0 +1,14 @@
+#summary Intro page for RepLib Library
+
+= RepLib = 
+
+RepLib is a Haskell Library for automatically deriving instances of type classes using generic programming. 
+
+
+
+
+= Links =
+
+The old webpage for RepLib is [http://www.cis.upenn.edu/~sweirich/RepLib/ here]. It is no longer updated and will go away soon.
+
+RepLib is available on [http://hackage.haskell.org/package/RepLib Hackage]
