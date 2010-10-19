@@ -16,7 +16,10 @@
 -----------------------------------------------------------------------------
 module Data.RepLib.RepAux (
   -- ** Casting operations 
-  compR, cast, castR, gcast, gcastR,
+  eqR, cast, castR, gcast, gcastR,
+
+  -- ** Comparison
+  compareR,
 
   -- ** Operations for heterogeneous lists 
   findCon, Val(..), foldl_l, foldr_l, map_l, mapQ_l, mapM_l, fromTup, fromTupM, toList,
@@ -41,29 +44,29 @@ import GHC.Base (unsafeCoerce#)
 ------ Casting
 
 -- | Determine if two reps are for the same type
-compR :: R a -> R b -> Bool
-compR Int Int = True
-compR Char Char = True
-compR Float Float = True
-compR Integer Integer = True
-compR Double Double = True
-compR (IO t1) (IO t2) = compR t1 t2
-compR IOError IOError = True
-compR (Arrow t1 t2) (Arrow s1 s2) = compR t1 s1 && compR t2 s2
-compR (Data rc1 _) (Data rc2 _) = compDT rc1 rc2
-compR _ _ = False
+eqR :: R a -> R b -> Bool
+eqR Int Int = True
+eqR Char Char = True
+eqR Float Float = True
+eqR Integer Integer = True
+eqR Double Double = True
+eqR (IO t1) (IO t2) = eqR t1 t2
+eqR IOError IOError = True
+eqR (Arrow t1 t2) (Arrow s1 s2) = eqR t1 s1 && eqR t2 s2
+eqR (Data rc1 _) (Data rc2 _) = eqDT rc1 rc2
+eqR _ _ = False
 
-compDT :: DT -> DT -> Bool
-compDT (DT str1 rt1) (DT str2 rt2) = str1 == str2 && compRTup rt1 rt2
+eqDT :: DT -> DT -> Bool
+eqDT (DT str1 rt1) (DT str2 rt2) = str1 == str2 && eqRTup rt1 rt2
 
-compRTup :: MTup R t1 -> MTup R t2 -> Bool
-compRTup MNil MNil = True
-compRTup (r1 :+: rt1) (r2 :+: rt2) = compR r1 r2 && compRTup rt1 rt2
+eqRTup :: MTup R t1 -> MTup R t2 -> Bool
+eqRTup MNil MNil = True
+eqRTup (r1 :+: rt1) (r2 :+: rt2) = eqR r1 r2 && eqRTup rt1 rt2
 
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
 castR (ra::R a) (rb::R b) = 
-    if compR ra rb then \(x::a) -> Just (unsafeCoerce# x::b) else \x -> Nothing
+    if eqR ra rb then \(x::a) -> Just (unsafeCoerce# x::b) else \x -> Nothing
 
 -- | The type-safe cast operation, implicit arguments
 cast :: forall a b. (Rep a, Rep b) => a -> Maybe b
@@ -71,13 +74,49 @@ cast x = castR (rep :: R a) (rep :: R b) x
 
 -- | Leibniz equality between types, explicit representations
 gcastR :: forall a b c. R a -> R b -> c a -> Maybe (c b)
-gcastR ra rb = if compR ra rb
+gcastR ra rb = if eqR ra rb
         then \(x :: c a) -> Just (unsafeCoerce# x :: c b)
         else \x -> Nothing
 
 -- | Leibniz equality between types, implicity representations
 gcast :: forall a b c. (Rep a, Rep b) => c a -> Maybe (c b)
 gcast = gcastR (rep :: R a) (rep :: R b)      
+
+---------- (Heterogeneous) Ordering -------------------------
+
+-- | Heterogeneous Ordering    
+compareR :: R a -> R b -> Ordering 
+compareR Int Int = EQ
+compareR Int _   = LT
+compareR _   Int = GT
+compareR Char Char = EQ
+compareR Char _  = LT
+compareR _ Char  = GT
+compareR Integer Integer = EQ
+compareR Integer _  = LT
+compareR _ Integer  = GT
+compareR Float Float = EQ
+compareR Float _  = LT
+compareR _ Float  = GT
+compareR Rational Rational = EQ
+compareR Rational _  = LT
+compareR _ Rational  = GT
+compareR IOError IOError = EQ
+compareR IOError _  = LT
+compareR _ IOError  = GT
+compareR (IO r1) (IO r2) = compareR r1 r2
+compareR (IO _) _  = LT
+compareR _ (IO _)  = GT
+compareR (Arrow r1 r2) (Arrow r3 r4) =
+   case compareR r1 r3 of 
+      EQ -> compareR r2 r4
+      ord -> ord
+compareR (Arrow _ _) _  = LT
+compareR _ (Arrow _ _)  = GT
+compareR (Data (DT str1 _) _) (Data (DT str2 _) _) = 
+   compare str1 str2
+compareR (Data _ _) _ = LT
+compareR _ (Data _ _) = GT
 
 --------- Basic instances and library operations for heterogeneous lists ---------------
 
