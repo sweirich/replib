@@ -67,9 +67,6 @@ import Data.Monoid
 import Control.Monad.Reader (Reader,ask,local,runReader)
 import System.IO.Unsafe (unsafePerformIO)
 
-(<>) :: Monoid m => m -> m -> m
-(<>) = mappend
-
 ---------------------------------------------------
 -- | Names are things that get bound.
 data Name = Nm (String, Integer)   -- free names
