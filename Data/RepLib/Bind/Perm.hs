@@ -14,7 +14,7 @@
 ----------------------------------------------------------------------
 
 module Data.RepLib.Bind.Perm (
-    Perm, single, apply, support, isid
+    Perm, single, (<>), apply, support, isid
   ) where
 
 import Data.Monoid
@@ -36,10 +36,13 @@ instance Ord a => Eq (Perm a) where
    p1 == p2 = all (\x -> apply p1 x == apply p2 x) (support p1)
               && support p1 `seteq` support p2
 
--- | Permutations form a monoid.  'mempty' is the identity permutation
---   which has no effect.  `mappend` is composition of permutations
---   (the right-hand permutation is applied first).
-instance Eq a => Monoid (Perm a) where
+-- | Permutations form a monoid:
+--
+--     * 'mempty' is the identity permutation which has no effect.
+--
+--     * 'mappend' is composition of permutations
+--       (the right-hand permutation is applied first).
+instance Monoid (Perm a) where
   mempty            = Empty
   Empty `mappend` p = p
   p `mappend` Empty = p
@@ -49,6 +52,11 @@ instance Eq a => Monoid (Perm a) where
 --   @y@ but leaves all other values alone.
 single :: Eq a => a -> a -> Perm a
 single = Single
+
+-- | Compose two permutations.  The right-hand permutation will be
+--   applied first.
+(<>) :: Perm a -> Perm a -> Perm a
+(<>) = mappend
 
 -- | Apply a permutation to an object, possibly resulting in a
 --   different object.
@@ -66,7 +74,6 @@ first (Join p1 p2) = case first p1 of
    Nothing -> first p2
    Just (s, p1') -> Just (s, Join p1' p2)
 
--- XXX change 'names' to a better name?
 -- | Return a list of all the objects mentioned by a permutation.
 names :: Eq a => Perm a -> [a]
 names Empty        = []
