@@ -36,6 +36,7 @@ toSNat (Data (DT "Data.RepLib.Vec.S" (rm :+: MNil)) []) =
        (unsafeCoerce# (SS (toSNat rm)) :: SNat n)
 toSNat _ = error "BUG: toSNat can only be called with the representation of a natural number"
 
+
 -- | a tuple of n values of type a
 type family Tup a n :: *
 type instance Tup a Z = Nil
