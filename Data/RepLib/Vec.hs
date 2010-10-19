@@ -15,25 +15,33 @@ where
 import Data.RepLib
 import GHC.Base (unsafeCoerce#)
 
-data Z
+-- | Natural numbers
+data Z 
 data S n
 
 $(derive [''Z, ''S])
 
+-- | Singleton GADT for natural numbers
 data SNat a where
   SZ :: SNat Z
   SS :: Rep n => SNat n -> SNat (S n)
 
+-- | Convert a representation of a natural number into a singleton
+-- WARNING: Only call this on *numbers*
+-- It demonstrates a deficiency of reps for void/abstract datatypes
 toSNat :: forall n. R n -> (SNat n)
-toSNat (Data (DT "Z" MNil) []) = 
+toSNat (Data (DT "Data.RepLib.Vec.Z" MNil) []) = 
        (unsafeCoerce# SZ :: SNat n)
-toSNat (Data (DT "S" (rm :+: MNil)) []) = 
+toSNat (Data (DT "Data.RepLib.Vec.S" (rm :+: MNil)) []) = 
        (unsafeCoerce# (SS (toSNat rm)) :: SNat n)
+toSNat _ = error "BUG: toSNat can only be called with the representation of a natural number"
 
+-- | a tuple of n values of type a
 type family Tup a n :: *
 type instance Tup a Z = Nil
 type instance Tup a (S m) = a :*: (Tup a m)
 
+-- | a vector of n values of type a
 data Vec a n where
  VNil  :: Vec a Z
  VCons :: Rep n => a -> Vec a n -> Vec a (S n)
@@ -58,9 +66,11 @@ vecEmb sn =   (Emb { to = gTo sn,
                     labels = Nothing, 
                     name = "", 
                     fixity = Nonfix })
+
+-- | Rep of the vector type
 rVec :: forall a n. (Rep a, Rep n) => R (Vec a n)
 rVec =
-  Data (DT "Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
+  Data (DT "Data.RepLib.Vec.Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
        [ Con (vecEmb sn)
              (gMTup (rep :: R a) sn) ]  where
      sn :: SNat n 
@@ -72,7 +82,7 @@ gMTup1 ra (SS sm) = dict :+: gMTup1 ra sm
 
 rVec1 :: forall a n ctx. (Rep a, Rep n, Sat (ctx a)) => R1 ctx (Vec a n)
 rVec1 =
-  Data1 (DT "Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
+  Data1 (DT "Data.RepLib.Vec.Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
        [ Con (vecEmb sn)
              (gMTup1 (rep :: R a) sn) ]  where
      sn :: SNat n 
