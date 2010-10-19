@@ -1,5 +1,5 @@
 name:           RepLib
-version:        0.2.2
+version:        0.3
 license:        LGPL
 license-file:   LICENSE
 build-type:     Simple
@@ -30,5 +30,8 @@ Library
     Data.RepLib.Derive,
     Data.RepLib.SYB.Aliases,
     Data.RepLib.SYB.Schemes,
-    Data.RepLib.Unify
+    Data.RepLib.Unify,
+    Data.RepLib.Bind.Nominal,
+    Data.RepLib.Bind.LocallyNameless,
+    Data.RepLib.Bind.Perm
   extensions: GADTs
