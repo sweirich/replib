@@ -23,13 +23,13 @@ import Data.RepLib.Derive
 import Language.Haskell.TH
 
 $(derive [''Bool,
-	       ''Maybe,
-  	       ''Either, 
- 	       ''Ordering, 
+          ''Maybe,
+          ''Either, 
+          ''Ordering, 
           tupleTypeName 3,
-			 tupleTypeName 4,
-			 tupleTypeName 5,
-			 tupleTypeName 6,
-			 tupleTypeName 7]) 
+          tupleTypeName 4,
+          tupleTypeName 5,
+          tupleTypeName 6,
+          tupleTypeName 7]) 
 
 
