@@ -14,10 +14,10 @@
 ----------------------------------------------------------------------
 
 module Data.RepLib.Bind.Perm (
-    Perm, empty, single,
-    join, apply, support, isid, joins
+    Perm, single, apply, support, isid
   ) where
 
+import Data.Monoid
 import Data.List
 import System.IO.Unsafe
 
@@ -27,25 +27,28 @@ data Perm a = Empty
             | Join (Perm a) (Perm a)
   deriving (Show)
 
+-- Permutations are represented as a list of swaps, to be applied from
+-- right to left.  The list is stored as a join-list for efficiency.
+
+-- | Two permutations are equal if they have the same behavior when
+--   applied, i.e. they send the same objects to the same objects.
 instance Ord a => Eq (Perm a) where
    p1 == p2 = all (\x -> apply p1 x == apply p2 x) (support p1)
               && support p1 `seteq` support p2
 
--- | Create an identity permutation which has no effect.
-empty :: Eq a => Perm a
-empty  = Empty
+-- | Permutations form a monoid.  'mempty' is the identity permutation
+--   which has no effect.  `mappend` is composition of permutations
+--   (the right-hand permutation is applied first).
+instance Eq a => Monoid (Perm a) where
+  mempty            = Empty
+  Empty `mappend` p = p
+  p `mappend` Empty = p
+  p1 `mappend` p2   = Join p1 p2
 
 -- | Create a singleton permutation.  @'single' x y@ exchanges @x@ and
 --   @y@ but leaves all other values alone.
 single :: Eq a => a -> a -> Perm a
 single = Single
-
--- XXX replace with Monoid instance
--- | Compose two permutations.
-join :: Eq a => Perm a -> Perm a -> Perm a
-join Empty p = p
-join p Empty = p
-join p1 p2   = Join p1 p2
 
 -- | Apply a permutation to an object, possibly resulting in a
 --   different object.
@@ -80,10 +83,6 @@ isid :: Eq a => Perm a -> Bool
 isid Empty = True
 isid (Single x y) = x == y
 isid p = support p == []
-
--- | Compose an entire list of permutations.
-joins :: Eq a => [Perm a] -> Perm a
-joins = foldl join Empty
 
 seteq :: Ord a => [a] -> [a] -> Bool
 seteq x y = nub (sort x) == nub (sort y)
