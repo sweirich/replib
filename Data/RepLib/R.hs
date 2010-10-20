@@ -20,7 +20,6 @@ module Data.RepLib.R where
 
 import Data.List
 
-
 data R a where
    Int     :: R Int
    Char    :: R Char 
@@ -38,7 +37,7 @@ data Emb l a  = Emb { to     :: l -> a,
                       from   :: a -> Maybe l, 
                       labels :: Maybe [String],  
                       name   :: String,
-		      fixity :: Fixity
+                      fixity :: Fixity
                      }
 
 data Fixity =  Nonfix
@@ -149,7 +148,6 @@ rNilEmb = Emb {   to   = \Nil -> [],
                   labels = Nothing, 
                   name = "[]",
 		  fixity = Nonfix
-					
                  }
 
 rConsEmb :: Emb (a :*: [a] :*: Nil) [a]
