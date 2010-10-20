@@ -41,6 +41,7 @@ eachother.
 -- Name generation is controlled via the 'Fresh' and 'LFresh' monads.
 module Data.RepLib.Bind.LocallyNameless
   (Fresh(..),Alpha(..),HasNext(..)
+  ,LFresh(..),lunbind,lunbind2,lunbind3
   ,AlphaCtx
   ,Name,rName,name1,name2,name3,name4,name5,name6,name7,name8,name9, name10
   ,name2Int,integer2Name,string2Name
@@ -766,9 +767,13 @@ class Monad m => LFresh m where
   -- | avoid these names when freshening in the subcomputation.
   avoid   :: [Name] -> m a -> m a
 
+
+
+
 -- | Reader monad instance for local freshness class.
 instance LFresh (Reader Integer) where
   lfresh (Nm (s,j)) = do { n <- ask; return (Nm (s, max j (n+1))) }
+  avoid []          = id
   avoid names       = local (max k) where
         k = maximum (map name2Int names)
 
