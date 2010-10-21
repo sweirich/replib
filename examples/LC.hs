@@ -16,20 +16,18 @@
 --
 -----------------------------------------------------------------------------
 
--- | An example demonstration of the binding library.
+-- | A very simple example demonstration of the binding library
+-- based on the untyped lambda calculus.
 module LC where
 
 import Data.RepLib 
 import Data.RepLib.Bind.LocallyNameless 
-    (Name, rName, string2Name,
-     Bind, rBind, bind, 
-     -- bind :: (Alpha a, Alpha b) => Bind a b
+    (Name, string2Name,
+     Bind, bind, 
      LFresh, lunbind,
-     -- lunbind :: LFresh m => Bind a b -> m (a,b)
      Alpha, fv,
-     -- fv  :: Alpha a => a -> [ Name ]
-    Subst(isvar), subst
-     -- subst :: Subst b a => Name -> b -> a -> a 
+     Subst(isvar), subst
+     rName, rBind
     )
 import Control.Monad.Reader (Reader, runReader)
 
