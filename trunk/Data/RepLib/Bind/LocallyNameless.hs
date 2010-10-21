@@ -40,21 +40,33 @@ eachother.
 --     'Subst' -- for subtitution functions.
 -- Name generation is controlled via the 'Fresh' and 'LFresh' monads.
 module Data.RepLib.Bind.LocallyNameless
-  (Fresh(..),Alpha(..),HasNext(..)
-  ,LFresh(..),lunbind,lunbind2,lunbind3
-  ,AlphaCtx
-  ,Name,rName,name1,name2,name3,name4,name5,name6,name7,name8,name9, name10
-  ,name2Int,integer2Name,string2Name
-  ,binders,patfv,fv
-  ,aeq
-  ,Bind,rBind,bind,unbind,unbind2,unbind3
-  ,Rebind,rRebind,rebind,reopen
-  ,Annot(..),rAnnot
-  ,Or,or,unOr,rOr
-  ,Subst(..), matchR1
-  ,unsafeUnBind
-  ,abs_swaps',abs_fv',abs_freshen',abs_match'
-  ,abs_nthpatrec,abs_findpatrec,abs_close,abs_open
+  ( -- * --
+    Name, Bind, Annot(..), Rebind,
+    -- * --
+    integer2Name,string2Name,
+    name1,name2,name3,name4,name5,name6,name7,name8,name9, name10,
+    name2Int,  -- change to integer
+    -- * -- Ignore all methods of this class
+    Alpha(..),
+    binders, patfv, fv, -- use these instead
+    aeq,
+    -- * --
+    Fresh(..),
+    -- * -- Bind operations
+    bind,unbind,unbind2,unbind3,unsafeUnBind,
+    -- * -- revise? eliminate?
+    HasNext(..),LFresh(..),lunbind,lunbind2,lunbind3,
+    -- * -- Rebind operations
+    rebind,reopen,
+    -- * -- Substitution
+    Subst(..),
+    -- * -- For abstract types
+    abs_swaps',abs_fv',abs_freshen',abs_match',
+    abs_nthpatrec,abs_findpatrec,abs_close,abs_open,
+   -- * -- Advanced
+   AlphaCtx,matchR1,
+   -- * -- Please ignore
+   rName,rBind,rRebind,rAnnot
 ) where
 
 import Data.RepLib
@@ -713,10 +725,12 @@ freshFor n@(Nm (s,j)) ns | not (n `List.in` ns) -> n
 -- A monad "m" supports the nextInteger operation if it
 -- can generate new integers that are fresh for a global scope.
 
+-- XXX remove Monad constraint
 class Monad m => HasNext m where
   nextInteger :: m Integer  -- reads integer and increments it
   resetNext   :: Integer -> m ()
 
+-- XXX remove Monad constraint
 class Monad m => Fresh m where
   fresh  :: Name -> m Name
 
@@ -761,6 +775,7 @@ unbind3 (B b1 c) (B b2 d) (B b3 e) = do
 -- monads that support freshness in an (implicit) local scope.  Names
 -- drawn are fresh for this particular scope, but not globally fresh.
 -- This class has a basic instance based on the reader monad.
+         -- XXX remove Monad constraint
 class Monad m => LFresh m where
   -- | pick a new name that is fresh for the current (implicit) scope.
   lfresh  :: Name -> m Name
