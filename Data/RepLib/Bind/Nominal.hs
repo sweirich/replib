@@ -18,7 +18,7 @@ module Data.RepLib.Bind.Nominal
   ,Subst(..),substR1,subst,substs
   ,unsafeUnBind,bind,unbind,unbind2,unbind3
   ,Rebind,rRebind,rebind,reopen
-  ,Annot(..),rAnnot,Or,or,unOr
+  ,Annot(..),rAnnot,Or,or
   ,name1,name2,name3,name4,name5,name2Int
   ,integer2Name,string2Name
   ,binders,patfv,fv,matchR1
