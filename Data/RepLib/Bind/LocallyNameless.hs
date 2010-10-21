@@ -1,4 +1,17 @@
-{-# LANGUAGE FlexibleInstances, UndecidableInstances, FlexibleContexts, MultiParamTypeClasses, TemplateHaskell, TypeOperators, ScopedTypeVariables, TypeSynonymInstances, RankNTypes, GADTs, EmptyDataDecls, StandaloneDeriving #-}
+{-# LANGUAGE FlexibleInstances,
+             UndecidableInstances,
+             FlexibleContexts,
+             MultiParamTypeClasses,
+             TemplateHaskell,
+             TypeOperators,
+             ScopedTypeVariables,
+             TypeSynonymInstances,
+             RankNTypes,
+             GADTs,
+             EmptyDataDecls,
+             StandaloneDeriving
+  #-}
+{- LANGUAGE  KitchenSink -}
 
 {- TODO:
 
@@ -30,26 +43,44 @@ eachother.
 
  -}
 
-
--- | Generic implementation of name binding functions, based on the library
--- RepLib, using a locally nameless representation
--- Datatypes with binding can be defined using the 'Name', 'Bind' types.
--- Expressive patterns for binding come from the 'Annot' and 'Rebind' types.
+----------------------------------------------------------------------
+-- |
+-- Module      :  Data.RepLib.Bind.LocallyNameless
+-- Copyright   :  (c) 2010, The University of Pennsylvania
+-- License     :  BSD-like (see LICENSE)
+--
+-- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- A generic implementation of name binding functions using a locally
+-- nameless representation.  Datatypes with binding can be defined
+-- using the 'Name' and 'Bind' types.  Expressive patterns for binding
+-- come from the 'Annot' and 'Rebind' types.
+--
 -- Important classes are:
---     'Alpha' -- the class of types and patterns that include binders, and
---     'Subst' -- for subtitution functions.
--- Name generation is controlled via the 'Fresh' and 'LFresh' monads.
+--
+--   * 'Alpha' -- the class of types and patterns that include binders,
+--
+--   * 'Subst' -- for subtitution functions.
+--
+-- Name generation is controlled via monads which implement the
+-- 'Fresh' and 'LFresh' classes.
+----------------------------------------------------------------------
+
 module Data.RepLib.Bind.LocallyNameless
-  ( -- * --
+  ( -- * Basic types
     Name, Bind, Annot(..), Rebind,
-    -- * --
-    integer2Name,string2Name,
-    name1,name2,name3,name4,name5,name6,name7,name8,name9, name10,
-    name2Int,  -- change to integer
-    -- * -- Ignore all methods of this class
+
+    -- ** Utilities
+    integer2Name, string2Name, name2Integer,
+    name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
+
+    -- * Alpha
     Alpha(..),
-    binders, patfv, fv, -- use these instead
+    binders, patfv, fv,
     aeq,
+
     -- * --
     Fresh(..),
     -- * -- Bind operations
@@ -81,63 +112,51 @@ import Control.Monad.Reader (Reader,ask,local,runReader)
 import System.IO.Unsafe (unsafePerformIO)
 
 ---------------------------------------------------
--- | Names are things that get bound.
+-- | 'Name's are things that get bound.  This type is intentionally
+--   abstract; to create a 'Name' you can use 'string2Name' or
+--   'integer2Name'.
 data Name = Nm (String, Integer)   -- free names
           | Bn Integer Integer     -- bound names / binding level + pattern index
    deriving (Eq, Ord)
 
 
--- | Type of a binding.  Morally, the type a should be a
--- 'Pattern' and the type b should be in the class 'AlphaTerm'.
--- We can Bind an "a" object in a "b" object if we
--- can create "fresh" a objects, and Names can be
--- unbound in "b" objects. Often "a" is Name
--- but that need not be the case.
+-- | The type of a binding.  We can 'Bind' an @a@ object in a @b@
+--   object if we can create \"fresh\" @a@ objects, and @a@ objects
+--   can occur unbound in @b@ objects. Often @a@ is 'Name' but that
+--   need not be the case.
+--
+--   Like 'Name', 'Bind' is also abstract. You can create bindings
+--   using 'bind' and take them apart with 'unbind' and friends.
 data Bind a b = B a b
 
+-- BAY: What is SBind?  It is defined here, never used, and not
+-- exported.  Can we get rid of it?
 data SBind a b = SB a b
 
--- | An annotation is a 'hole' in a pattern where variables
--- can be used, but not bound. For example patterns may include
--- type annotations, and those annotations can reference variables
--- without binding them.
--- Annotations do nothing special when they appear elsewhere in terms
+-- | An annotation is a \"hole\" in a pattern where variables can be
+--   used, but not bound. For example, patterns may include type
+--   annotations, and those annotations can reference variables
+--   without binding them.  Annotations do nothing special when they
+--   appear elsewhere in terms.
 newtype Annot a = Annot a deriving (Show, Read, Eq)
 
--- | Rebinding is for telescopes --- i.e. to support patterns that
--- also bind variables that appear later
+-- | 'Rebind' supports \"telescopes\" --- that is, patterns where
+--   bound variables appear in multiple subterms.
 data Rebind a b = R a (Bind a b)
 
--- | Special type for "OR" patterns, those that match two different ways
--- yet bind the same variables
-data Or a b = Or a b deriving (Show, Read, Eq)
-
--- fragily deriving the replib instances for Bind and Name
+-- Fragilely deriving the replib instances for Bind and Name
 -- in the same file that they are defined in. This shouldn't
--- work but it does.
-$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Or])
+-- work, but it does.
+$(derive [''Bind, ''Name, ''Annot, ''Rebind])
 
 ---------------------------------------------------------------
 -- Constructors and destructors for builtin types
 ---------------------------------------------------------------
 
-name1 :: Name
-name1 = Nm ("",1)
-name2 :: Name
-name2 = Nm ("",2)
-name3 :: Name
-name3 = Nm ("",3)
-name4 :: Name
-name4 = Nm ("",4)
-name5 :: Name
-name5 = Nm ("",5)
-name6 = Nm ("",6)
-name7 = Nm ("",7)
-name8 = Nm ("",8)
-name9 = Nm ("",9)
-name10 = Nm ("",10)
-name11 = Nm ("",11)
-
+-- some convenient names for testing
+name1, name2, name3, name4, name5, name6, name7, name8, name9, name10, name11 :: Name
+[name1, name2, name3, name4, name5, name6, name7, name8, name9, name10, name11]
+  = map (\n -> Nm ("",n)) [1..11]
 
 --instance Read Name where
 --  read s = error "FIXME"
@@ -148,13 +167,16 @@ instance Show Name  where
   show (Nm (x,n)) = x ++ (show n)
   show (Bn x y) =  show x ++ "@" ++ show y
 
-name2Int :: Name -> Integer
-name2Int (Nm (_,x)) = x
-name2Int (Bn _ _) = error "Internal Error: cannot call name2Int for bound names"
+-- | Get the integer index of a 'Name'.
+name2Integer :: Name -> Integer
+name2Integer (Nm (_,x)) = x
+name2Integer (Bn _ _) = error "Internal Error: cannot call name2Integer for bound names"
 
+-- | Create a 'Name' from an 'Integer'.
 integer2Name :: Integer -> Name
 integer2Name n = Nm ("",n)
 
+-- | Create a 'Name' from a 'String'.
 string2Name :: String -> Name
 string2Name s = Nm(s,0)
 
@@ -211,13 +233,6 @@ instance (Show a, Show b) => Show (Rebind a b) where
 -- been freshened.
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 reopen (R a (B _ b)) = (a, open initial a b)
-
--- | or patterns must bind exactly the same list of names
-or :: (Alpha a, Alpha b) => a -> b -> Maybe (Or a b)
-or a b = if fv a == fv b then Just (Or a b) else Nothing
-
-unOr :: Or a b -> (a, b)
-unOr (Or a b) = (a,b)
 
 ---------------------------------------------------------------
 --- | Determine alpha-equivalence
@@ -653,24 +668,6 @@ instance Alpha a => Alpha (Annot a) where
    findpatrec _ _ = (0, False)
    nthpatrec nm i = (i, Nothing)
 
-
-instance (Alpha a, Alpha b) => Alpha (Or a b) where
-   freshen' p (Or a b) = do
-    (a', pm) <- freshen' p a
-    let b' = swaps' p pm b
-    return (Or a' b', pm)
-
-   match' p (Or a1 b1) (Or a2 b2) = do
-    p1 <- match' p a1 a2
-    p2 <- match' p b1 b2
-    if p1 == p2 then Just p1 else Nothing
-
-   fv' c (Or a b) | mode c == Term = fv' (term c) a
-   fv' c (Or a b) | mode c == Pat  = fv' (term c) a ++ fv' (pat c) b
-
-   findpatrec (Or a b) nm = findpatrec a nm
-   nthpatrec (Or a b) i   = nthpatrec a i
-
 -- Instances for other types use the default definitions.
 instance Alpha Bool where
 instance Alpha Float where
@@ -790,7 +787,7 @@ instance LFresh (Reader Integer) where
   lfresh (Nm (s,j)) = do { n <- ask; return (Nm (s, max j (n+1))) }
   avoid []          = id
   avoid names       = local (max k) where
-        k = maximum (map name2Int names)
+        k = maximum (map name2Integer names)
 
 -- | Destruct a binding in the LFresh monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
@@ -902,7 +899,6 @@ instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b) where
 
 instance (Subst c a) => Subst c (Annot a) where
-instance (Subst c a, Subst c b) => Subst c (Or a b) where
 
 
 
