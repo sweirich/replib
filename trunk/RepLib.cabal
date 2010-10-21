@@ -17,8 +17,9 @@ description:    Generic programming library providing structural
                 polymorphism and other features.
 
 Library
-  build-depends: base >= 4.2 && < 5, haskell98 >= 1.0 && < 1.1, 
-                 template-haskell >= 2.4 && < 2.5, mtl >= 1.1 && < 1.2
+  build-depends: base >= 4.2 && < 5, 
+                 template-haskell >= 2.4 && < 2.5, mtl >= 1.1 && < 1.2,
+                 fingertree >= 0.0.1 && < 0.1, containers >= 0.3 && < 0.4
   exposed-modules:
     Data.RepLib,
     Data.RepLib.R,
