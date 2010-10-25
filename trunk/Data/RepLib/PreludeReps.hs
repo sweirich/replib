@@ -4,7 +4,6 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepLib.PreludeReps
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu
@@ -12,9 +11,9 @@
 -- Portability :  non-portable
 --
 -- 
--- Automatically derive representations for prelude types
---
------------------------------------------------------------------------------
+-- Representations for Prelude types, necessary to (automatically) derive 
+-- representations of user defined types.
+----------------------------------------------------------------------------- 
 module Data.RepLib.PreludeReps where
 
 import Data.RepLib.R

@@ -5,22 +5,24 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Derive
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  TBD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
--- code to automatically derive representations and instance declarations 
+-- Automatically derive representations and instance declarations 
 -- for user defined datatypes. 
---
+-- The typical use is
+-- @
+--     $(derive [''MyType1, ''MyType2])
+-- @
 --
 -----------------------------------------------------------------------------
 
 
 module Data.RepLib.Derive (
-	repr, reprs, repr1, repr1s, derive
+	derive
 ) where
 
 import Data.RepLib.R 
@@ -30,7 +32,8 @@ import Data.List (nub)
 import Data.Tuple
 
 
--- Given a type, produce its representation. 
+-- | Given a type, produce its representation. 
+
 -- Note, that the representation of a type variable "a" is (rep :: R a) so Rep a must be 
 -- in the context
 repty :: Type -> Exp
@@ -209,6 +212,7 @@ repcon1 d single rd1 ctxParams (name, sttys) =
                     in [| $(return expQ) :+: $(tl) |]) [| MNil |] sttys in
        [| Con $(remb single d (name,sttys)) $(rec) |]
 
+-- Generate a parameterized representation of a type
 repr1 :: Name -> Q [Dec]
 repr1 n = do info' <- reify n
              case info' of
@@ -267,6 +271,10 @@ repr1s :: [Name] -> Q [Dec]
 repr1s ns = foldl (\qd n -> do decs1 <- repr1 n 
                                decs2 <- qd
                                return (decs1 ++ decs2)) (return []) ns
+
+-- | Generate representations (both basic and parameterized) for a list of 
+-- types.
+derive :: [Name] -> Q [Dec]
 derive = repr1s
 
 --------------------------------------------------------------------------------------

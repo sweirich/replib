@@ -5,14 +5,13 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Data.RepLib.R
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
---
+-- Basic data structure and class for representation types
 --
 -----------------------------------------------------------------------------
 
@@ -20,6 +19,7 @@ module Data.RepLib.R where
 
 import Data.List
 
+-- | A value of type @R a@ is a representation of a type @a@. 
 data R a where
    Int     :: R Int
    Char    :: R Char 
@@ -32,7 +32,15 @@ data R a where
    Arrow   :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
    Data    :: DT -> [Con R a] -> R a 
 
+-- | Representation of a data constructor includes an
+-- embedding between the datatype and a list of other types
+-- as well as the representation of that list of other types.
+data Con r a  = forall l. Con (Emb l a) (MTup r l)
 
+-- | An embedding between a list of types @l@ and 
+-- a datatype @a@, based on a particular data constructor.
+-- The to function is a wrapper for the constructor, the 
+-- from function pattern matches on the constructor.
 data Emb l a  = Emb { to     :: l -> a, 
                       from   :: a -> Maybe l, 
                       labels :: Maybe [String],  
@@ -45,21 +53,26 @@ data Fixity =  Nonfix
                 | Infixl     { prec      :: Int }
                 | Infixr     { prec      :: Int }
 
-
+-- | Information about a datatype, including its
+-- fully qualified name and representation of 
+-- its type arguments.
 data DT       = forall l. DT String (MTup R l) 
-data Con r a  = forall l. Con (Emb l a) (MTup r l)
 
 
+-- | An empty list of types
 data Nil = Nil 
+-- | Cons for a list of types
 data a :*: l = a :*: l
 infixr 7 :*:
 
+-- | A heterogeneous list
 data MTup r l where
-    MNil   :: MTup ctx Nil
+    MNil   :: MTup r Nil
     (:+:)  :: (Rep a) => r a -> MTup r l -> MTup r (a :*: l)
 
 infixr 7 :+:
 
+-- | A Class of representatble types
 class Rep a where rep :: R a
 
 ------ Showing representations  (rewrite this with showsPrec?)
@@ -90,7 +103,7 @@ instance Eq (R a) where
 	 r1 == r2 = True
 
 
---- Representations for Haskell Prelude types
+--- Representations for (some) Haskell Prelude types
 
 instance Rep Int where rep = Int
 instance Rep Char where rep = Char

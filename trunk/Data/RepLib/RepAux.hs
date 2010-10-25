@@ -4,7 +4,6 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepAux
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu
@@ -78,7 +77,7 @@ gcastR ra rb = if eqR ra rb
         then \(x :: c a) -> Just (unsafeCoerce# x :: c b)
         else \x -> Nothing
 
--- | Leibniz equality between types, implicity representations
+-- | Leibniz equality between types, implicit representations
 gcast :: forall a b c. (Rep a, Rep b) => c a -> Maybe (c b)
 gcast = gcastR (rep :: R a) (rep :: R b)      
 

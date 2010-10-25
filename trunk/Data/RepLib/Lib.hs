@@ -7,20 +7,20 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepLib.Lib
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
--- A library of specializable, type-indexed functions 
+-- A library of type-indexed functions 
 --
 -----------------------------------------------------------------------------
 module Data.RepLib.Lib (
   -- * Available for all representable types
   subtrees, deepSeq, rnf,
-  -- * Derivable classes
+
+  -- * Specializable type-indexed functions
   GSum(..),
   Zero(..),
   Generate(..),
@@ -33,7 +33,7 @@ module Data.RepLib.Lib (
   Fold(..),
   crush, gproduct, gand, gor, flatten, count, comp, gconcat, gall, gany, gelem,
 
-  -- * Types and generators for derivable classes
+  -- * Auxiliary types and generators for derivable classes
   GSumD(..), ZeroD(..), GenerateD(..), EnumerateD(..), ShrinkD(..), LreduceD(..), RreduceD(..),
   rnfR, deepSeqR, gsumR1, zeroR1, generateR1, enumerateR1, lreduceR1, rreduceR1
   
@@ -50,7 +50,7 @@ import Data.RepLib.PreludeReps()
 -- overloading and higher-order polymorphism
 -- Also the same function as "children" from SYB III
 
--- | Produce all children of a datastructure with the same type
+-- | Produce all children of a datastructure with the same type.
 -- Note that subtrees is available for all representable types. For those that 
 -- are not recursive datatypes, subtrees will always return the
 -- empty list. But, these trivial instances are convenient to have 
@@ -62,13 +62,19 @@ subtrees x = [y | Just y <- gmapQ (cast :: Query (Maybe a)) x]
 -------------------- DeepSeq -----------------------
 
 
--- | deepSeq recursively forces the evaluation of its entire
--- argument.
+-- | Recursively force the evaluation of the first
+-- argument. For example, 
+-- @
+--  deepSeq ( x , y ) z where 
+--    x = ...
+--    y = ...
+-- @ 
+-- will evaluate both @x@ and @y@ then return @z@ 
 deepSeq :: Rep a => a -> b -> b
 deepSeq = deepSeqR rep
 
--- | rnf forces the evaluation of *datatypes* to their normal 
--- forms.  However, other types are left alone and not forced.
+-- | Force the evaluation of *datatypes* to their normal 
+-- forms. Other types are left alone and not forced.
 rnf :: Rep a => a -> a 
 rnf = rnfR rep
 
@@ -91,6 +97,10 @@ deepSeq_l (rb :+: rs) (b :*: bs) = deepSeqR rb b . deepSeq_l rs bs
 
 ------------------- Generic Sum ----------------------
 -- | Add together all of the @Int@s in a datastructure
+-- For example:
+-- gsum ( 1 , True, ("a", Maybe 3, []) , Nothing)
+-- 4
+-- 
 class Rep1 GSumD a => GSum a where
    gsum :: a -> Int 
    gsum = gsumR1 rep1
@@ -121,6 +131,10 @@ instance (GSum a) => GSum [a]
 
 -------------------- Zero ------------------------------
 -- | Create a zero element of a type
+-- @
+-- ( zero  :: ((Int, Maybe Int), Float))
+-- ((0, Nothing), 0.0)
+-- @
 class (Rep1 ZeroD a) => Zero a where
     zero :: a
     zero = zeroR1 rep1
@@ -159,6 +173,7 @@ instance Zero a => Zero [a]
 data GenerateD a = GenerateD { generateD :: Int -> [a] }
 
 -- | Generate elements of a type up to a certain depth
+-- 
 class Rep1 GenerateD a => Generate a where
   generate :: Int -> [a]
   generate = generateR1 rep1
@@ -219,6 +234,8 @@ data ShrinkD a = ShrinkD { shrinkD :: a -> [a] }
 instance Shrink a => Sat (ShrinkD a) where
     dict = ShrinkD { shrinkD    = shrink }
 
+-- | Given an element, return smaller elements of the same type
+-- for example, to automatically find small counterexamples when testing
 class (Rep1 ShrinkD a) => Shrink a where
     shrink :: a -> [a]
     shrink a = subtrees a ++ shrinkStep a 
@@ -246,13 +263,23 @@ instance (Shrink a, Shrink b) => Shrink (a,b)
 data RreduceD b a = RreduceD { rreduceD :: a -> b -> b }
 data LreduceD b a = LreduceD { lreduceD :: b -> a -> b }
 
+-- | A general version of fold right, use for Fold class below
 class Rep1 (RreduceD b) a => Rreduce b a where
     rreduce :: a -> b -> b
     rreduce = rreduceR1 rep1 
 
+-- | A general version of fold left, use for Fold class below
 class Rep1 (LreduceD b) a => Lreduce b a where
     lreduce :: b -> a -> b 
     lreduce = lreduceR1 rep1
+
+-- For example
+-- @ instance Fold [] where
+--	 foldRight op = rreduceR1 (rList1 (RreduceD { rreduceD = op })
+--					  (RreduceD { rreduceD = foldRight op }))
+--	 foldLeft op = lreduceR1 (rList1 (LreduceD  { lreduceD = op })
+--					 (LreduceD { lreduceD = foldLeft op }))
+-- @
 
 instance Rreduce b a => Sat (RreduceD b a) where
     dict = RreduceD { rreduceD = rreduce }
@@ -285,40 +312,54 @@ instance (Rreduce c a, Rreduce c b) => Rreduce c (a,b)
 instance Rreduce c a => Rreduce c[a] 
 
 -------------------- Fold -------------------------------
+-- | All of the functions below are defined using instances
+-- of the following class
 class Fold f where
 	 foldRight :: Rep a => (a -> b -> b) -> f a -> b -> b
 	 foldLeft  :: Rep a => (b -> a -> b) -> b -> f a -> b
 
+-- | Fold a bindary operation left over a datastructure
 crush      :: (Rep a, Fold t) => (a -> a -> a) -> a -> t a -> a 
 crush op   = foldLeft op
 
+-- | Multiply all elements together
 gproduct   :: (Rep a, Num a, Fold t) => t a -> a
 gproduct t = foldLeft (*) 1 t 
 
+-- | Ensure all booleans are true
 gand       :: (Fold t) => t Bool -> Bool
 gand t     = foldLeft (&&) True t
 
+-- | Ensure at least one boolean is true
 gor        :: (Fold t) => t Bool -> Bool
 gor  t     = foldLeft (||) False t
 
+-- | Convert to list
 flatten    :: (Rep a, Fold t) => t a -> [a]
 flatten t  = foldRight (:) t [] 
 
+-- | Count number of @a@s that appear in the argument
 count      :: (Rep a, Fold t) => t a -> Int
 count t    = foldRight (const (+1)) t 0 
 
+-- | Compose all functions in the datastructure together
 comp       :: (Rep a, Fold t) => t (a -> a) -> a -> a
 comp t     = foldLeft (.) id t
 
+-- | Concatenate all lists in the datastructure together
 gconcat    :: (Rep a, Fold t) => t [a] -> [a]
 gconcat t  = foldLeft (++) []  t
 
+-- | Ensure property holds of all data
 gall       :: (Rep a, Fold t) => (a -> Bool) -> t a -> Bool
 gall p t   = foldLeft (\a b -> a && p b) True t
 			  
+
+-- | Ensure property holds of some element
 gany       :: (Rep a, Fold t) => (a -> Bool) -> t a -> Bool
 gany p t   = foldLeft (\a b -> a || p b) False t
 
+-- | Is an element stored in a datastructure
 gelem      :: (Rep a, Eq a, Fold t) => a -> t a -> Bool
 gelem x t  = foldRight (\a b -> a == x || b) t False 
 
