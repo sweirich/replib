@@ -4,7 +4,6 @@
 -----------------------------------------------------------------------------
 -- 
 -- Module      :  RepLib.PreludeLib
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu

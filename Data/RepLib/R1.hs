@@ -5,7 +5,6 @@
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepLib.R1
--- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu
