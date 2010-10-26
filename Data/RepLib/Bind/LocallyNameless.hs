@@ -46,12 +46,11 @@ eachother.
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Data.RepLib.Bind.LocallyNameless
--- Copyright   :  (c) 2010, The University of Pennsylvania
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
 -- Stability   :  experimental
--- Portability :  portable
+-- Portability :  non-portable (-XKitchenSink)
 --
 -- A generic implementation of name binding functions using a locally
 -- nameless representation.  Datatypes with binding can be defined
@@ -76,28 +75,39 @@ module Data.RepLib.Bind.LocallyNameless
     integer2Name, string2Name, name2Integer,
     name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
 
-    -- * Alpha
+    -- * The 'Alpha' class
     Alpha(..),
+    swaps,
     binders, patfv, fv,
     aeq,
 
-    -- * --
+    -- * The 'Fresh' class
     Fresh(..),
-    -- * -- Bind operations
-    bind,unbind,unbind2,unbind3,unsafeUnBind,
-    -- * -- revise? eliminate?
-    HasNext(..),LFresh(..),lunbind,lunbind2,lunbind3,
-    -- * -- Rebind operations
-    rebind,reopen,
-    -- * -- Substitution
+
+    -- * Binding operations
+    bind,
+    unbind, unbind2, unbind3, unsafeUnBind,
+
+    -- * The 'LFresh' class
+    HasNext(..), LFresh(..),
+    lunbind, lunbind2, lunbind3,
+
+    -- * Rebinding operations
+    rebind, reopen,
+
+    -- * Substitution
     Subst(..),
-    -- * -- For abstract types
+
+    -- * For abstract types
     abs_swaps',abs_fv',abs_freshen',abs_match',
     abs_nthpatrec,abs_findpatrec,abs_close,abs_open,
-   -- * -- Advanced
-   AlphaCtx,matchR1,
-   -- * -- Please ignore
-   rName,rBind,rRebind,rAnnot
+
+   -- * Advanced
+   AlphaCtx, matchR1,
+
+   -- * Pay no attention to the man behind the curtain
+   -- $paynoattention
+   rName, rBind, rRebind, rAnnot
 ) where
 
 import Data.RepLib
@@ -111,7 +121,10 @@ import Data.Monoid
 import Control.Monad.Reader (Reader,ask,local,runReader)
 import System.IO.Unsafe (unsafePerformIO)
 
----------------------------------------------------
+------------------------------------------------------------
+-- Basic types
+------------------------------------------------------------
+
 -- | 'Name's are things that get bound.  This type is intentionally
 --   abstract; to create a 'Name' you can use 'string2Name' or
 --   'integer2Name'.
@@ -129,8 +142,7 @@ data Name = Nm (String, Integer)   -- free names
 --   using 'bind' and take them apart with 'unbind' and friends.
 data Bind a b = B a b
 
--- BAY: What is SBind?  It is defined here, never used, and not
--- exported.  Can we get rid of it?
+-- Set bindings.  TODO: implement.
 data SBind a b = SB a b
 
 -- | An annotation is a \"hole\" in a pattern where variables can be
@@ -149,9 +161,9 @@ data Rebind a b = R a (Bind a b)
 -- work, but it does.
 $(derive [''Bind, ''Name, ''Annot, ''Rebind])
 
----------------------------------------------------------------
--- Constructors and destructors for builtin types
----------------------------------------------------------------
+------------------------------------------------------------
+-- Utilities
+------------------------------------------------------------
 
 -- some convenient names for testing
 name1, name2, name3, name4, name5, name6, name7, name8, name9, name10, name11 :: Name
@@ -180,117 +192,73 @@ integer2Name n = Nm ("",n)
 string2Name :: String -> Name
 string2Name s = Nm(s,0)
 
-----------------------------------------------------------
--- | Smart constructor for binders
--- (aka close)
-bind :: (Alpha b, Alpha c) => b -> c -> Bind b c
-bind b c = B b (close initial b c)
+------------------------------------------------------------
+-- The Alpha class
+------------------------------------------------------------
 
--- | A destructor for binders that does not guarantee fresh
--- names for the binders.
-unsafeUnBind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
-unsafeUnBind (B a b) = (a, open initial a b)
+-- | The 'Alpha' type class is for types which may contain names.  The
+--   'Rep1' constraint means that we can only make instances of this
+--   class for types that have generic representations (which can be
+--   automatically derived by RepLib.)
+--
+--   Note that the methods of 'Alpha' should never be called directly!
+--   Instead, use other methods provided by this module which are
+--   defined in terms of 'Alpha' methods. (The only reason they are
+--   exported is to make them available to automatically-generated
+--   code.)
+--
+--   Most of the time, the default definitions of these methods will
+--   suffice, so you can make an instance for your data type by simply
+--   declaring
+--
+--   > instance Alpha MyType
+--
+class (Show a, Rep1 AlphaD a) => Alpha a where
 
-instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
-   b1 == b2 = b1 `aeq` b2
+  -- BAY: A bunch of these 'see foo' notes refer to things which are
+  -- not exported, should they be?
 
-instance (Alpha a, Alpha b, Ord a, Ord b) => Ord (Bind a b) where
-   compare (B a1 b1) (B a2 b2) =
-       case (match a1 a2) of
-         Just p  -> case compare a1 (swaps p a2) of
-                      EQ -> compare b1 b2
-                      otherwise -> otherwise
-         Nothing -> compare a1 a2
+  -- | See 'swaps'.
+  swaps' :: AlphaCtx -> Perm Name -> a -> a
+  swaps' = swapsR1 rep1
 
-instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
-         readPrec = R.parens $ (R.prec app_prec $ do
-                                  R.Ident "<" <- R.lexP
-                                  m1 <- R.step R.readPrec
-                                  R.Ident ">" <- R.lexP
-                                  m2 <- R.step R.readPrec
-                                  return (bind m1 m2))
-           where app_prec = 10
+  -- | See 'fv'.
+  fv' :: AlphaCtx -> a -> [Name]
+  fv' = fvR1 rep1
 
-         readListPrec = R.readListPrecDefault
+  -- | See 'lfreshen'.
+  lfreshen' :: LFresh m => AlphaCtx -> a -> (a -> Perm Name -> m b) -> m b
+  lfreshen' = lfreshenR1 rep1
 
-instance (Show a, Show b) => Show (Bind a b) where
-  showsPrec p (B a b) = showParen (p>0)
-      (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
+  -- | See 'freshen'.
+  freshen' :: Fresh m => AlphaCtx -> a -> m (a, Perm Name)
+  freshen' = freshenR1 rep1
 
+  -- | See 'match'.
+  match'   :: AlphaCtx -> a -> a -> Maybe (Perm Name)
+  match'   = matchR1 rep1
 
--- | Constructor for binding in patterns
-rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (bind a b)
+  -- | Replace free 'Name's by bound 'Name's.
+  close :: (Alpha b) => AlphaCtx -> b -> a -> a
+  close = closeR1 rep1
 
-instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
-   b1 == b2 = b1 `aeq` b2
+  -- | Replace bound 'Name's by free 'Name's.
+  open :: Alpha b => AlphaCtx -> b -> a -> a
+  open = openR1 rep1
 
-instance (Show a, Show b) => Show (Rebind a b) where
-  showsPrec p (R a (B _ b)) = showParen (p>0)
-      (showString "<<" . showsPrec p a . showString ">> " . showsPrec 0 b)
+  ---------------- PATTERN OPERATIONS ----------------------------
 
--- | destructor for binding patterns, the names should have already
--- been freshened.
-reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-reopen (R a (B _ b)) = (a, open initial a b)
+  -- | @'nthpatrec' b n@ looks up the @n@th name in the pattern @b@
+  -- (zero-indexed), returning the number of names encountered if not
+  -- found.
+  nthpatrec :: a -> Integer -> (Integer, Maybe Name)
+  nthpatrec = nthpatR1 rep1
 
----------------------------------------------------------------
---- | Determine alpha-equivalence
-aeq :: Alpha a => a -> a -> Bool
-aeq t1 t2 = case match t1 t2 of
-              Just p -> isid p
-              _      -> False
-
--- | List the binding variables in a pattern
-binders :: Alpha b => b -> [ Name ]
-binders = fv
-
--- | List variables that occur freely in annotations (not binding)
-patfv :: Alpha b => b -> [ Name ]
-patfv = fv' (pat initial)
-
--- | calculate the free variables of the term
-fv :: Alpha a => a -> [Name]
-fv = fv' initial
-
--- | The method "swaps" applys a permutation
-swaps :: Alpha a => Perm Name -> a -> a
-swaps = swaps' initial
-
--- | "Locally" freshen an object
-lfreshen :: Alpha a => LFresh m => a -> (a -> Perm Name -> m b) -> m b
-lfreshen = lfreshen' initial
-
--- | An object of type "b" can be freshened if a new
--- copy of "b" can be produced where all old *binding* Names
--- in "b" are replaced with new fresh Names, and the
--- permutation reports which Names were swapped by others.
-freshen :: (Fresh m, Alpha a) => a -> m (a, Perm Name)
-freshen = freshen' initial
-
--- | Match compares two data structures and produces a permutation
--- of their Names that will make them alpha-equivalent to
--- eachother. (Names that appear in annotations must match exactly.)
--- Also note that two terms are alpha-equivalent when the empty
--- permutation is returned.
-match   :: Alpha a => a -> a -> Maybe (Perm Name)
-match   = match' initial
-
-
--- | lookup up the nth name in the pattern b
--- PRECONDITION: number of names in the pattern must be at least n
-nthpat :: Alpha a => a -> Integer -> Name
-nthpat x i = case nthpatrec x i of
-                 (j, Nothing) -> error
-                   ("BUG: pattern index " ++ show i ++ " out of bounds by " ++ show j ++ "in" ++ show x)
-                 (_, Just n)  -> n
-
--- | find the (first) index of the name in the pattern
--- if it exists
-findpat :: Alpha a => a -> Name -> Maybe Integer
-findpat x n = case findpatrec x n of
-                   (i, True) -> Just i
-                   (_, False) -> Nothing
+  -- | Find the (first) index of the name in the pattern if it exists;
+  --   if not found ('Bool' = 'False'), return the number of names
+  --   encountered instead.
+  findpatrec :: a -> Name -> (Integer, Bool)
+  findpatrec = findpatR1 rep1
 
 
 -- | Many of the operations in the 'Alpha' class take an 'AlphaCtx':
@@ -311,67 +279,16 @@ pat c  = c { mode = Pat }
 term  :: AlphaCtx -> AlphaCtx
 term c  = c { mode = Term }
 
--- A mode is basically a flag that tells us whether we should be
--- looking at the names in the term, or if we are in a pattern and
--- should *only* be looking at the names in the annotations. The
--- standard mode is to use 'Term', the function 'fv', 'swaps',
--- 'lfreshen', 'freshen' and 'match' do this by default.
+-- | A mode is basically a flag that tells us whether we should be
+--   looking at the names in the term, or if we are in a pattern and
+--   should /only/ be looking at the names in the annotations. The
+--   standard mode is to use 'Term'; the function 'fv', 'swaps',
+--   'lfreshen', 'freshen' and 'match' do this by default.
 data Mode = Term | Pat deriving (Show, Eq, Read)
 
--- | The next class is for all terms that may contain binders The
--- 'Rep1' class constraint means that we can only make instances of
--- this class for types that have generic representations. (Derive
--- these using TH and RepLib.) Most of the time, the default (generic)
--- definitions of these methods will suffice. Furthermore, these methods
--- should not (and cannot) be called directly, as they maintain state
--- about the iteration.
-class (Show a, Rep1 AlphaD a) => Alpha a where
-
-  -- | See 'swaps'
-  swaps' :: AlphaCtx -> Perm Name -> a -> a
-  swaps' = swapsR1 rep1
-
-  -- | See 'fv'
-  fv' :: AlphaCtx -> a -> [Name]
-  fv' = fvR1 rep1
-
-  -- | See 'lfreshen'
-  lfreshen' :: LFresh m => AlphaCtx -> a -> (a -> Perm Name -> m b) -> m b
-  lfreshen' = lfreshenR1 rep1
-
-  -- | See 'freshen'
-  freshen' :: Fresh m => AlphaCtx -> a -> m (a, Perm Name)
-  freshen' = freshenR1 rep1
-
-  -- | See 'match'
-  match'   :: AlphaCtx -> a -> a -> Maybe (Perm Name)
-  match'   = matchR1 rep1
-
-  -- | replace free Names by bound Names
-  close :: (Alpha b) => AlphaCtx -> b -> a -> a
-  close = closeR1 rep1
-
-  -- | replace bound Names by free Names
-  -- level, new Names,
-  open :: Alpha b => AlphaCtx -> b -> a -> a
-  open = openR1 rep1
-
-  ---------------- PATTERN OPERATIONS ----------------------------
-
-  -- | lookup the nth name in the pattern b, returning
-  -- the number of names encoundered if not found
-  nthpatrec :: a -> Integer -> (Integer, Maybe Name)
-  nthpatrec = nthpatR1 rep1
-
-  -- | find the (first) index of the name in the pattern if
-  -- it exists, if not found (bool = false) return the number
-  -- of names encountered
-  findpatrec :: a -> Name -> (Integer, Bool)
-  findpatrec = findpatR1 rep1
-
-
--- class constraint hackery to allow us to override the
--- default definitions for certain classes
+-- | Class constraint hackery to allow us to override the default
+--   definitions for certain classes.  'AlphaD' is essentially a
+--   reified dictionary for the 'Alpha' class.
 data AlphaD a = AlphaD {
   swapsD    :: AlphaCtx -> Perm Name -> a -> a,
   fvD       :: AlphaCtx -> a -> [Name],
@@ -383,18 +300,16 @@ data AlphaD a = AlphaD {
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> Name -> (Integer, Bool),
   nthpatD   :: a -> Integer -> (Integer, Maybe Name)
-
-
- }
+  }
 
 instance Alpha a => Sat (AlphaD a) where
   dict = AlphaD swaps' fv' freshen' lfreshen' match'
            close open findpatrec nthpatrec
 
-
--- Generic definitions of the functions in the swap
--- class. (All functions that take representations end
--- in 'R1')
+----------------------------------------------------------------------
+-- Generic definitions for 'Alpha' methods.  (Note that all functions
+-- that take representations end in 'R1'.)
+----------------------------------------------------------------------
 
 closeR1 :: Alpha b => R1 AlphaD a -> AlphaCtx -> b -> a -> a
 closeR1 (Data1 _ cons) = \i a d ->
@@ -512,7 +427,9 @@ nthpatL (r :+: rs) (t :*: ts) i =
     s@(_, Just n) -> s
     (j, Nothing) -> nthpatL rs ts j
 
----------------- Specific instances ----------------------------
+------------------------------------------------------------
+-- Specific Alpha instances
+-----------------------------------------------------------
 
 instance Alpha Name  where
   fv' c (Nm n)   | mode c == Term = [ Nm n ]
@@ -704,43 +621,146 @@ abs_open :: (Alpha a, Alpha b) => AlphaCtx -> b -> a -> a
 abs_open i b x = x
 
 
--------------------------------------------------------
--- | Select a new name, fresh for the given set, based on the
---  given name. Preference is to return the same name if it
---  is not already in the set.
-{-
-freshFor :: Name -> [Name] -> Name
-freshFor n@(Nm (s,j)) ns | not (n `List.in` ns) -> n
-                         | otherwise -> error "UNIMP"
+----------------------------------------------------------
+-- | A smart constructor for binders, also sometimes known as
+-- \"close\".
+bind :: (Alpha b, Alpha c) => b -> c -> Bind b c
+bind b c = B b (close initial b c)
 
--}
+-- | A destructor for binders that does /not/ guarantee fresh
+--   names for the binders.
+unsafeUnBind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
+unsafeUnBind (B a b) = (a, open initial a b)
+
+-- | The 'Eq' instance for 'Bind' compares bindings for
+-- alpha-equality.
+instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
+   b1 == b2 = b1 `aeq` b2
+
+instance (Alpha a, Alpha b, Ord a, Ord b) => Ord (Bind a b) where
+   compare (B a1 b1) (B a2 b2) =
+       case (match a1 a2) of
+         Just p  -> case compare a1 (swaps p a2) of
+                      EQ -> compare b1 b2
+                      otherwise -> otherwise
+         Nothing -> compare a1 a2
+
+instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
+         readPrec = R.parens $ (R.prec app_prec $ do
+                                  R.Ident "<" <- R.lexP
+                                  m1 <- R.step R.readPrec
+                                  R.Ident ">" <- R.lexP
+                                  m2 <- R.step R.readPrec
+                                  return (bind m1 m2))
+           where app_prec = 10
+
+         readListPrec = R.readListPrecDefault
+
+instance (Show a, Show b) => Show (Bind a b) where
+  showsPrec p (B a b) = showParen (p>0)
+      (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
 
 
+-- | Constructor for binding in patterns.
+rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
+rebind a b = R a (bind a b)
 
--------------------------------------------------------
--- | Global freshness monad
--- A monad "m" supports the nextInteger operation if it
--- can generate new integers that are fresh for a global scope.
+-- | Compare for alpha-equality.
+instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
+   b1 == b2 = b1 `aeq` b2
 
--- XXX remove Monad constraint
-class Monad m => HasNext m where
-  nextInteger :: m Integer  -- reads integer and increments it
+instance (Show a, Show b) => Show (Rebind a b) where
+  showsPrec p (R a (B _ b)) = showParen (p>0)
+      (showString "<<" . showsPrec p a . showString ">> " . showsPrec 0 b)
+
+-- | destructor for binding patterns, the names should have already
+-- been freshened.
+reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
+reopen (R a (B _ b)) = (a, open initial a b)
+
+-- | Determine alpha-equivalence.
+aeq :: Alpha a => a -> a -> Bool
+aeq t1 t2 = case match t1 t2 of
+              Just p -> isid p
+              _      -> False
+
+-- | List all the binding variables in a pattern.
+binders :: Alpha b => b -> [Name]
+binders = fv
+
+-- | List variables that occur freely in annotations (not bindings).
+patfv :: Alpha b => b -> [Name]
+patfv = fv' (pat initial)
+
+-- | Calculate the free variables of a term.
+fv :: Alpha a => a -> [Name]
+fv = fv' initial
+
+-- | Apply a permutation to a term.
+swaps :: Alpha a => Perm Name -> a -> a
+swaps = swaps' initial
+
+-- | \"Locally\" freshen a term.  TODO: explain this type signature a bit better.
+lfreshen :: (Alpha a, LFresh m) => a -> (a -> Perm Name -> m b) -> m b
+lfreshen = lfreshen' initial
+
+-- | Freshen a term by replacing all old /binding/ 'Name's with new
+-- fresh 'Name's, returning a new term and a @'Perm' 'Name'@
+-- specifying how 'Name's were replaced.
+freshen :: (Fresh m, Alpha a) => a -> m (a, Perm Name)
+freshen = freshen' initial
+
+-- | Compare two data structures and produce a permutation of their
+-- 'Name's that will make them alpha-equivalent to each other ('Name's
+-- that appear in annotations must match exactly).  Return 'Nothing'
+-- if no such renaming is possible.  Note that two terms are
+-- alpha-equivalent if the empty permutation is returned.
+match   :: Alpha a => a -> a -> Maybe (Perm Name)
+match   = match' initial
+
+-- | @'nthpat' b n@ looks up up the @n@th name in the pattern @b@
+-- (zero-indexed).  PRECONDITION: the number of names in the pattern
+-- must be at least @n@.
+nthpat :: Alpha a => a -> Integer -> Name
+nthpat x i = case nthpatrec x i of
+                 (j, Nothing) -> error
+                   ("BUG: pattern index " ++ show i ++ " out of bounds by " ++ show j ++ "in" ++ show x)
+                 (_, Just n)  -> n
+
+-- | Find the (first) index of the name in the pattern, if it exists.
+findpat :: Alpha a => a -> Name -> Maybe Integer
+findpat x n = case findpatrec x n of
+                   (i, True) -> Just i
+                   (_, False) -> Nothing
+
+------------------------------------------------------------
+-- Freshening
+------------------------------------------------------------
+
+-- | Type class for contexts which can generate new globally fresh
+-- integers.
+class HasNext m where
+  -- | Get a new, globally fresh 'Integer'.
+  nextInteger :: m Integer
+
+  -- | Reset the internal state, i.e. forget about 'Integers' that
+  -- have already been generated.
   resetNext   :: Integer -> m ()
 
--- XXX remove Monad constraint
+-- | Type class for monads which can generate new globally unique
+-- 'Name's based on a given 'Name'.
 class Monad m => Fresh m where
-  fresh  :: Name -> m Name
+  fresh :: Name -> m Name
 
--- | A monad "m" supports the "fresh" operation if it
+-- | A monad @m@ supports the 'fresh' operation if it
 -- can generate a new unique names.
-instance HasNext m => Fresh m where
+instance (Monad m, HasNext m) => Fresh m where
   fresh (Nm (s,j)) = do { n <- nextInteger; return (Nm (s,n)) }
-  fresh (Bn _ _) = error "BUG: cannot freshen bound vars"
+  fresh (Bn _ _)   = error "BUG: cannot freshen bound vars"
 
 
--- | Unbind is the destructor of a binding. It ensures that
--- the names in the binding b are fresh.
--- aka open
+-- | Unbind (also known as \"open\") is the destructor for
+-- bindings. It ensures that the names in the binding are fresh.
 unbind  :: (Fresh m, Alpha b, Alpha c) => Bind b c -> m (b,c)
 unbind (B b c) = do
       (b', _) <- freshen b
@@ -767,43 +787,45 @@ unbind3 (B b1 c) (B b2 d) (B b3 e) = do
          _ -> return Nothing
 
 ---------------------------------------------------
--- | Locally fresh monad
--- This is the class of
--- monads that support freshness in an (implicit) local scope.  Names
--- drawn are fresh for this particular scope, but not globally fresh.
--- This class has a basic instance based on the reader monad.
-         -- XXX remove Monad constraint
+-- LFresh
+
+-- | This is the class of monads that support freshness in an
+-- (implicit) local scope.  Generated names are fresh for the current
+-- local scope, but not globally fresh.  This class has a basic
+-- instance based on the reader monad.
 class Monad m => LFresh m where
-  -- | pick a new name that is fresh for the current (implicit) scope.
+  -- | Pick a new name that is fresh for the current (implicit) scope.
   lfresh  :: Name -> m Name
-  -- | avoid these names when freshening in the subcomputation.
+  -- | Avoid the given names when freshening in the subcomputation.
   avoid   :: [Name] -> m a -> m a
 
-
-
-
--- | Reader monad instance for local freshness class.
+-- | Simple reader monad instance for 'LFresh'.
 instance LFresh (Reader Integer) where
   lfresh (Nm (s,j)) = do { n <- ask; return (Nm (s, max j (n+1))) }
   avoid []          = id
   avoid names       = local (max k) where
         k = maximum (map name2Integer names)
 
--- | Destruct a binding in the LFresh monad.
+-- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
 lunbind (B a b) =
   avoid (fv b) $
   lfreshen a (\x _ -> return (x, open initial x b))
 
+-- | Unbind two terms with the same fresh names, provided the
+--   binders match.
 lunbind2  :: (LFresh m, Alpha b, Alpha c, Alpha d) =>
             Bind b c -> Bind b d -> m (Maybe (b,c,d))
-lunbind2 (B b1 c) (B b2 d) = do
+lunbind2 (B b1 c) (B b2 d) =
       case match b1 b2 of
          Just _ -> do
            (b', c') <- lunbind (B b1 c)
-           return $ Just (b', c, open initial b' d)
-         Nothing -> return Nothing
+           return $ Just (b', c', open initial b' d)  -- BAY: the c' used to be c,
+         Nothing -> return Nothing                    -- am I correct in assuming
+                                                      -- that was a bug?
 
+-- | Unbind three terms with the same fresh names, provided the
+--   binders match.
 lunbind3  :: (LFresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
             Bind b c -> Bind b d -> Bind b e ->  m (Maybe (b,c,d,e))
 lunbind3 (B b1 c) (B b2 d) (B b3 e) = do
@@ -813,22 +835,22 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) = do
            return $ Just (b', c', open initial b' d, open initial b' e)
          _ -> return Nothing
 
----------------------------------------------------------------
-{-
-instance Subst Ty   Term where
-   -- no variable cases for ty in term
-instance Subst Term Term where
-   isvar (Var x) = Just (x, id)
-   isvar _       = Nothing
--}
+------------------------------------------------------------
+-- Substitution
+------------------------------------------------------------
 
--- | Capture-avoiding substitution
--- To derive this class, you only need to indicate where the variables
--- are in the datatype a , by overriding the method 'isvar'
+-- | The 'Subst' class governs capture-avoiding substitution.  To
+--   derive this class, you only need to indicate where the variables
+--   are in the data type, by overriding the method 'isvar'.
 class (Rep1 (SubstD b) a) => Subst b a where
+
+  -- | If the argument is a variable, return its name and a function
+  --   to generate a substituted term.  Return 'Nothing' for
+  --   non-variable arguments.
   isvar :: a -> Maybe (Name, b -> a)
   isvar x = Nothing
 
+  -- | @'subst' nm sub tm@ substitutes @sub@ for @nm@ in @tm@.
   subst :: Name -> b -> a -> a
   subst n u x =
       case isvar x of
@@ -836,7 +858,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
         Just (_, _) -> x
         Nothing -> substR1 rep1 n u x
 
-
+  -- | Perform several simultaneous substitutions.
   substs :: [Name] -> [b] -> a -> a
   substs ns us x =
       case isvar x of
@@ -848,6 +870,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
                Nothing -> x
         Nothing -> substsR1 rep1 ns us x
 
+-- | Reified class dictionary for 'Subst'.
 data SubstD b a = SubstD {
   substD ::  Name -> b -> a -> a ,
   substsD :: [Name] -> [b] -> a -> a
@@ -899,7 +922,6 @@ instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b) where
 
 instance (Subst c a) => Subst c (Annot a) where
-
 
 
 -------------------- TESTING CODE --------------------------------
@@ -997,8 +1019,10 @@ tests_big = do
    assert "b2" $ fv big1 == []
    assert "b3" $ big1 == subst name11 (V name11) big1
 
-
-
 -- properties
 -- if match t1 t2 = Some p then swaps p t1 = t2
 
+-- $paynoattention
+-- These type representation objects are exported so they can be
+-- referenced by auto-generated code.  Please pretend they do not
+-- exist.
