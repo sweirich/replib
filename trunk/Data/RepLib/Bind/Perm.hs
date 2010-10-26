@@ -2,7 +2,6 @@
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Data.RepLib.Bind.Perm
--- Copyright   :  (c) 2010, The University of Pennsylvania
 -- License     :  BSD
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
