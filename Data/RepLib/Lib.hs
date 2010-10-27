@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleContexts, FlexibleInstances,
-    TypeSynonymInstances
+    TypeSynonymInstances, GADTs
   #-} 
 
 

@@ -1,5 +1,5 @@
 -- OPTIONS -fglasgow-exts -fallow-undecidable-instances 
-{-# LANGUAGE TemplateHaskell, UndecidableInstances #-} 
+{-# LANGUAGE TemplateHaskell, UndecidableInstances, GADTs #-} 
 
 -----------------------------------------------------------------------------
 -- 

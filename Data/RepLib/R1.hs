@@ -108,13 +108,12 @@ instance (Rep a, Sat (ctx a), Rep b, Sat (ctx b)) => Rep1 ctx (a,b) where
 rList1 :: forall a ctx. 
   Rep a => ctx a -> ctx [a] -> R1 ctx [a]
 rList1 ca cl = Data1 (DT "[]" ((rep :: R a) :+: MNil))
-                  [ rCons1 ca cl, rNil1 ]
+                  [ rCons1 ca cl, rNil1 ] where
+   rNil1  :: Con ctx [a]
+   rNil1  = Con rNilEmb MNil
 
-rNil1  :: Con ctx [a]
-rNil1  = Con rNilEmb MNil
-
-rCons1 :: Rep a => ctx a -> ctx [a] -> Con ctx [a]
-rCons1 ca cl = Con rConsEmb (ca :+: cl :+: MNil)
+   rCons1 :: ctx a -> ctx [a] -> Con ctx [a]
+   rCons1 ca cl = Con rConsEmb (ca :+: cl :+: MNil)
 
 instance (Rep a, Sat (ctx a), Sat (ctx [a])) => Rep1 ctx [a] where
   rep1 = rList1 dict dict
