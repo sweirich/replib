@@ -58,7 +58,7 @@ instance Subst Exp Exp where
 
 -- | All new functions should be defined in a monad that can generate
 -- locally fresh names. One such monad is the Reader Monad. (Automatically
--- a member of the class LFresh.
+-- a member of the class LFresh.)
 type M a = Reader Integer a
 
 -- | Beta-Eta equivalence for lambda calculus terms.

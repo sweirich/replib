@@ -63,12 +63,16 @@ data DT       = forall l. DT String (MTup R l)
 data Nil = Nil 
 -- | Cons for a list of types
 data a :*: l = a :*: l
+
+data Ex f = forall a. Rep a => Ex (f a)
+
 infixr 7 :*:
 
 -- | A heterogeneous list
 data MTup r l where
     MNil   :: MTup r Nil
     (:+:)  :: (Rep a) => r a -> MTup r l -> MTup r (a :*: l)
+    MEx    :: (Rep a) => MTup r (f a) -> MTup r (Ex f)
 
 infixr 7 :+:
 

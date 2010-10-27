@@ -111,7 +111,7 @@ module Data.RepLib.Bind.LocallyNameless
 ) where
 
 import Data.RepLib
-import Data.RepLib.Bind.Perm
+import Data.RepLib.Bind.PermM
 
 import qualified Data.List as List
 import qualified Data.Char as Char
@@ -355,18 +355,17 @@ matchR1 (Data1 _ cons) = loop cons where
       (Nothing, Nothing) -> loop rest p x y
       (_,_)              -> Nothing
   loop [] _ _ _ = error "Impossible"
-matchR1 Int1 = \ _ x y -> if x == y then Just mempty else Nothing
-matchR1 Integer1 = \ _ x y -> if x == y then Just mempty else Nothing
-matchR1 Char1 = \ _ x y -> if x == y then Just mempty else Nothing
+matchR1 Int1 = \ _ x y -> if x == y then Just empty else Nothing
+matchR1 Integer1 = \ _ x y -> if x == y then Just empty else Nothing
+matchR1 Char1 = \ _ x y -> if x == y then Just empty else Nothing
 matchR1 _ = \ _ _ _ -> Nothing
 
 match1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Maybe (Perm Name)
-match1 MNil _ Nil Nil = Just mempty
+match1 MNil _ Nil Nil = Just empty
 match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l1 <- matchD r c p1 p2
-  l2 <- match1 rs c t1
-                    (map_l (\z -> swapsD z c l1) rs t2)
-  return (l1 <> l2)
+  l2 <- match1 rs c t1 t2
+  (l1 `join` l2)
 
 freshenR1 :: Fresh m => R1 (AlphaD) a -> AlphaCtx -> a -> m (a,Perm Name)
 freshenR1 (Data1 _ cons) = \ p d ->
@@ -374,10 +373,10 @@ freshenR1 (Data1 _ cons) = \ p d ->
      Val c rec kids -> do
        (l, p') <- freshenL rec p kids
        return (to c l, p')
-freshenR1 _ = \ _ n -> return (n, mempty)
+freshenR1 _ = \ _ n -> return (n, empty)
 
 freshenL :: Fresh m => MTup (AlphaD) l -> AlphaCtx -> l -> m (l, Perm Name)
-freshenL MNil _ Nil = return (Nil, mempty)
+freshenL MNil _ Nil = return (Nil, empty)
 freshenL (r :+: rs) p (t :*: ts) = do
   (xs, p2) <- freshenL rs p ts
   (x, p1) <- freshenD r p (swapsD r p p2 t)
@@ -388,11 +387,11 @@ lfreshenR1 :: LFresh m => R1 AlphaD a -> AlphaCtx -> a ->
 lfreshenR1 (Data1 _ cons) = \p d f ->
    case findCon cons d of
      Val c rec kids -> lfreshenL rec p kids (\ l p' -> f (to c l) p')
-lfreshenR1 _ = \ _ n f -> f n mempty
+lfreshenR1 _ = \ _ n f -> f n empty
 
 lfreshenL :: LFresh m => MTup (AlphaD) l -> AlphaCtx -> l ->
               (l -> Perm Name -> m b) -> m b
-lfreshenL MNil _ Nil f = f Nil mempty
+lfreshenL MNil _ Nil f = f Nil empty
 lfreshenL (r :+: rs) p (t :*: ts) f =
   lfreshenL rs p ts ( \ y p2 ->
   lfreshenD r p (swapsD r p p2 t) ( \ x p1 ->
@@ -440,21 +439,21 @@ instance Alpha Name  where
                    Term -> apply p x
                    Pat  -> x
 
-  match' _ x y           | x == y          = Just mempty
+  match' _ x y           | x == y          = Just empty
   match' c (Nm x) (Nm y) | mode c == Term  = Just $ single (Nm x) (Nm y)
   match' c (Bn x1 y1) (Bn x2 y2) |
    mode c == Term && x1 == x2 = Just $ single (Bn x1 y1) (Bn x2 y2)
-  match' c _ _           | mode c == Pat   = Just mempty
+  match' c _ _           | mode c == Pat   = Just empty
   match' _ _ _                             = Nothing
 
   freshen' c nm = case mode c of
      Term -> do { x <- fresh nm; return(x, single nm x) }
-     Pat  -> return (nm, mempty)
+     Pat  -> return (nm, empty)
 
   --lfreshen' :: LFresh m => Pat a -> (a -> Perm Name -> m b) -> m b
   lfreshen' c nm f = case mode c of
      Term -> do { x <- lfresh nm; avoid [x] $ f x (single nm x) }
-     Pat  -> f nm mempty
+     Pat  -> f nm empty
 
   open c a (Bn j x) | level c == j = nthpat a x
   open _ _ n = n
@@ -523,11 +522,11 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     match' c (B x1 y1) (B x2 y2) = do
       px <- match' (pat c) x1 x2
       --- check this!
-      py <- match' (incr c) y1
-                            (swaps' (incr c) px y2)
+      py <- match' (incr c) y1y2
+
       -- need to make sure that all permutations of bound variables at this
       -- level are the identity
-      return (px <> py)
+      (px `join` py)
 
     open  c a (B x y)    = B (open c a x)  (open  (incr c) a y)
     close c a (B x y)    = B (close c a x) (close (incr c) a y)
@@ -545,10 +544,8 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
   match' p (R x1 (B x1' y1)) (R x2 (B x2' y2)) = do
      px <- match' p x1 x2
-     --- check!!
-     py <- match' (incr p)  y1
-                           (swaps' (incr p) px y2)
-     return (px <> py)
+     py <- match' (incr p)  y1 y2
+     (px `join` py)
 
   findpatrec (R x (B x' y)) nm =
      case findpatrec x nm of
@@ -573,14 +570,14 @@ instance Alpha a => Alpha (Annot a) where
    freshen' c (Annot t) | mode c == Pat = do
        (t', p) <- freshen' (term c) t
        return (Annot t', p)
-   freshen' c a | mode c == Term = return (a, mempty)
+   freshen' c a | mode c == Term = return (a, empty)
 
 ---   lfreshen' c (Annot t) | mode c == Pat
 
 
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
    match' c (Annot x) (Annot y) | mode c == Term = if x `aeq` y
-                                    then Just mempty
+                                    then Just empty
                                     else Nothing
    findpatrec _ _ = (0, False)
    nthpatrec nm i = (i, Nothing)
@@ -608,9 +605,9 @@ abs_swaps' _ p s = s
 abs_fv' :: Alpha a => AlphaCtx -> a -> [Name]
 abs_fv' _ s = []
 abs_freshen' :: (Fresh m, Alpha a) => AlphaCtx -> a -> m (a, Perm Name)
-abs_freshen' _ b = return (b, mempty)
+abs_freshen' _ b = return (b, empty)
 abs_match' :: (Eq a, Alpha a) => AlphaCtx -> a -> a -> Maybe (Perm Name)
-abs_match' _ x1 x2 = if x1 == x2 then Just mempty else Nothing
+abs_match' _ x1 x2 = if x1 == x2 then Just empty else Nothing
 abs_nthpatrec :: Alpha a => a -> Integer -> (Integer, Maybe Name)
 abs_nthpatrec b i = (i, Nothing)
 abs_findpatrec :: Alpha a => a -> Name -> (Integer, Bool)
@@ -982,6 +979,7 @@ tests_aeq = do
    assert "a16" $ bind (name1, name2) name1 /= bind (name2, name1) name1
    assert "a17" $ bind (name1, name2) name1 /= bind (name1, name2) name2
    assert "a18" $ (name1, name1) /= (name1, name2)
+   assert "a19" $ match (name1, name1) (name2, name3) == Nothing
 
 tests_fv = do
    assert "f1" $ fv (bind name1 name1) == []
