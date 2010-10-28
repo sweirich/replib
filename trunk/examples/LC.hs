@@ -84,12 +84,11 @@ red (App e1 e2) = do
   e2' <- red e2
   case e1' of
     -- look for a beta-reduction
-    Lam bnd -> do
-      (x, e1'') <- lunbind bnd
-      return $ subst x e2' e1''
+    Lam bnd -> 
+      lunbind bnd $ \ (x, e1'') ->
+        return $ subst x e2' e1''
     otherwise -> return $ App e1' e2'
-red (Lam bnd) = do
-   (x, e) <- lunbind bnd
+red (Lam bnd) = lunbind bnd $ \ (x, e) -> do
    e' <- red e
    case e of
      -- look for an eta-reduction
