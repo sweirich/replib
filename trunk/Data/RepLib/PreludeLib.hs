@@ -87,6 +87,7 @@ eqRL1 MNil Nil Nil = True
 eqRL1 (r :+: rl) (p1 :*: t1) (p2 :*: t2) =
   eqD r p1 p2 && eqRL1 rl t1 t2
 
+
 ------------ Ord -------------------------------
 
 -- compare :: a -> a -> Ordering is a minimal instance 

@@ -22,7 +22,7 @@
 
 
 module Data.RepLib.Derive (
-	derive
+	derive, derive_abstract
 ) where
 
 import Data.RepLib.R 
@@ -144,10 +144,13 @@ repDT name param =
 						  (ConE 'MNil) param
          [| DT $(return str) $(return reps) |]
 
+data Flag = Abs | Conc
+
 -- Create an "R" representation for a given type constructor
-repr :: Name -> Q [Dec]
-repr n = do info' <- reify n
-            case info' of 
+
+repr :: Flag -> Name -> Q [Dec]
+repr f n = do info' <- reify n
+              case info' of 
                TyConI d -> do
                   (name, param, ca, terms) <- typeInfo ((return d) :: Q Dec) 
                   let paramNames = map tyVarBndrName param
@@ -157,7 +160,9 @@ repr n = do info' <- reify n
                   -- the representations of the paramters, as a list
                   -- representations of the data constructors
                   rcons <- mapM (repcon (length terms == 1) ty) terms
-                  body  <- [| Data $(repDT name paramNames) $(return (ListE rcons)) |]
+                  body  <- case f of
+                     Conc -> [| Data $(repDT name paramNames) $(return (ListE rcons)) |]
+                     Abs  -> [| Abstract $(repDT name paramNames) |]
                   let ctx = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
                   let rTypeName :: Name 
                       rTypeName = rName n
@@ -171,10 +176,10 @@ repr n = do info' <- reify n
                                  [ValD (VarP (mkName "rep")) (NormalB (VarE rTypeName)) []]
                   return [rSig, rType, inst]
 
-reprs :: [Name] -> Q [Dec]
-reprs ns = foldl (\qd n -> do decs1 <- repr n 
-                              decs2 <- qd
-                              return (decs1 ++ decs2)) (return []) ns
+reprs :: Flag -> [Name] -> Q [Dec]
+reprs f ns = foldl (\qd n -> do decs1 <- repr f n 
+                                decs2 <- qd
+                                return (decs1 ++ decs2)) (return []) ns
 
 --------------------------------------------------------------------------------------------
 --- Generating the R1 representation
@@ -213,10 +218,10 @@ repcon1 d single rd1 ctxParams (name, sttys) =
        [| Con $(remb single d (name,sttys)) $(rec) |]
 
 -- Generate a parameterized representation of a type
-repr1 :: Name -> Q [Dec]
-repr1 n = do info' <- reify n
-             case info' of
-               TyConI d -> do
+repr1 :: Flag -> Name -> Q [Dec]
+repr1 f n = do info' <- reify n
+               case info' of
+                TyConI d -> do
                   (name, param, ca, terms) <- typeInfo ((return d) :: Q Dec) 
                   let paramNames = map tyVarBndrName param
                   -- the type that we are defining, applied to its parameters.                      
@@ -237,8 +242,10 @@ repr1 n = do info' <- reify n
                   -- the representations of the parameters, as a list
                   -- representations of the data constructors
                   rcons <- mapM (repcon1 ty (length terms == 1) e2 ctxParams) terms
-                  body  <- [| Data1 $(repDT name paramNames) 
-                                    $(return (ListE rcons)) |]
+                  body  <- case f of 
+                            Conc -> [| Data1 $(repDT name paramNames) 
+                                           $(return (ListE rcons)) |]
+                            Abs  -> [| Abstract1 $(repDT name paramNames) |]
                            
                   let rhs = LamE (cparams) body
 {-                    rhs_type = ForallT (ctx:param) rparams 
@@ -261,21 +268,25 @@ repr1 n = do info' <- reify n
                               (foldr (\(_,p,_) f -> (ArrowT `AppT` p `AppT` f))
                                      ((ConT (mkName "R1")) `AppT` (VarT ctx) `AppT` ty)
                                      ctxParams))
-                  decs <- repr n
+                  decs <- repr f n
                   return (decs ++ [rSig, rTypeDecl, inst])
 
 
-repr1s :: [Name] -> Q [Dec]
+repr1s :: Flag -> [Name] -> Q [Dec]
 
 
-repr1s ns = foldl (\qd n -> do decs1 <- repr1 n 
-                               decs2 <- qd
-                               return (decs1 ++ decs2)) (return []) ns
+repr1s f ns = foldl (\qd n -> do decs1 <- repr1 f n 
+                                 decs2 <- qd
+                                 return (decs1 ++ decs2)) (return []) ns
 
 -- | Generate representations (both basic and parameterized) for a list of 
 -- types.
 derive :: [Name] -> Q [Dec]
-derive = repr1s
+derive = repr1s Conc
+
+-- | Generate abstract representations for a list of types.
+derive_abstract :: [Name] -> Q [Dec]
+derive_abstract = repr1s Abs
 
 --------------------------------------------------------------------------------------
 
