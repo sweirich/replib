@@ -53,10 +53,14 @@ eqR (IO t1) (IO t2) = eqR t1 t2
 eqR IOError IOError = True
 eqR (Arrow t1 t2) (Arrow s1 s2) = eqR t1 s1 && eqR t2 s2
 eqR (Data rc1 _) (Data rc2 _) = eqDT rc1 rc2
+eqR (Abstract rc1) (Abstract rc2) = eqDT rc1 rc2
 eqR _ _ = False
 
 eqDT :: DT -> DT -> Bool
 eqDT (DT str1 rt1) (DT str2 rt2) = str1 == str2 && eqRTup rt1 rt2
+
+instance Eq DT where
+   (==) = eqDT
 
 eqRTup :: MTup R t1 -> MTup R t2 -> Bool
 eqRTup MNil MNil = True
@@ -112,10 +116,31 @@ compareR (Arrow r1 r2) (Arrow r3 r4) =
       ord -> ord
 compareR (Arrow _ _) _  = LT
 compareR _ (Arrow _ _)  = GT
-compareR (Data (DT str1 _) _) (Data (DT str2 _) _) = 
-   compare str1 str2
+compareR (Data dt1 _) (Data dt2 _) = 
+   compare dt1 dt2
 compareR (Data _ _) _ = LT
 compareR _ (Data _ _) = GT
+compareR (Abstract dt1) (Abstract dt2) = 
+   compare dt1 dt2
+compareR (Abstract _) _ = LT
+compareR _ (Abstract _) = GT
+
+instance Ord DT where
+  compare (DT str1 reps1) (DT str2 reps2) = 
+    case compare str1 str2 of 
+       EQ -> compareMTup reps1 reps2
+       other -> other
+
+compareMTup :: MTup R l -> MTup R l' -> Ordering
+compareMTup MNil MNil = EQ
+compareMTup MNil _    = LT
+compareMTup _    MNil = GT
+compareMTup (a :+: as) (b :+: bs) = 
+  case compareR a b of 
+     EQ -> compareMTup as bs
+     other -> other  
+
+
 
 --------- Basic instances and library operations for heterogeneous lists ---------------
 

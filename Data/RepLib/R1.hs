@@ -33,7 +33,7 @@ data R1 ctx a where
     IO1       :: (Rep a) => ctx a -> R1 ctx (IO a)
     Arrow1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a -> b)
     Data1     :: DT -> [Con ctx a] -> R1 ctx a
-
+    Abstract1 :: DT -> R1 ctx a
 class Sat a where dict :: a 
 
 class Rep a => Rep1 ctx a where rep1 :: R1 ctx a
@@ -49,6 +49,7 @@ instance Show (R1 c a) where
     show (IO1 cb)       = "(IO1 " ++ show (getRep cb) ++ ")"
     show (Arrow1 cb cc) = "(Arrow1 " ++ show (getRep cb) ++ " " ++ show (getRep cc) ++ ")" 
     show (Data1 dt _)   = "(Data1 " ++ show dt ++ ")"
+    show (Abstract1 dt) = "(Abstract1 " ++ show dt ++ ")"
 
 -- | Access a representation, given a proxy
 getRep :: Rep b => c b -> R b
@@ -70,6 +71,7 @@ toR (Data1 dt cons) = (Data dt (map toCon cons))
         toRs           :: MTup c a -> MTup R a 
         toRs MNil      = MNil
         toRs (c :+: l) = (getRep c :+: toRs l)
+toR (Abstract1 dt) = Abstract dt
 
 ---------------  Representations of Prelude types
 

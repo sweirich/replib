@@ -21,16 +21,17 @@ import Data.List
 
 -- | A value of type @R a@ is a representation of a type @a@. 
 data R a where
-   Int     :: R Int
-   Char    :: R Char 
-   Integer :: R Integer
-   Float   :: R Float
-   Double  :: R Double
-   Rational:: R Rational
-   IOError :: R IOError
-   IO      :: (Rep a) => R a -> R (IO a)
-   Arrow   :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
-   Data    :: DT -> [Con R a] -> R a 
+   Int      :: R Int
+   Char     :: R Char 
+   Integer  :: R Integer
+   Float    :: R Float
+   Double   :: R Double
+   Rational :: R Rational
+   IOError  :: R IOError
+   IO       :: (Rep a) => R a -> R (IO a)
+   Arrow    :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
+   Data     :: DT -> [Con R a] -> R a 
+   Abstract :: DT -> R a
 
 -- | Representation of a data constructor includes an
 -- embedding between the datatype and a list of other types
@@ -94,6 +95,8 @@ instance Show (R a) where
      "(" ++ (show r1) ++ " -> " ++ (show r2) ++ ")"
   show (Data dt _) = 
      "(Data" ++ show dt ++ ")"
+  show (Abstract dt) = 
+     "(Abstract" ++ show dt ++ ")"
 
 instance Show DT where
   show (DT str reps) = str ++ show reps 
@@ -105,7 +108,6 @@ instance Show (MTup R l) where
 
 instance Eq (R a) where
 	 r1 == r2 = True
-
 
 --- Representations for (some) Haskell Prelude types
 

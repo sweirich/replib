@@ -74,8 +74,9 @@ module Data.RepLib.Bind.LocallyNameless
 
     -- * The 'Alpha' class
     Alpha(..),
-    swaps,
+    swaps, match,
     binders, patfv, fv,
+    freshen, lfreshen,
     aeq,
 
     -- * The 'Fresh' class
@@ -814,12 +815,10 @@ instance LFresh (Reader Integer) where
         k = maximum (map name2Integer names)
 
 -- | Destruct a binding in an 'LFresh' monad.
--- I think the type should be:
--- lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> 
            ((a, b) -> m c) -> m c
 lunbind (B a b) g =
-  avoid (fv b) $
+  avoid (fv b) $  -- do we need this? Maybe correct without, though won't hurt here.
   lfreshen a (\x _ -> g (x, open initial x b))
 
 -- | Unbind two terms with the same fresh names, provided the

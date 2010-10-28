@@ -194,6 +194,7 @@ generateR1 (Data1 dt cons) 0 = []
 generateR1 (Data1 dt cons) d = 
   [ to emb l | (Con emb rec) <- cons, 
                l <- fromTupM (\x -> generateD x (d-1)) rec]
+generateR1 r1 x = error ("No way to generate type: " ++ show r1)
 
 instance Generate Int
 instance Generate Char
@@ -222,6 +223,7 @@ enumerateR1 :: R1 EnumerateD a -> [a]
 enumerateR1 Int1 =  [minBound .. (maxBound::Int)]
 enumerateR1 Char1 = [minBound .. (maxBound::Char)]
 enumerateR1 (Data1 dt cons) = enumerateCons cons
+enumerateR1 r1 = error ("No way to enumerate type: " ++ show r1)
 
 enumerateCons :: [Con EnumerateD a] -> [a] 
 enumerateCons (Con emb rec:rest) = (map (to emb) (fromTupM enumerateD rec)) ++ (enumerateCons rest)
