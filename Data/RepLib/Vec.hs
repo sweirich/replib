@@ -30,10 +30,20 @@ data SNat a where
 -- WARNING: Only call this on *numbers*
 -- It demonstrates a deficiency of reps for void/abstract datatypes
 toSNat :: forall n. R n -> (SNat n)
-toSNat (Data (DT "Data.RepLib.Vec.Z" MNil) []) = 
-       (unsafeCoerce# SZ :: SNat n)
-toSNat (Data (DT "Data.RepLib.Vec.S" (rm :+: MNil)) []) = 
-       (unsafeCoerce# (SS (toSNat rm)) :: SNat n)
+toSNat r = 
+  case gcast (SZ :: SNat n) of 
+    Just sz -> sz
+    Nothing -> case gcast (SS (toSNat rm)) of 
+                 
+toSNat r@(Data (DT "Data.RepLib.Vec.Z" MNil) []) = 
+    case gcastR r rZ SZ of 
+      Just sz -> sz
+      Nothing -> error "BUG"
+toSNat r@(Data (DT "Data.RepLib.Vec.S" (rm :+: MNil)) []) = 
+    case gcastR r (rS (toSNat rm)) of
+       Just i -> i
+       Nothing -> error "impossible"
+--       (unsafeCoerce# (SS (toSNat rm)) :: SNat n)
 toSNat _ = error "BUG: toSNat can only be called with the representation of a natural number"
 
 
