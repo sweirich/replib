@@ -15,15 +15,15 @@
 
 {- TODO:
 
+X - Permutation type
 X - Better type for freshen
 Story about polarity
 X - Easier instances for Patterns/Alphas
+  - coalesced Pattern and Alpha type classes together
+  - as there does not seem to be a good reason to distinguish them.
 Extensive testing
 X - Nominal version
 Multiple name types -- see GenericBindLNa.hs
-
-free vars returns a set instead of a list.
-
 
 -}
 
@@ -36,7 +36,7 @@ need to edit match to take that into accont. Merely creating a special
 instance of Eq won't work!
 
 Single/multiple substitutions are *not* defined in terms of
-eachother.
+each other.
 
  -}
 
@@ -74,9 +74,8 @@ module Data.RepLib.Bind.LocallyNameless
 
     -- * The 'Alpha' class
     Alpha(..),
-    swaps, match,
+    swaps,
     binders, patfv, fv,
-    freshen, lfreshen,
     aeq,
 
     -- * The 'Fresh' class
@@ -113,6 +112,8 @@ import Data.RepLib.Bind.PermM
 
 import qualified Data.List as List
 import qualified Data.Char as Char
+import Data.Set (Set)
+import qualified Data.Set as S
 import qualified Text.Read as R
 import Prelude hiding (or)
 import Data.Monoid
@@ -221,7 +222,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   swaps' = swapsR1 rep1
 
   -- | See 'fv'.
-  fv' :: AlphaCtx -> a -> [Name]
+  fv' :: AlphaCtx -> a -> Set Name
   fv' = fvR1 rep1
 
   -- | See 'lfreshen'.
@@ -289,7 +290,7 @@ data Mode = Term | Pat deriving (Show, Eq, Read)
 --   reified dictionary for the 'Alpha' class.
 data AlphaD a = AlphaD {
   swapsD    :: AlphaCtx -> Perm Name -> a -> a,
-  fvD       :: AlphaCtx -> a -> [Name],
+  fvD       :: AlphaCtx -> a -> Set Name,
   freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm Name),
   lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm Name -> m b) -> m b,
   matchD    :: AlphaCtx -> a -> a -> Maybe (Perm Name),
@@ -332,17 +333,16 @@ swapsR1 (Data1 _ cons)  = \ p x d ->
 swapsR1 _               = \ _ _ d -> d
 
 
-fvR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> [Name]
+fvR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> Set Name
 fvR1 (Data1 _ cons) = \ p  d ->
   case (findCon cons d) of
-    Val _ rec kids -> List.nub (fv1 rec p kids)
-fvR1 (IO1 a) = \ _ _ -> error "Cannot call fv"
-fvR1 _ = \ _ _ -> []
+    Val _ rec kids -> fv1 rec p kids
+fvR1 _ = \ _ _ -> S.empty
 
-fv1 :: MTup (AlphaD) l -> AlphaCtx -> l -> [Name]
-fv1 MNil _ Nil = []
+fv1 :: MTup (AlphaD) l -> AlphaCtx -> l -> Set Name
+fv1 MNil _ Nil = S.empty
 fv1 (r :+: rs) p (p1 :*: t1) =
-   fvD r p p1 ++ fv1 rs p t1
+   fvD r p p1 `S.union` fv1 rs p t1
 
 -- Generic definition of freshen and match
 
@@ -363,10 +363,10 @@ match1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Maybe (Perm Name)
 match1 MNil _ Nil Nil = Just empty
 match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l1 <- matchD r c p1 p2
-  l2 <- match1 rs c t1 t2
+  l2 <- match1 rs c t1 t2
   (l1 `join` l2)
 
-freshenR1 :: Fresh m => R1 (AlphaD) a -> AlphaCtx -> a -> m (a, Perm Name)
+freshenR1 :: Fresh m => R1 (AlphaD) a -> AlphaCtx -> a -> m (a,Perm Name)
 freshenR1 (Data1 _ cons) = \ p d ->
    case findCon cons d of
      Val c rec kids -> do
@@ -430,25 +430,18 @@ nthpatL (r :+: rs) (t :*: ts) i =
 -----------------------------------------------------------
 
 instance Alpha Name  where
-  fv' c (Nm n)   | mode c == Term = [ Nm n ]
-  fv' c (Bn _ _) | mode c == Term = []
-  fv' c n        | mode c == Pat  = []
+  fv' c (Nm n)   | mode c == Term = S.singleton (Nm n)
+  fv' c (Bn _ _) | mode c == Term = S.empty
+  fv' c n        | mode c == Pat  = S.empty
 
   swaps' c p x = case mode c of
                    Term -> apply p x
                    Pat  -> x
-{-
-  aeq' c n1 n2 | mode c == Term = n1 == n2
-  aeq' c n1 n2 | mode c == Pat = True
--}
 
   match' _ x y           | x == y          = Just empty
   match' c (Nm x) (Nm y) | mode c == Term  = Just $ single (Nm x) (Nm y)
-{-
- -- this case is to support set binding...
   match' c (Bn x1 y1) (Bn x2 y2) |
    mode c == Term && x1 == x2 = Just $ single (Bn x1 y1) (Bn x2 y2)
--}
   match' c _ _           | mode c == Pat   = Just empty
   match' _ _ _                             = Nothing
 
@@ -512,7 +505,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     swaps' c pm (B x y) =
         (B (swaps' (pat c) pm x) (swaps' (incr c) pm y))
 
-    fv' c (B x y) = fv' (pat c) x ++ fv' (incr c) y
+    fv' c (B x y) = fv' (pat c) x `S.union` fv' (incr c) y
 
     freshen' c (B x y) = do
       (x', pm1) <- freshen' (pat c) x
@@ -520,19 +513,16 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
       return (B x' y', pm1 <> pm2)
 
     lfreshen' c (B x y) f =
-      avoid (fv' c x) $
+      avoid (S.elems $ fv' c x) $
         lfreshen' (pat c) x (\ x' pm1 ->
         lfreshen' (incr c) (swaps' (incr c) pm1 y) (\ y' pm2 ->
         f (B x' y') (pm1 <> pm2)))
-{-
-    aeq' c (B x1 y1) (B x2 y2) = 
-      aeq' (pat c) x1 x2 &&
-      aeq' (incr c) y1 y2
--}
+
     match' c (B x1 y1) (B x2 y2) = do
       px <- match' (pat c) x1 x2
       --- check this!
-      py <- match' (incr c) y1 y2
+      py <- match' (incr c) y1y2
+
       -- need to make sure that all permutations of bound variables at this
       -- level are the identity
       (px `join` py)
@@ -544,7 +534,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 --  swaps' p pm (R x bnd) = R (swaps' pm x) (swaps' pm bnd)
-  fv' p (R x (B x' y)) =  fv' p x ++ fv' p y
+  fv' p (R x (B x' y)) =  fv' p x `S.union` fv' p y
 
   freshen' p (R x (B x1 y)) = do
       (x', pm1) <- freshen' p x
@@ -553,7 +543,7 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
   match' p (R x1 (B x1' y1)) (R x2 (B x2' y2)) = do
      px <- match' p x1 x2
-     py <- match' (incr p)  y1 y2
+     py <- match' (incr p)  y1 y2
      (px `join` py)
 
   findpatrec (R x (B x' y)) nm =
@@ -574,7 +564,7 @@ instance Alpha a => Alpha (Annot a) where
    swaps' c pm (Annot t) | mode c == Term = Annot t
 
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
-   fv' c _         | mode c == Term = []
+   fv' c _         | mode c == Term = S.empty
 
    freshen' c (Annot t) | mode c == Pat = do
        (t', p) <- freshen' (term c) t
@@ -582,10 +572,8 @@ instance Alpha a => Alpha (Annot a) where
    freshen' c a | mode c == Term = return (a, empty)
 
 ---   lfreshen' c (Annot t) | mode c == Pat
-{-
-   aeq' c (Annot t1) (Annot t2) = 
-     aeq' (term c) t1 t2 
--}
+
+
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
    match' c (Annot x) (Annot y) | mode c == Term = if x `aeq` y
                                     then Just empty
@@ -613,8 +601,8 @@ instance (Alpha a, Alpha b,Alpha c, Alpha d, Alpha e) =>
 -- Definitions of the class members for abstract types.
 abs_swaps' :: Alpha a => AlphaCtx -> Perm Name -> a -> a
 abs_swaps' _ p s = s
-abs_fv' :: Alpha a => AlphaCtx -> a -> [Name]
-abs_fv' _ s = []
+abs_fv' :: Alpha a => AlphaCtx -> a -> Set Name
+abs_fv' _ s = S.empty
 abs_freshen' :: (Fresh m, Alpha a) => AlphaCtx -> a -> m (a, Perm Name)
 abs_freshen' _ b = return (b, empty)
 abs_match' :: (Eq a, Alpha a) => AlphaCtx -> a -> a -> Maybe (Perm Name)
@@ -645,6 +633,10 @@ unsafeUnBind (B a b) = (a, open initial a b)
 instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
    b1 == b2 = b1 `aeq` b2
 
+-- fixme: in the 'otherwise' case the comparison is not alpha-respecting,
+-- e.g.
+--   compare (bind [name1] name1) (bind [name1,name1] name1) == LT
+--   compare (bind [name3] name3) (bind [name1,name1] name1) == GT
 instance (Alpha a, Alpha b, Ord a, Ord b) => Ord (Bind a b) where
    compare (B a1 b1) (B a2 b2) =
        case (match a1 a2) of
@@ -693,15 +685,15 @@ aeq t1 t2 = case match t1 t2 of
               _      -> False
 
 -- | List all the binding variables in a pattern.
-binders :: Alpha b => b -> [Name]
+binders :: Alpha b => b -> Set Name
 binders = fv
 
 -- | List variables that occur freely in annotations (not bindings).
-patfv :: Alpha b => b -> [Name]
+patfv :: Alpha b => b -> Set Name
 patfv = fv' (pat initial)
 
 -- | Calculate the free variables of a term.
-fv :: Alpha a => a -> [Name]
+fv :: Alpha a => a -> Set Name
 fv = fv' initial
 
 -- | Apply a permutation to a term.
@@ -815,37 +807,33 @@ instance LFresh (Reader Integer) where
         k = maximum (map name2Integer names)
 
 -- | Destruct a binding in an 'LFresh' monad.
-lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> 
-           ((a, b) -> m c) -> m c
-lunbind (B a b) g =
-  avoid (fv b) $  -- do we need this? Maybe correct without, though won't hurt here.
-  lfreshen a (\x _ -> g (x, open initial x b))
+lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
+lunbind (B a b) =
+  avoid (S.elems $ fv b) $
+  lfreshen a (\x _ -> return (x, open initial x b))
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders match.
 lunbind2  :: (LFresh m, Alpha b, Alpha c, Alpha d) =>
-            Bind b c -> Bind b d ->  (Maybe (b,c,d) -> m e) -> m e 
-lunbind2 (B b1 c) (B b2 d) g =
+            Bind b c -> Bind b d -> m (Maybe (b,c,d))
+lunbind2 (B b1 c) (B b2 d) =
       case match b1 b2 of
-         Just _ ->
-           avoid (fv d) $
-             lunbind (B b1 c) $ \ (b', c') ->
-               g $ Just (b', c', open initial b' d)  
-         Nothing -> g Nothing                    
-                                                 
+         Just _ -> do
+           (b', c') <- lunbind (B b1 c)
+           return $ Just (b', c', open initial b' d)  -- BAY: the c' used to be c,
+         Nothing -> return Nothing                    -- am I correct in assuming
+                                                      -- that was a bug?
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders match.
 lunbind3  :: (LFresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
-            Bind b c -> Bind b d -> Bind b e ->  
-            ((Maybe (b,c,d,e)) -> m f) -> m f
-lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
+            Bind b c -> Bind b d -> Bind b e ->  m (Maybe (b,c,d,e))
+lunbind3 (B b1 c) (B b2 d) (B b3 e) = do
       case (match b1 b2, match b1 b3) of
-         (Just _, Just _) ->
-           avoid (fv d) $ avoid (fv e) $ 
-             lunbind (B b1 c) $ \ (b', c') ->
-               g $ Just (b', c', open initial b' d, open initial b' e)
-         _ -> g Nothing
+         (Just _, Just _) -> do
+           (b', c') <- lunbind (B b1 c)
+           return $ Just (b', c', open initial b' d, open initial b' e)
+         _ -> return Nothing
 
 ------------------------------------------------------------
 -- Substitution
@@ -963,34 +951,8 @@ do_tests =
    tests_fv
    tests_big
    tests_nth
-   tests_match
 
 perm = single name1 name2
-
-crazy1 = bind (name8, Annot name2) 
-         (bind (name3, Annot
-                         (bind (name4, Annot (name8, name3)) name8)) 
-          name5)
-crazy2 = bind (name1, Annot name6)
-         (bind (name3, Annot
-                         (bind (name4, Annot (name1, name3)) name1))
-          name7)
-
-pc = (single name2 name6) <> (single name5 name7)
-
-tests_match = do
-  assert "m1" $ match crazy1 crazy2 == Just pc
-  assert "m2" $ swaps pc crazy1 == crazy2
-  assert "m3" $ swaps pc crazy2 == crazy1
-  assert "m4" $ match (bind name1 name1) (bind name1 name1) == Just empty
-  assert "m5" $ match (name1, name1) (name3, name4) == Nothing
-  assert "m6" $ match (bind name1 name2) (bind name3 name4) == 
-      Just (single name2 name4)
-  assert "m7" $ match (bind (name1, Annot name2) name1)
-                      (bind (name2, Annot name3) name2) == 
-      Just (single name2 name3)
-  assert "m8" $ match (bind name1 name2) (bind name2 name2) == Nothing
-  assert "m9" $ match (bind (name1, Annot name3) name1) (bind (name2, Annot name4) name2) == Just (single name3 name4)
 
 tests_aeq = do
    assert "a1" $ (bind name1 name1) /= (bind name1 name2)
@@ -1020,23 +982,21 @@ tests_aeq = do
    assert "a16" $ bind (name1, name2) name1 /= bind (name2, name1) name1
    assert "a17" $ bind (name1, name2) name1 /= bind (name1, name2) name2
    assert "a18" $ (name1, name1) /= (name1, name2)
-   assert "a19" $ (name1, name1) /= (name3, name4)
-   assert "a20" $ match (name1, name1) (name3, name4) == Nothing
-
+   assert "a19" $ match (name1, name1) (name2, name3) == Nothing
 
 tests_fv = do
-   assert "f1" $ fv (bind name1 name1) == []
-   assert "f2" $ fv' (pat initial) (bind name1 name1) == []
-   assert "f4" $ fv (bind name1 name2) == [name2]
-   assert "f5" $ fv (bind (name1, Annot name2) name1) == [name2]
-   assert "f7" $ fv (bind (name2, Annot name2) name2) == [name2]
-   assert "f8" $ fv (rebind name1 name2) == [name1, name2]
-   assert "f9" $ fv' (pat initial) (rebind name1 name1) == []
-   assert "f3" $ fv (bind (rebind name1 (Annot name1)) name1) == []
-   assert "f10" $ fv (rebind (name1, Annot name1) ()) == [name1]
-   assert "f11" $ fv' (pat initial) (rebind (name1, Annot name1) ()) == [name1]
-   assert "f12" $ fv (bind (Annot name1) ()) == [name1]
-   assert "f14" $ fv (rebind (Annot name1) ()) == []
+   assert "f1" $ fv (bind name1 name1) == S.empty
+   assert "f2" $ fv' (pat initial) (bind name1 name1) == S.empty
+   assert "f4" $ fv (bind name1 name2) == S.singleton name2
+   assert "f5" $ fv (bind (name1, Annot name2) name1) == S.singleton name2
+   assert "f7" $ fv (bind (name2, Annot name2) name2) == S.singleton name2
+   assert "f8" $ fv (rebind name1 name2) == S.fromList [name1, name2]
+   assert "f9" $ fv' (pat initial) (rebind name1 name1) == S.empty
+   assert "f3" $ fv (bind (rebind name1 (Annot name1)) name1) == S.empty
+   assert "f10" $ fv (rebind (name1, Annot name1) ()) == S.singleton name1
+   assert "f11" $ fv' (pat initial) (rebind (name1, Annot name1) ()) == S.singleton name1
+   assert "f12" $ fv (bind (Annot name1) ()) == S.singleton name1
+   assert "f14" $ fv (rebind (Annot name1) ()) == S.empty
 
 mkbig :: [Name] -> Exp -> Exp
 mkbig (n : names) body =
@@ -1057,11 +1017,11 @@ tests_nth = do
 
 tests_big = do
    assert "b1" $ big1 /= big2
-   assert "b2" $ fv big1 == []
+   assert "b2" $ fv big1 == S.empty
    assert "b3" $ big1 == subst name11 (V name11) big1
 
 -- properties
--- if match t1 t2 = Just p then swaps p t1 = t2
+-- if match t1 t2 = Some p then swaps p t1 = t2
 
 -- $paynoattention
 -- These type representation objects are exported so they can be

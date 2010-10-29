@@ -26,10 +26,12 @@ module Data.RepLib.Bind.Nominal
   ) where
 
 import Data.RepLib
-import Data.RepLib.Bind.PermM
+import Data.RepLib.Bind.Perm
 
 import qualified Data.List as List
 import qualified Text.Read as R
+import Data.Set (Set)
+import qualified Data.Set as S
 import Prelude hiding (or)
 import Data.Monoid
 import Control.Monad.Reader (Reader,ask,local,runReader)
@@ -122,11 +124,10 @@ unsafeUnBind (B a b) = (a,b)
 
 instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
    (B x y) == (B m n) =
--- replace with aeq??
       case match x m of
          Just p | isid p -> y == n
          Just p -> y == swaps p n &&
-                   fv x `List.intersect` fv n == []
+                   S.null (fv x `S.intersection` fv n)
          Nothing -> False
 
 instance (Alpha a, Alpha b, Ord a, Ord b) => Ord (Bind a b) where
@@ -160,7 +161,7 @@ instance (Eq a, Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
 -- external names
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 reopen (R a1 (B a2 b)) = (a1, swaps p b) where
-   p =  List.foldr (<>) empty (zipWith single (fv a1) (fv a2))
+   p =  mconcat (zipWith single (S.elems $ fv a1) (S.elems $ fv a2))
 
 -- | Or patterns must bind exactly the same list of names
 or :: (Alpha a, Alpha b) => a -> b -> Maybe (Or a b)
@@ -176,15 +177,15 @@ aeq t1 t2 = case match t1 t2 of
               _       -> False
 
 -- | List the binding variables in a pattern
-binders :: Alpha b => b -> [ Name ]
+binders :: Alpha b => b -> Set Name 
 binders = fv
 
 -- | List variables that occur freely in annotations (not binding)
-patfv :: Alpha b => b -> [ Name ]
+patfv :: Alpha b => b -> Set Name
 patfv = fv' (pat initial)
 
 -- | calculate the free variables of the term
-fv :: Alpha a => a -> [Name]
+fv :: Alpha a => a -> Set Name
 fv = fv' initial
 
 -- | The method "swaps" applys a permutation
@@ -242,7 +243,7 @@ class (Rep1 (AlphaD) a) => Alpha a where
   swaps' = swapsR1 rep1
 
   -- | calculate the free variables (aka support)
-  fv' :: AlphaCtx -> a -> [Name]
+  fv' :: AlphaCtx -> a -> Set Name
   fv' = fvR1 rep1
 
   -- | Match' compares two data structures and produces a
@@ -267,7 +268,7 @@ class (Rep1 (AlphaD) a) => Alpha a where
 -- default definitions for certain classes
 data AlphaD a = AlphaD {
   swapsD   :: AlphaCtx -> (Perm Name) -> a -> a,
-  fvD      :: AlphaCtx -> a -> [Name],
+  fvD      :: AlphaCtx -> a -> Set Name,
   matchD   :: AlphaCtx -> a -> a -> Maybe (Perm Name),
   freshenD :: forall m. Fresh m => AlphaCtx -> a -> m (a,Perm Name),
   lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm Name -> m b) -> m b
@@ -289,16 +290,16 @@ swapsR1 (Data1 _ cons)  = \ p x d ->
   Val c rec kids -> to c (map_l (\z -> swapsD z p x) rec kids)
 swapsR1 r               = error ("Cannot swap type " ++ (show r))
 
-fvR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> [Name]
+fvR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> Set Name
 fvR1 (Data1 _ cons) = \ p  d ->
   case (findCon cons d) of
-    Val _ rec kids -> List.nub (fv1 rec p kids)
-fvR1 _ = \ _ _ -> []
+    Val _ rec kids -> fv1 rec p kids
+fvR1 _ = \ _ _ -> S.empty
 
-fv1 :: MTup (AlphaD) l -> AlphaCtx -> l -> [Name]
-fv1 MNil _ Nil = []
+fv1 :: MTup (AlphaD) l -> AlphaCtx -> l -> Set Name
+fv1 MNil _ Nil = S.empty
 fv1 (r :+: rs) p (p1 :*: t1) =
-   fvD r p p1 ++ fv1 rs p t1
+   fvD r p p1 `S.union` fv1 rs p t1
 
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm Name)
 matchR1 (Data1 _ cons) = loop cons where
@@ -308,17 +309,24 @@ matchR1 (Data1 _ cons) = loop cons where
       (Nothing, Nothing) -> loop rest p x y
       (_,_)              -> Nothing
   loop [] _ _ _ = error "Impossible"
-matchR1 Int1 = \ _ x y -> if x == y then Just empty else Nothing
-matchR1 Integer1 = \ _ x y -> if x == y then Just empty else Nothing
-matchR1 Char1 = \ _ x y -> if x == y then Just empty else Nothing
+matchR1 Int1 = \ _ x y -> if x == y then Just mempty else Nothing
+matchR1 Integer1 = \ _ x y -> if x == y then Just mempty else Nothing
+matchR1 Char1 = \ _ x y -> if x == y then Just mempty else Nothing
 matchR1 _ = \ _ _ _ -> Nothing
 
 match1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Maybe (Perm Name)
-match1 MNil _ Nil Nil = Just empty
+match1 MNil _ Nil Nil = Just mempty
+{-
+match1 (r :+: rs) p (p1 :*: t1) (p2 :*: t2) = do
+  l2 <- match1 rs p t1 t2
+  l1 <- matchD r p (swapsD r p l2 p1) (swapsD r p l2 p2)
+  return (l1 <> l2)
+-}
 match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l1 <- matchD r c p1 p2
-  l2 <- match1 rs c t1 t2
-  (l1 `join` l2)
+  l2 <- match1 rs c t1
+                    (map_l (\z -> swapsD z c l1) rs t2)
+  return (l1 <> l2)
 
 
 freshenR1 :: R1 (AlphaD) a -> Fresh m => AlphaCtx -> a -> m (a,Perm Name)
@@ -327,10 +335,10 @@ freshenR1 (Data1 _ cons) = \ p d ->
      Val c rec kids -> do
        (l, p') <- freshenL rec p kids
        return (to c l, p')
-freshenR1 _ = \ _ n -> return (n, empty)
+freshenR1 _ = \ _ n -> return (n, mempty)
 
 freshenL :: Fresh m => MTup (AlphaD) l -> AlphaCtx -> l -> m (l, Perm Name)
-freshenL MNil _ Nil = return (Nil, empty)
+freshenL MNil _ Nil = return (Nil, mempty)
 freshenL (r :+: rs) p (t :*: ts) = do
   (xs, p2) <- freshenL rs p ts
   (x, p1) <- freshenD r p (swapsD r p p2 t)
@@ -341,11 +349,11 @@ lfreshenR1 :: LFresh m => R1 AlphaD a -> AlphaCtx -> a ->
 lfreshenR1 (Data1 _ cons) = \p d f ->
    case findCon cons d of
      Val c rec kids -> lfreshenL rec p kids (\ l p' -> f (to c l) p')
-lfreshenR1 _ = \ _ n f -> f n empty
+lfreshenR1 _ = \ _ n f -> f n mempty
 
 lfreshenL :: LFresh m => MTup (AlphaD) l -> AlphaCtx -> l ->
               (l -> Perm Name -> m b) -> m b
-lfreshenL MNil _ Nil f = f Nil empty
+lfreshenL MNil _ Nil f = f Nil mempty
 lfreshenL (r :+: rs) p (t :*: ts) f =
   lfreshenL rs p ts ( \ y p2 ->
   lfreshenD r p (swapsD r p p2 t) ( \ x p1 ->
@@ -353,26 +361,26 @@ lfreshenL (r :+: rs) p (t :*: ts) f =
 
 instance Alpha Name  where
 
-  fv' Term n = [ n ]
-  fv' Pat n  = []
+  fv' Term n = S.singleton n 
+  fv' Pat n  = S.empty
 
   swaps' Term p x = apply p x
   swaps' Pat perm x = x
 
-  match' Term x y = if x == y then Just empty else Just (single x y)
-  match' Pat x y  = if x == y then Just empty else Nothing
+  match' Term x y = if x == y then Just mempty else Just (single x y)
+  match' Pat x y = if x == y then Just mempty else Nothing
 
   freshen' Term nm = do { x <- fresh nm; return(x,(single nm x)) }
-  freshen' Pat nm = return (nm, empty)
+  freshen' Pat nm = return (nm, mempty)
 
   lfreshen' c nm f = case mode c of
      Term -> do { x <- lfresh nm; avoid [x] $ f x (single nm x) }
-     Pat  -> f nm empty
+     Pat  -> f nm mempty
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     -- default swaps'
 
-    fv' p (B x y) = fv' (pat p) x ++ (fv' p y List.\\ fv' Term x)
+    fv' p (B x y) = fv' (pat p) x `S.union` (fv' p y S.\\ fv' Term x)
 
     freshen' p (B x y) = do
        (x', p1)  <- freshen' p x
@@ -380,25 +388,27 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
        return (B x' y', p1 <> p3)
 
     lfreshen' c (B x y) f =
-      avoid (fv' c x) $
+      avoid (S.elems $ fv' c x) $
         lfreshen' (pat c) x (\ x' pm1 ->
         lfreshen' c (swaps' c pm1 y) (\ y' pm2 ->
         f (B x' y') (pm1 <> pm2)))
 
-    match' p (B x1 y1) (B x2 y2) = do
-        pmt <- match' Term x1 x2
-        if any (\x -> apply pmt x /= x &&  x `elem` fv y2) (fv x1)
-          then Nothing
-          else do
-            pmp <- match' Pat  x1 (swaps' Term pmt x2)
-            pmy <- match' Term y1 (swaps' Term pmt y2)
-            pmp `join` pmy
-
+    match' p (B x1 y1) (B x2 y2) =
+        if any (\x -> elem x (S.elems $ fv x1)) (S.elems $ fv y2) --Check this, it's not symmetric.
+        then Nothing
+        else
+        case (match' Term x1 x2) of
+          Just pmt ->
+              case (match' Pat x1 (swaps' Term pmt x2),
+                    match' p   y1 (swaps' Term pmt y2)) of
+                  (Just pmp, Just pmy) -> Just (pmp <> pmy)
+                  _ -> Nothing
+          _ -> Nothing
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
-   fv' Term (R x (B x' y)) = fv' Term x ++ fv' Term y
-   fv' Pat  (R x (B x' y)) = fv' Pat x ++
-                   ((fv' Pat y) List.\\ (fv' Term x))
+   fv' Term (R x (B x' y)) = fv' Term x `S.union` fv' Term y
+   fv' Pat  (R x (B x' y)) = fv' Pat x `S.union`
+                   ((fv' Pat y) S.\\ (fv' Term x))
 
    freshen' p (R x (B x1 y)) = do
       (x', pm1) <- freshen' p x
@@ -407,8 +417,8 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
    match' p (R x1 (B x1' y1)) (R x2 (B x2' y2)) = do
      px <- match' p x1 x2
-     py <- match' p y1 y2
-     (px `join` py)
+     py <- match' p y1 (swaps' Pat px y2)
+     return (px <> py)
 
 
 instance (Eq a, Alpha a) => Alpha (Annot a) where
@@ -417,16 +427,16 @@ instance (Eq a, Alpha a) => Alpha (Annot a) where
    swaps' Term pm (Annot t) = Annot t
 
    fv' Pat (Annot t)       = fv' Term t
-   fv' Term _              = []
+   fv' Term _              = S.empty
 
    freshen' Pat (Annot t)  = do
      (t', p) <- freshen' Term t
      return (Annot t', p)
-   freshen' Term a       = return (a, empty)
+   freshen' Term a       = return (a, mempty)
 
    match' Pat (Annot x) (Annot y)  = match' Term x y
    match' Term (Annot x) (Annot y) = if x `aeq` y
-                                    then Just empty
+                                    then Just mempty
                                     else Nothing
 
 -- Instances for other types (mostly) use the default definitions.
@@ -453,9 +463,9 @@ abs_swaps' _ p s = s
 abs_fv' :: Alpha a => AlphaCtx -> a -> [Name]
 abs_fv' _ s = []
 abs_freshen' :: (Fresh m, Alpha a) => AlphaCtx -> a -> m (a, Perm Name)
-abs_freshen' _ b = return (b, empty)
+abs_freshen' _ b = return (b, mempty)
 abs_match' :: (Eq a, Alpha a) => AlphaCtx -> a -> a -> Maybe (Perm Name)
-abs_match' _ x1 x2 = if x1 == x2 then Just empty else Nothing
+abs_match' _ x1 x2 = if x1 == x2 then Just mempty else Nothing
 
 -------------------------------------------------------
 -- | A monad "m" supports the nextInteger operation if it
@@ -521,10 +531,9 @@ instance LFresh (Reader Integer) where
         k = maximum (map name2Int names)
 
 -- | Destruct a binding in the LFresh monad.
-lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a,b)
---           (a -> b -> m c) -> m c 
+lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
 lunbind (B a b) =
-  avoid (fv b) $ error "UNIMP"
+  avoid (S.elems $ fv b) $ error "UNIMP"
 
 
 lunbind2  :: (LFresh m, Alpha b, Alpha c, Alpha d) =>
@@ -553,11 +562,11 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) = do
 
 subst :: (Alpha a, Alpha b, Subst b a) => Name -> b -> a -> a
 subst n u x =
- runReader (avoid ([n] ++ (fv u)++(fv x)) $ lsubst n u x) (0 :: Integer)
+ runReader (avoid ([n] ++ (S.elems $ fv u)++(S.elems $ fv x)) $ lsubst n u x) (0 :: Integer)
 
 substs :: (Alpha a, Alpha b, Subst b a) => [Name] -> [b] -> a -> a
 substs ns us x =
- runReader (avoid (ns ++ (concatMap fv us)++(fv x)) $ lsubsts ns us x)
+ runReader (avoid (ns ++ (concatMap (S.elems . fv) us)++(S.elems $ fv x)) $ lsubsts ns us x)
      (0 :: Integer)
 
 
@@ -670,36 +679,9 @@ do_tests =
    tests_aeq
    tests_fv
    tests_big
-   tests_match
 
 perm = single name1 name2
 
-
-crazy1 = bind (name8, Annot name2) 
-         (bind (name3, Annot
-                         (bind (name4, Annot (name8, name3)) name8)) 
-          name5)
-crazy2 = bind (name1, Annot name6)
-         (bind (name3, Annot
-                         (bind (name4, Annot (name1, name3)) name1))
-          name7)
-
-pc = (single name2 name6) <> (single name5 name7)
-
-tests_match = do
-  assert "m1" $ match crazy1 crazy2 == Just pc
-  assert "m2" $ swaps pc crazy1 == crazy2
-  assert "m3" $ swaps pc crazy2 == crazy1
-  assert "m4" $ match (bind name1 name1) (bind name1 name1) == Just empty
-  assert "m5" $ match (name1, name1) (name3, name4) == Nothing
-  assert "m6" $ match (bind name1 name2) (bind name3 name4) == 
-      Just (single name2 name4)
-  assert "m7" $ match (bind (name1, Annot name2) name1)
-                      (bind (name2, Annot name3) name2) == 
-      Just (single name2 name3)
-  assert "m8" $ match (bind name1 name2) (bind name2 name2) == Nothing
-  assert "m9" $ match (bind (name1, Annot name3) name1) (bind (name2, Annot name4) name2) == Just (single name3 name4)
- 
 tests_aeq = do
    assert "a1" $ (bind name1 name1) /= (bind name1 name2)
    assert "a2" $ (bind name1 name1) == (bind name1 name1)
@@ -727,23 +709,20 @@ tests_aeq = do
                   (rebind (name4, Annot name3) ())
    assert "a16" $ bind (name1, name2) name1 /= bind (name2, name1) name1
    assert "a17" $ bind (name1, name2) name1 /= bind (name1, name2) name2
-   assert "a18" $ (name1, name1) /= (name1, name2)
-   assert "a19" $ (name1, name1) /= (name3, name4)
-
 
 tests_fv = do
-   assert "f1" $ fv (bind name1 name1) == []
-   assert "f2" $ fv' (pat initial) (bind name1 name1) == []
-   assert "f4" $ fv (bind name1 name2) == [name2]
-   assert "f5" $ fv (bind (name1, Annot name2) name1) == [name2]
-   assert "f7" $ fv (bind (name2, Annot name2) name2) == [name2]
-   assert "f8" $ fv (rebind name1 name2) == [name1, name2]
-   assert "f9" $ fv' (pat initial) (rebind name1 name1) == []
-   assert "f3" $ fv (bind (rebind name1 (Annot name1)) name1) == []
-   assert "f10" $ fv (rebind (name1, Annot name1) ()) == [name1]
-   assert "f11" $ fv' (pat initial) (rebind (name1, Annot name1) ()) == [name1]
-   assert "f12" $ fv (bind (Annot name1) ()) == [name1]
-   assert "f14" $ fv (rebind (Annot name1) ()) == []
+   assert "f1" $ fv (bind name1 name1) == S.empty
+   assert "f2" $ fv' (pat initial) (bind name1 name1) == S.empty
+   assert "f4" $ fv (bind name1 name2) == S.singleton name2
+   assert "f5" $ fv (bind (name1, Annot name2) name1) == S.singleton name2
+   assert "f7" $ fv (bind (name2, Annot name2) name2) == S.singleton name2
+   assert "f8" $ fv (rebind name1 name2) == S.fromList [name1, name2]
+   assert "f9" $ fv' (pat initial) (rebind name1 name1) == S.empty
+   assert "f3" $ fv (bind (rebind name1 (Annot name1)) name1) == S.empty
+   assert "f10" $ fv (rebind (name1, Annot name1) ()) == S.singleton name1
+   assert "f11" $ fv' (pat initial) (rebind (name1, Annot name1) ()) == S.singleton name1
+   assert "f12" $ fv (bind (Annot name1) ()) == S.singleton name1
+   assert "f14" $ fv (rebind (Annot name1) ()) == S.empty
 
 big1 =
     bind name1
@@ -773,7 +752,7 @@ big2 =
 
 tests_big = do
    assert "b1" $ big1 == big2
-   assert "b2" $ fv big1 == [name11]
+   assert "b2" $ fv big1 == S.singleton name11
    assert "b3" $ big1 == subst name11 (V name11) big1
 
 
