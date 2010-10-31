@@ -806,6 +806,15 @@ instance LFresh (Reader Integer) where
   avoid names       = local (max k) where
         k = maximum (map name2Integer names)
 
+-- | A monad instance for 'LFresh' which tries to not rename
+--   more than necessary.
+instance LFresh (Reader (Set Name)) where
+  lfresh (Nm (s,j)) = do
+    used <- ask;
+    return $ head (filter (\x -> not (S.member x used))
+                          (map (\i -> Nm (s,i)) [0..]))
+  avoid names = local (S.union (S.fromList names))
+
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
 lunbind (B a b) =
