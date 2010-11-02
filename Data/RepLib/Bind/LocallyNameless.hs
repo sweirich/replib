@@ -74,7 +74,7 @@ module Data.RepLib.Bind.LocallyNameless
 
     -- * The 'Alpha' class
     Alpha(..),
-    swaps,
+    swaps, match,
     binders, patfv, fv,
     aeq,
 
@@ -153,11 +153,8 @@ newtype Annot a = Annot a deriving (Show, Read, Eq)
 
 -- | 'Rebind' supports \"telescopes\" --- that is, patterns where
 --   bound variables appear in multiple subterms.
-data Rebind a b = R a (Bind a b)
+data Rebind a b = R a b
 
--- Fragilely deriving the replib instances for Bind and Name
--- in the same file that they are defined in. This shouldn't
--- work, but it does.
 $(derive [''Bind, ''Name, ''Annot, ''Rebind])
 
 ------------------------------------------------------------
@@ -503,7 +500,8 @@ instance (Alpha a, Alpha b) => Alpha (SBind a b) where
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     swaps' c pm (B x y) =
-        (B (swaps' (pat c) pm x) (swaps' (incr c) pm y))
+        (B (swaps' (pat c) pm x)
+           (swaps' (incr c) pm y))
 
     fv' c (B x y) = fv' (pat c) x `S.union` fv' (incr c) y
 
@@ -513,7 +511,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
       return (B x' y', pm1 <> pm2)
 
     lfreshen' c (B x y) f =
-      avoid (S.elems $ fv' c x) $
+--      avoid (S.elems $ fv' c x) $ -- I don't think we need this
         lfreshen' (pat c) x (\ x' pm1 ->
         lfreshen' (incr c) (swaps' (incr c) pm1 y) (\ y' pm2 ->
         f (B x' y') (pm1 <> pm2)))
@@ -521,39 +519,47 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     match' c (B x1 y1) (B x2 y2) = do
       px <- match' (pat c) x1 x2
       --- check this!
-      py <- match' (incr c) y1y2
-
-      -- need to make sure that all permutations of bound variables at this
+      py <- match' (incr c) y1 y2
+      -- need to make sure that all permutations of 
+      -- bound variables at this
       -- level are the identity
       (px `join` py)
 
-    open  c a (B x y)    = B (open c a x)  (open  (incr c) a y)
-    close c a (B x y)    = B (close c a x) (close (incr c) a y)
-
-
+    open  c a (B x y)    = B (open (pat c) a x)  (open  (incr c) a y)
+    close c a (B x y)    = B (close (pat c) a x) (close (incr c) a y)
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
---  swaps' p pm (R x bnd) = R (swaps' pm x) (swaps' pm bnd)
-  fv' p (R x (B x' y)) =  fv' p x `S.union` fv' p y
 
-  freshen' p (R x (B x1 y)) = do
+  swaps' p pm (R x y) = R (swaps' p pm x) (swaps' (incr p) pm y)
+
+  fv' p (R x y) =  fv' p x `S.union` fv' (incr p) y
+
+  lfreshen' p (R x y) g = 
+    lfreshen' p x $ \ x' pm1 ->
+      lfreshen' (incr p) (swaps' (incr p) pm1 y) $ \ y' pm2 ->
+        g (R x' y') (pm1 <> pm2)
+
+  freshen' p (R x y) = do
       (x', pm1) <- freshen' p x
       (y', pm2) <- freshen' (incr p) (swaps' (incr p) pm1 y)
-      return (R x (B x1 y'), pm1 <> pm2)
+      return (R x' y', pm1 <> pm2)
 
-  match' p (R x1 (B x1' y1)) (R x2 (B x2' y2)) = do
+  match' p (R x1 y1) (R x2 y2) = do
      px <- match' p x1 x2
-     py <- match' (incr p)  y1 y2
+     py <- match' (incr p)  y1 y2
      (px `join` py)
 
-  findpatrec (R x (B x' y)) nm =
+  open c a (R x y)  = R (open c a x) (open (incr c) a y)
+  close c a (R x y) = R (close c a x) (close (incr c) a y)
+
+  findpatrec (R x y) nm =
      case findpatrec x nm of
          (i, True) -> (i, True)
          (i, False) -> case findpatrec y nm of
                          (j, True) -> (i + j, True)
                          (j, False) -> (i+j, False)
 
-  nthpatrec (R x (B x' y)) i =
+  nthpatrec (R x y) i =
       case nthpatrec x i of
         (j , Just n) -> (j, Just n)
         (j , Nothing) -> nthpatrec y j
@@ -599,6 +605,7 @@ instance (Alpha a, Alpha b,Alpha c, Alpha d, Alpha e) =>
    Alpha (a,b,c,d,e)
 
 -- Definitions of the class members for abstract types.
+-- These will go away soon.
 abs_swaps' :: Alpha a => AlphaCtx -> Perm Name -> a -> a
 abs_swaps' _ p s = s
 abs_fv' :: Alpha a => AlphaCtx -> a -> Set Name
@@ -663,20 +670,20 @@ instance (Show a, Show b) => Show (Bind a b) where
 
 -- | Constructor for binding in patterns.
 rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (bind a b)
+rebind a b = R a (close initial a b)
 
 -- | Compare for alpha-equality.
 instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
    b1 == b2 = b1 `aeq` b2
 
 instance (Show a, Show b) => Show (Rebind a b) where
-  showsPrec p (R a (B _ b)) = showParen (p>0)
+  showsPrec p (R a b) = showParen (p>0)
       (showString "<<" . showsPrec p a . showString ">> " . showsPrec 0 b)
 
 -- | destructor for binding patterns, the names should have already
 -- been freshened.
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-reopen (R a (B _ b)) = (a, open initial a b)
+reopen (R a b) = (a, open initial a b)
 
 -- | Determine alpha-equivalence.
 aeq :: Alpha a => a -> a -> Bool
