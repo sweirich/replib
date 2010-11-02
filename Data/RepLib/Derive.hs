@@ -36,27 +36,32 @@ import Data.Tuple
 
 -- Note, that the representation of a type variable "a" is (rep :: R a) so Rep a must be 
 -- in the context
-repty :: Type -> Exp
+repty :: Type -> Q Exp
 repty (ForallT _ _ _) = error "cannot rep"
-repty (VarT n) = (SigE (VarE (mkName "rep")) ((ConT ''R) `AppT` (VarT n)))
+repty (VarT n) = return (SigE (VarE (mkName "rep")) ((ConT ''R) `AppT` (VarT n)))
 repty (AppT t1 t2) = (repty t1) -- `AppE` (repty t2)
-repty (ConT n) = 
-    case nameBase n of 
-      "Int"     -> (ConE 'Int)
-      "Char"    -> (ConE 'Char)
-      "Float"   -> (ConE 'Float)
-      "Double"  -> (ConE 'Double)
-      "Rational"-> (ConE 'Rational)
-      "Integer" -> (ConE 'Integer)
-      "IOError" -> (ConE 'IOError)
-      "IO"      -> (ConE 'IO)
-      "[]"      -> (VarE 'rList)  --- don't know why this isn't ListT 
-      "String"  -> (VarE 'rList)
-      c         -> (VarE (rName n))
+repty (ConT n) = do 
+  info <- reify n
+  case info of 
+    TyConI (TySynD n' vars t) -> repty t
+    _ ->
+     return $
+      case nameBase n of 
+       "Int"     -> (ConE 'Int)
+       "Char"    -> (ConE 'Char)
+       "Float"   -> (ConE 'Float)
+       "Double"  -> (ConE 'Double)
+       "Rational"-> (ConE 'Rational)
+       "Integer" -> (ConE 'Integer)
+       "IOError" -> (ConE 'IOError)
+       "IO"      -> (ConE 'IO)
+       "[]"      -> (VarE 'rList)  --- don't know why this isn't ListT 
+       "String"  -> (VarE 'rList)
+       c         -> (VarE (rName n))
 -- repty (TupleT 2) = (VarE (mkName "rTup2"))
 repty (TupleT i) = error "urk"
-repty (ArrowT)   = (ConE 'Arrow)
-repty (ListT)    = (VarE 'rList)
+repty (ArrowT)   = return (ConE 'Arrow)
+repty (ListT)    = return (VarE 'rList)
  
 
 rName :: Name -> Name
@@ -92,7 +97,7 @@ repcon :: Bool ->  -- Is this the ONLY constructor for the datatype
 	  Q Exp
 repcon single d (name, sttys) = 
 	 let rargs = foldr (\ (_,t) tl -> 
-		 [| $(return (repty t)) :+: $(tl) |]) [| MNil |] sttys in
+		 [| $(repty t) :+: $(tl) |]) [| MNil |] sttys in
 		 [| Con $(remb single d (name,sttys)) $(rargs) |]
 
 -- the "from" function that coerces from an "a" to the arguments
