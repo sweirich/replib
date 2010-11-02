@@ -145,7 +145,7 @@ instance Zero a => Sat (ZeroD a) where
     dict = ZD zero
 
 zeroR1 :: R1 ZeroD a -> a 
-zeroR1 Int1 = minBound
+zeroR1 Int1 = 0
 zeroR1 Char1 = minBound
 zeroR1 (Arrow1 z1 z2) = \x -> zeroD z2
 zeroR1 Integer1 = 0
