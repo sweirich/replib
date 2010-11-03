@@ -381,11 +381,12 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     -- default swaps'
 
     fv' p (B x y) = fv' (pat p) x `S.union` (fv' p y S.\\ fv' Term x)
-
+{-
     freshen' p (B x y) = do
-       (x', p1)  <- freshen' p x
-       (y' , p3) <- freshen' p (swaps' p p1 y)
+--       (x', p1)  <- freshen' (all p) x -- freshen the binders & annots
+       (y', p3) <- freshen' p (swaps' p p1 y) -- freshen body
        return (B x' y', p1 <> p3)
+-}
 
     lfreshen' c (B x y) f =
       avoid (S.elems $ fv' c x) $
@@ -393,8 +394,16 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         lfreshen' c (swaps' c pm1 y) (\ y' pm2 ->
         f (B x' y') (pm1 <> pm2)))
 
+    -- basic idea of match
+    -- if binders x1 == binders x2 then 
+        --- match the annots in x1 and x2 and match the bodies y1 y2
+    -- if binders x1 /= binders x2 then
+        -- make sure binders of x1 are not free in (B x2 y2) 
+        -- match the annots & match the bodies, but remove the
+        -- matches from x1 ~ x2
     match' p (B x1 y1) (B x2 y2) =
-        if any (\x -> elem x (S.elems $ fv x1)) (S.elems $ fv y2) --Check this, it's not symmetric.
+        if any (\x -> elem x (S.elems $ fv x1))
+                (S.elems $ fv y2) --Check this, it's not symmetric.
         then Nothing
         else
         case (match' Term x1 x2) of
