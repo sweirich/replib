@@ -654,6 +654,9 @@ instance (Pattern a, AlphaTerm b) => Eq (Bind a b) where
 -- e.g.
 --   compare (bind [name1] name1) (bind [name1,name1] name1) == LT
 --   compare (bind [name3] name3) (bind [name1,name1] name1) == GT
+-- 
+-- I think we are going to need a new generic fcn for comparison
+-- to implement this.
 {-
 instance (Pattern a, AlphaTerm b, Ord a, Ord b) => Ord (Bind a b) where
    compare (B a1 b1) (B a2 b2) =
