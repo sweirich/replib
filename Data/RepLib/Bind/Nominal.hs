@@ -26,7 +26,7 @@ module Data.RepLib.Bind.Nominal
   ) where
 
 import Data.RepLib
-import Data.RepLib.Bind.Perm
+import Data.RepLib.Bind.PermM
 
 import qualified Data.List as List
 import qualified Text.Read as R
@@ -161,7 +161,7 @@ instance (Eq a, Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
 -- external names
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 reopen (R a1 (B a2 b)) = (a1, swaps p b) where
-   p =  mconcat (zipWith single (S.elems $ fv a1) (S.elems $ fv a2))
+   p = foldl (<>) empty (zipWith single (S.elems $ fv a1) (S.elems $ fv a2))
 
 -- | Or patterns must bind exactly the same list of names
 or :: (Alpha a, Alpha b) => a -> b -> Maybe (Or a b)
@@ -309,24 +309,17 @@ matchR1 (Data1 _ cons) = loop cons where
       (Nothing, Nothing) -> loop rest p x y
       (_,_)              -> Nothing
   loop [] _ _ _ = error "Impossible"
-matchR1 Int1 = \ _ x y -> if x == y then Just mempty else Nothing
-matchR1 Integer1 = \ _ x y -> if x == y then Just mempty else Nothing
-matchR1 Char1 = \ _ x y -> if x == y then Just mempty else Nothing
+matchR1 Int1 = \ _ x y -> if x == y then Just empty else Nothing
+matchR1 Integer1 = \ _ x y -> if x == y then Just empty else Nothing
+matchR1 Char1 = \ _ x y -> if x == y then Just empty else Nothing
 matchR1 _ = \ _ _ _ -> Nothing
 
 match1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Maybe (Perm Name)
-match1 MNil _ Nil Nil = Just mempty
-{-
-match1 (r :+: rs) p (p1 :*: t1) (p2 :*: t2) = do
-  l2 <- match1 rs p t1 t2
-  l1 <- matchD r p (swapsD r p l2 p1) (swapsD r p l2 p2)
-  return (l1 <> l2)
--}
+match1 MNil _ Nil Nil = Just empty
 match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l1 <- matchD r c p1 p2
-  l2 <- match1 rs c t1
-                    (map_l (\z -> swapsD z c l1) rs t2)
-  return (l1 <> l2)
+  l2 <- match1 rs c t1 t2
+  (l1 `join` l2)
 
 
 freshenR1 :: R1 (AlphaD) a -> Fresh m => AlphaCtx -> a -> m (a,Perm Name)
@@ -335,10 +328,10 @@ freshenR1 (Data1 _ cons) = \ p d ->
      Val c rec kids -> do
        (l, p') <- freshenL rec p kids
        return (to c l, p')
-freshenR1 _ = \ _ n -> return (n, mempty)
+freshenR1 _ = \ _ n -> return (n, empty)
 
 freshenL :: Fresh m => MTup (AlphaD) l -> AlphaCtx -> l -> m (l, Perm Name)
-freshenL MNil _ Nil = return (Nil, mempty)
+freshenL MNil _ Nil = return (Nil, empty)
 freshenL (r :+: rs) p (t :*: ts) = do
   (xs, p2) <- freshenL rs p ts
   (x, p1) <- freshenD r p (swapsD r p p2 t)
@@ -349,11 +342,11 @@ lfreshenR1 :: LFresh m => R1 AlphaD a -> AlphaCtx -> a ->
 lfreshenR1 (Data1 _ cons) = \p d f ->
    case findCon cons d of
      Val c rec kids -> lfreshenL rec p kids (\ l p' -> f (to c l) p')
-lfreshenR1 _ = \ _ n f -> f n mempty
+lfreshenR1 _ = \ _ n f -> f n empty
 
 lfreshenL :: LFresh m => MTup (AlphaD) l -> AlphaCtx -> l ->
               (l -> Perm Name -> m b) -> m b
-lfreshenL MNil _ Nil f = f Nil mempty
+lfreshenL MNil _ Nil f = f Nil empty
 lfreshenL (r :+: rs) p (t :*: ts) f =
   lfreshenL rs p ts ( \ y p2 ->
   lfreshenD r p (swapsD r p p2 t) ( \ x p1 ->
@@ -367,15 +360,15 @@ instance Alpha Name  where
   swaps' Term p x = apply p x
   swaps' Pat perm x = x
 
-  match' Term x y = if x == y then Just mempty else Just (single x y)
-  match' Pat x y = if x == y then Just mempty else Nothing
+  match' Term x y = if x == y then Just empty else Just (single x y)
+  match' Pat x y = if x == y then Just empty else Nothing
 
   freshen' Term nm = do { x <- fresh nm; return(x,(single nm x)) }
-  freshen' Pat nm = return (nm, mempty)
+  freshen' Pat nm = return (nm, empty)
 
   lfreshen' c nm f = case mode c of
      Term -> do { x <- lfresh nm; avoid [x] $ f x (single nm x) }
-     Pat  -> f nm mempty
+     Pat  -> f nm empty
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     -- default swaps'
@@ -399,20 +392,28 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         --- match the annots in x1 and x2 and match the bodies y1 y2
     -- if binders x1 /= binders x2 then
         -- make sure binders of x1 are not free in (B x2 y2) 
-        -- match the annots & match the bodies, but remove the
-        -- matches from x1 ~ x2
-    match' p (B x1 y1) (B x2 y2) =
-        if any (\x -> elem x (S.elems $ fv x1))
-                (S.elems $ fv y2) --Check this, it's not symmetric.
-        then Nothing
-        else
-        case (match' Term x1 x2) of
-          Just pmt ->
-              case (match' Pat x1 (swaps' Term pmt x2),
-                    match' p   y1 (swaps' Term pmt y2)) of
-                  (Just pmp, Just pmy) -> Just (pmp <> pmy)
-                  _ -> Nothing
-          _ -> Nothing
+        -- swap x1,x2 in y2
+        -- match the annots & match the bodies
+    -- ingredients:  
+        -- match the binders, ignoring the annots
+        -- match the annots, ignoring the binders
+        -- list the binding variables
+    match' Term (B x1 y1) (B x2 y2) =
+        case (match' Term x1 x2) of 
+          Just pmt | isid pmt -> do 
+            pm1 <- match' Pat x1 x2
+            pm2 <- match' Term y1 y2 
+            (pm1 `join` pm2)
+          Just pmt -> 
+            let xs = binders x1 in
+            if xs `S.intersection` fv y2 == S.empty then do
+               pm1 <- match' Pat x1 x2
+               pm2 <- match' Term y1 (swaps' Term pmt y2)
+               (pm1 `join` pm2)
+             else Nothing
+          _ -> Nothing 
+    match' Pat _ _ = error "cannot match binders here."
+
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
    fv' Term (R x (B x' y)) = fv' Term x `S.union` fv' Term y
@@ -441,11 +442,11 @@ instance (Eq a, Alpha a) => Alpha (Annot a) where
    freshen' Pat (Annot t)  = do
      (t', p) <- freshen' Term t
      return (Annot t', p)
-   freshen' Term a       = return (a, mempty)
+   freshen' Term a       = return (a, empty)
 
    match' Pat (Annot x) (Annot y)  = match' Term x y
    match' Term (Annot x) (Annot y) = if x `aeq` y
-                                    then Just mempty
+                                    then Just empty
                                     else Nothing
 
 -- Instances for other types (mostly) use the default definitions.
@@ -472,9 +473,9 @@ abs_swaps' _ p s = s
 abs_fv' :: Alpha a => AlphaCtx -> a -> [Name]
 abs_fv' _ s = []
 abs_freshen' :: (Fresh m, Alpha a) => AlphaCtx -> a -> m (a, Perm Name)
-abs_freshen' _ b = return (b, mempty)
+abs_freshen' _ b = return (b, empty)
 abs_match' :: (Eq a, Alpha a) => AlphaCtx -> a -> a -> Maybe (Perm Name)
-abs_match' _ x1 x2 = if x1 == x2 then Just mempty else Nothing
+abs_match' _ x1 x2 = if x1 == x2 then Just empty else Nothing
 
 -------------------------------------------------------
 -- | A monad "m" supports the nextInteger operation if it
