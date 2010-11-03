@@ -823,33 +823,33 @@ instance LFresh (Reader (Set Name)) where
   avoid names = local (S.union (S.fromList names))
 
 -- | Destruct a binding in an 'LFresh' monad.
-lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
-lunbind (B a b) =
-  avoid (S.elems $ fv b) $
-  lfreshen a (\x _ -> return (x, open initial x b))
+lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
+lunbind (B a b) g =
+  -- avoid (S.elems $ fv b) $ -- don't think we need this
+  lfreshen a (\x _ -> g (x, open initial x b))
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders match.
 lunbind2  :: (LFresh m, Alpha b, Alpha c, Alpha d) =>
-            Bind b c -> Bind b d -> m (Maybe (b,c,d))
-lunbind2 (B b1 c) (B b2 d) =
+            Bind b c -> Bind b d -> (Maybe (b,c,d) -> m e) -> m e 
+lunbind2 (B b1 c) (B b2 d) g =
       case match b1 b2 of
-         Just _ -> do
-           (b', c') <- lunbind (B b1 c)
-           return $ Just (b', c', open initial b' d)  -- BAY: the c' used to be c,
-         Nothing -> return Nothing                    -- am I correct in assuming
+         Just _ -> 
+           lunbind (B b1 c) $ \ (b', c') ->
+             g $ Just (b', c', open initial b' d)  -- BAY: the c' used to be c,
+         Nothing -> g Nothing                    -- am I correct in assuming
                                                       -- that was a bug?
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders match.
 lunbind3  :: (LFresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
-            Bind b c -> Bind b d -> Bind b e ->  m (Maybe (b,c,d,e))
-lunbind3 (B b1 c) (B b2 d) (B b3 e) = do
+            Bind b c -> Bind b d -> Bind b e ->  (Maybe (b,c,d,e) -> m f) -> m f 
+lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
       case (match b1 b2, match b1 b3) of
-         (Just _, Just _) -> do
-           (b', c') <- lunbind (B b1 c)
-           return $ Just (b', c', open initial b' d, open initial b' e)
-         _ -> return Nothing
+         (Just _, Just _) -> 
+           lunbind (B b1 c) $ \ (b', c') ->
+              g $ Just (b', c', open initial b' d, open initial b' e)
+         _ -> g Nothing
 
 ------------------------------------------------------------
 -- Substitution
