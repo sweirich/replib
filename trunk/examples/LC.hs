@@ -30,6 +30,7 @@ import Data.RepLib.Bind.LocallyNameless
      rName, rBind
     )
 import Control.Monad.Reader (Reader, runReader)
+import Data.Set as S
 
 -- | A Simple datatype for the Lambda Calculus
 data Exp = Var Name
@@ -92,7 +93,7 @@ red (Lam bnd) = lunbind bnd $ \ (x, e) -> do
    e' <- red e
    case e of
      -- look for an eta-reduction
-     App e1 (Var y) | y == x && x `notElem` fv e1 -> return e1
+     App e1 (Var y) | y == x && x `S.notMember` fv e1 -> return e1
      otherwise -> return (Lam (bind x e'))
 red (Var x) = return $ (Var x)
 
