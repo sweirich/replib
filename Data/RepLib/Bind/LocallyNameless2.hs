@@ -9,7 +9,8 @@
              RankNTypes,
              GADTs,
              EmptyDataDecls,
-             StandaloneDeriving
+             StandaloneDeriving, 
+             FunctionalDependencies
   #-}
 {- LANGUAGE  KitchenSink -}
 
@@ -64,7 +65,7 @@ each other.
 -- 'Fresh' and 'LFresh' classes.
 ----------------------------------------------------------------------
 
-module Data.RepLib.Bind.LocallyNameless
+module Data.RepLib.Bind.LocallyNameless2
   ( -- * Basic types
     Name, Bind, Annot(..), Rebind,
 
@@ -87,12 +88,12 @@ module Data.RepLib.Bind.LocallyNameless
     -- ** The 'Fresh' class
     Fresh(..),     
     unbind, unbind2, unbind3,
-    freshen, freshenBinders, freshenAnnots,
+    freshen, -- freshenBinders, freshenAnnots,
 
     -- ** The 'LFresh' class
     HasNext(..), LFresh(..),
     lunbind, lunbind2, lunbind3,
-    lfreshen, lfreshenBinders, lfreshenAnnots,
+    lfreshen, -- lfreshenBinders, lfreshenAnnots,
 
     -- * Rebinding operations
     rebind, reopen,
@@ -741,7 +742,7 @@ swapsBinders = swaps' initial
 swapsAnnots :: AlphaTerm a => Perm Name -> a -> a
 swapsAnnots = swaps' (pat initial)
 
-
+{-
 -- | \"Locally\" freshen a term. Replace all free variables with 
 -- fresh variables. The second argument is the scope of the freshness, 
 -- calls to lfreshen within this scope will avoid the names chosen 
@@ -753,29 +754,30 @@ lfreshen = lfreshen' initial
 -- of a pattern
 lfreshenAnnots :: (Pattern a, LFresh m) => a -> (a -> Perm Name -> m b) -> m b
 lfreshenAnnots = lfreshen' (pat initial)
-
+-}
 -- | \"Locally\" freshen the binding variables in a pattern.
-lfreshenBinders :: (Pattern a, LFresh m) => a -> (a -> Perm Name -> m b) -> m b
-lfreshenBinders = lfreshen' initial
+lfreshen :: (Pattern a, LFresh m) => a -> (a -> Perm Name -> m b) -> m b
+lfreshen = lfreshen' initial
 
-
+{-
 -- | Freshen a term by replacing all old free 'Name's with new
 -- fresh 'Name's, returning a new term and a @'Perm' 'Name'@
 -- specifying how 'Name's were replaced.
 freshen :: (Fresh m, AlphaTerm a) => a -> m (a, Perm Name)
 freshen = freshen' initial
 
+
 -- | Freshen a pattern by replacing all old /binding/ 'Name's with new
 -- fresh 'Name's, returning a new pattern and a @'Perm' 'Name'@
 -- specifying how 'Name's were replaced.
 freshenAnnots :: (Fresh m, Pattern a) => a -> m (a, Perm Name)
 freshenAnnots = freshen' (pat initial)
-
+-}
 -- | Freshen a pattern by replacing all old /binding/ 'Name's with new
 -- fresh 'Name's, returning a new pattern and a @'Perm' 'Name'@
 -- specifying how 'Name's were replaced.
-freshenBinders :: (Fresh m, Pattern a) => a -> m (a, Perm Name)
-freshenBinders = freshen' initial
+freshen :: (Fresh m, Pattern a) => a -> m (a, Perm Name)
+freshen = freshen' initial
 
 -- | Compare two data structures and produce a permutation of their
 -- 'Name's that will make them alpha-equivalent to each other. 
@@ -851,7 +853,7 @@ instance (Monad m, HasNext m) => Fresh m where
 -- bindings. It ensures that the names in the binding are fresh.
 unbind  :: (Fresh m, Pattern b, AlphaTerm c) => Bind b c -> m (b,c)
 unbind (B b c) = do
-      (b', _) <- freshenBinders b
+      (b', _) <- freshen b
       return (b', open initial b' c)
 
 -- | Unbind two terms with the same fresh names, provided the
@@ -861,7 +863,7 @@ unbind2  :: (Fresh m, Pattern b, AlphaTerm c, AlphaTerm d) =>
 unbind2 (B b1 c) (B b2 d) = do
       case matchBinders b1 b2 of
          Just _ -> do
-           (b', _) <- freshenBinders b1
+           (b', _) <- freshen b1
            return $ Just (b', open initial b' c, open initial b' d)
          Nothing -> return Nothing
 
@@ -870,7 +872,7 @@ unbind3  :: (Fresh m, Pattern b, AlphaTerm c, AlphaTerm d, AlphaTerm e) =>
 unbind3 (B b1 c) (B b2 d) (B b3 e) = do
       case (matchBinders b1 b2, matchBinders b1 b3) of
          (Just _, Just _) -> do
-           (b', _) <- freshenBinders b1
+           (b', _) <- freshen b1
            return $ Just (b', open initial b' c, open initial b' d, open initial b' e)
          _ -> return Nothing
 
@@ -907,7 +909,7 @@ instance LFresh (Reader (Set Name)) where
 lunbind :: (LFresh m, Pattern a, AlphaTerm b) => Bind a b -> ((a, b) -> m c) -> m c
 lunbind (B a b) g =
   -- avoid (S.elems $ fv b) $ -- don't think we need this
-  lfreshenBinders a (\x _ -> g (x, open initial x b))
+  lfreshen a (\x _ -> g (x, open initial x b))
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders match.
@@ -934,6 +936,26 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
 
 ------------------------------------------------------------
 
+
+data Nat = Zero | Suc Nat
+ 
+data Cons a b
+
+class Subterm a b | b -> a where 
+instance Subterm (Cons Nat Nil) Nat
+instance Subterm Nil Cons 
+instance Subterm Nil Nil
+
+instance Pattern Nil
+instance (Pattern a, Pattern b) => Pattern (Cons a b) 
+
+class (Pattern l, Subterm l a) => Pattern a where
+
+instance Pattern Nat
+
+class AlphaTerm a 
+
+{-
 class Alpha a => Pattern a where
 class Alpha a => AlphaTerm a where 
 
@@ -975,7 +997,7 @@ instance (Pattern a,Pattern b,Pattern c) => Pattern (a,b,c) where
 instance (Pattern a, Pattern b,Pattern c, Pattern d) => Pattern (a,b,c,d)
 instance (Pattern a, Pattern b,Pattern c, Pattern d, Pattern e) =>
    Pattern (a,b,c,d,e)
-
+-}
 
 ------------------------------------------------------------
 -- Substitution

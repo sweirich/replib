@@ -133,6 +133,28 @@ redcomp e1 e2 = if e1 == e2 then return True                                    
       else redcomp e1' e2'       
 
 ---------------------------------------------------------------------
+-- TDPE ???
+
+data RExp a where
+   RVar  :: Name a -> RExp a
+   RLam  :: (Bind (Name b) (Exp b)) -> Exp (a -> b)
+   RApp  :: RExp (a -> b) -> (RExp a) -> RExp b
+   RUnit :: RExp ()
+
+reify   :: (Fresh m, Rep a) => Exp a -> m a
+reify e = case rep of
+           Unit -> return ()
+           (Arr a b) -> do
+              e' <- reflect x --here's the rub!
+              return $ \ x -> reify (RApp e e')
+
+reflect :: (Fresh m, Rep a) => a -> m (RExp a)
+reflect m = case rep of 
+   Unit -> return RUnit 
+   (Arr a b) -> do
+      x <- fresh "x"
+      e' <- reflect (m (reify (RVar x)))
+      return $ RLam (bind x e')
 ---------------------------------------------------------------------
 
 assert :: String -> Bool -> IO ()
