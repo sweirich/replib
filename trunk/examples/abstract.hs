@@ -51,6 +51,8 @@ data Exp = Var SourcePos Name
 
 $(derive [''Exp])
 
+deriving instance Eq Exp
+
 -- To make Exp an instance of Alpha, we also need SourcePos to be an
 -- instance of Alpha, because it appears inside the Exp type.  When we
 -- do so, we override the default definition of match'.  There are a

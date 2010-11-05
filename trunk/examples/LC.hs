@@ -21,14 +21,7 @@
 module LC where
 
 import Data.RepLib
-import Data.RepLib.Bind.LocallyNameless
-    (Name, string2Name,
-     Bind, bind,
-     LFresh, lunbind,
-     Alpha, fv,
-     Subst(isvar), subst,
-     rName, rBind
-    )
+import Data.RepLib.Bind.LocallyNameless2
 import Control.Monad.Reader (Reader, runReader)
 import Data.Set as S
 
@@ -43,7 +36,9 @@ $(derive [''Exp])
 
 -- | With representation types, tbe default implementation of Alpha
 -- provides alpha-equivalence and free variable calculation.
-instance Alpha Exp where
+instance Alpha Exp
+instance AlphaTerm Exp
+deriving instance Pattern Exp 
 
 -- | Equivalence for bind expressions is alpha equivalence. So we can't derive Eq
 -- for Exp until we've first made it a member of the Alpha class

@@ -78,15 +78,16 @@ module Data.RepLib.Bind.LocallyNameless
     binders, patfv, fv,
     aeq,
 
-    -- * The 'Fresh' class
-    Fresh(..),
-
     -- * Binding operations
-    bind,
-    unbind, unbind2, unbind3, unsafeUnBind,
+    bind, unsafeUnBind,
+
+    -- * The 'Fresh' class
+    Fresh(..), freshen,
+    unbind, unbind2, unbind3, 
 
     -- * The 'LFresh' class
     HasNext(..), LFresh(..),
+    lfreshen,
     lunbind, lunbind2, lunbind3,
 
     -- * Rebinding operations
@@ -187,6 +188,10 @@ integer2Name n = Nm ("",n)
 -- | Create a 'Name' from a 'String'.
 string2Name :: String -> Name
 string2Name s = Nm(s,0)
+
+smash :: Name -> Name
+smash (Nm (s,x)) = Nm (s,0)
+smash (Bn _ _) = error "Internal Error: should not see bound variables"
 
 ------------------------------------------------------------
 -- The Alpha class
@@ -627,7 +632,7 @@ abs_open i b x = x
 ----------------------------------------------------------
 -- | A smart constructor for binders, also sometimes known as
 -- \"close\".
-bind :: (Alpha b, Alpha c) => b -> c -> Bind b c
+bind ::(Alpha b, Alpha c) => b -> c -> Bind b c
 bind b c = B b (close initial b c)
 
 -- | A destructor for binders that does /not/ guarantee fresh
@@ -813,8 +818,8 @@ instance LFresh (Reader Integer) where
   avoid names       = local (max k) where
         k = maximum (map name2Integer names)
 
--- | A monad instance for 'LFresh' which tries to not rename
---   more than necessary.
+-- | A monad instance for 'LFresh' which renames to the lowest 
+--  number not currently being used
 instance LFresh (Reader (Set Name)) where
   lfresh (Nm (s,j)) = do
     used <- ask;
@@ -822,11 +827,15 @@ instance LFresh (Reader (Set Name)) where
                           (map (\i -> Nm (s,i)) [0..]))
   avoid names = local (S.union (S.fromList names))
 
+
+
+
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
 lunbind (B a b) g =
   -- avoid (S.elems $ fv b) $ -- don't think we need this
   lfreshen a (\x _ -> g (x, open initial x b))
+           
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders match.
