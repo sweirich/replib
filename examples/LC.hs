@@ -21,7 +21,7 @@
 module LC where
 
 import Data.RepLib
-import Data.RepLib.Bind.LocallyNameless2
+import Data.RepLib.Bind.LocallyNameless
 import Control.Monad.Reader (Reader, runReader)
 import Data.Set as S
 
@@ -37,8 +37,6 @@ $(derive [''Exp])
 -- | With representation types, tbe default implementation of Alpha
 -- provides alpha-equivalence and free variable calculation.
 instance Alpha Exp
-instance AlphaTerm Exp
-deriving instance Pattern Exp 
 
 -- | Equivalence for bind expressions is alpha equivalence. So we can't derive Eq
 -- for Exp until we've first made it a member of the Alpha class
@@ -131,7 +129,8 @@ true = lam x (lam y (Var x))
 false = lam x (lam y (Var y))
 if_ x y z = (App (App x y) z)
 
-tests = do
+main :: IO ()
+main = do
   -- \x.x == \x.y
   assert "a1" $ lam x (Var x) == lam y (Var y)
   -- \x.x /= \x.y

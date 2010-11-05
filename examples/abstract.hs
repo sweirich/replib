@@ -26,6 +26,7 @@ module Abstract where
 import Data.RepLib
 import Data.RepLib.Bind.LocallyNameless
 import Data.RepLib.Bind.PermM
+import qualified Data.Set as S
 
 import Control.Monad.Reader (Reader, runReader)
 
@@ -50,8 +51,6 @@ data Exp = Var SourcePos Name
   deriving Show
 
 $(derive [''Exp])
-
-deriving instance Eq Exp
 
 -- To make Exp an instance of Alpha, we also need SourcePos to be an
 -- instance of Alpha, because it appears inside the Exp type.  When we
@@ -113,7 +112,7 @@ red (Lam bnd) = lunbind bnd $ \ (x, e) -> do
    e' <- red e
    case e of
      -- look for an eta-reduction
-     App e1 (Var _ y) | y == x && x `notElem` fv e1 -> return e1
+     App e1 (Var _ y) | y == x && x `S.notMember` fv e1 -> return e1
      otherwise -> return (Lam (bind x e'))
 red v = return $ v
 
@@ -163,7 +162,8 @@ true = lam x (lam y (var x))
 false = lam x (lam y (var y))
 if_ x y z = (App (App x y) z)
 
-tests = do
+main :: IO ()
+main = do
   -- \x.x == \x.y, no matter what the source positions are
   assert "a1" $ lam x (var x) == lam y (Var sp2 y)
   -- \x.x /= \x.y
