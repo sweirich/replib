@@ -21,6 +21,7 @@ module STLC where
 import Data.RepLib
 import Data.RepLib.Bind.LocallyNameless
 import Control.Monad.Reader
+import Data.Set as S
 
 data Ty = TInt | TUnit | Arr Ty Ty 
   deriving (Show, Eq)
@@ -56,8 +57,8 @@ tc g (Var n) ty =
     Just ty' -> return (ty == ty')
     Nothing  -> return False
 tc g (Lam bnd) (Arr t1 t2) = do
-  (x , e) <- lunbind bnd
-  tc ((x,t1) : g) e t2
+  lunbind bnd $ \ (x , e) -> 
+    tc ((x,t1) : g) e t2
 tc g (App e1 t1 e2) t2= do 
   b1 <- tc g e1 (Arr t1 t2)
   b2 <- tc g e2 t1
@@ -94,8 +95,8 @@ wh :: Exp -> M Exp
 wh (App e1 ty e2) = do
    e1' <- wh e1
    case e1' of 
-     Lam bnd -> do
-       (x, e1') <- lunbind bnd
+     Lam bnd -> 
+       lunbind bnd $ \ (x, e1') ->
        wh (subst x e2 e1')
      _ -> return $ App e1' ty e2
 wh e = return e
@@ -110,16 +111,16 @@ red (App e1 t e2) = do
   e1' <- red e1
   e2' <- red e2 
   case e1' of 
-    Lam bnd -> do 
-      (x, e1'') <- lunbind bnd
-      return $ subst x e2' e1''
+    Lam bnd -> 
+      lunbind bnd $ \ (x, e1'') ->
+        return $ subst x e2' e1''
     _ -> return $ App e1' t e2'
-red (Lam bnd) = do 
-   (x, e) <- lunbind bnd
-   e' <- red e 
-   case e of 
+red (Lam bnd) =  
+   lunbind bnd $ \ (x, e) -> do
+    e' <- red e 
+    case e of 
      -- look for an eta-reduction
-     App e1 t (Var y) | y == x && x `notElem` fv e1 -> return e1
+     App e1 t (Var y) | y == x && x `S.notMember` fv e1 -> return e1
      otherwise -> return e 
 red e = return $ e
 
@@ -134,7 +135,7 @@ redcomp e1 e2 = if e1 == e2 then return True                                    
 
 ---------------------------------------------------------------------
 -- TDPE ???
-
+{-
 data RExp a where
    RVar  :: Name a -> RExp a
    RLam  :: (Bind (Name b) (Exp b)) -> Exp (a -> b)
@@ -155,6 +156,7 @@ reflect m = case rep of
       x <- fresh "x"
       e' <- reflect (m (reify (RVar x)))
       return $ RLam (bind x e')
+-}
 ---------------------------------------------------------------------
 
 assert :: String -> Bool -> IO ()
@@ -167,7 +169,8 @@ assertM f s c =
   else print ("Assertion " ++ s ++ " failed") 
 
 
-tests = do 
+main :: IO ()
+main = do 
   -- \x.x == \x.y
   assert "a1" $ Lam (bind name1 (Var name1)) == Lam (bind name2 (Var name2))
   -- \x.x /= \x.y
