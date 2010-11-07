@@ -69,7 +69,7 @@ module Data.RepLib.Bind.LocallyNameless
     Name, Bind, Annot(..), Rebind,
 
     -- ** Utilities
-    integer2Name, string2Name, name2Integer,
+    integer2Name, string2Name, name2Integer, name2String, makeName,
     name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
 
     -- * The 'Alpha' class
@@ -181,6 +181,11 @@ name2Integer :: Name -> Integer
 name2Integer (Nm (_,x)) = x
 name2Integer (Bn _ _) = error "Internal Error: cannot call name2Integer for bound names"
 
+-- | Get the string part of a 'Name'.
+name2String :: Name -> String
+name2String (Nm (s,_)) = s
+name2String (Bn _ _) = error "Internal Error: cannot call name2Integer for bound names"
+
 -- | Create a 'Name' from an 'Integer'.
 integer2Name :: Integer -> Name
 integer2Name n = Nm ("",n)
@@ -189,10 +194,8 @@ integer2Name n = Nm ("",n)
 string2Name :: String -> Name
 string2Name s = Nm(s,0)
 
-smash :: Name -> Name
-smash (Nm (s,x)) = Nm (s,0)
-smash (Bn _ _) = error "Internal Error: should not see bound variables"
-
+makeName :: String -> Integer -> Name
+makeName s i = Nm (s,i)
 ------------------------------------------------------------
 -- The Alpha class
 ------------------------------------------------------------
@@ -811,6 +814,7 @@ class Monad m => LFresh m where
   -- | Avoid the given names when freshening in the subcomputation.
   avoid   :: [Name] -> m a -> m a
 
+-- XXX TODO: move these instances somewhere else
 -- | Simple reader monad instance for 'LFresh'.
 instance LFresh (Reader Integer) where
   lfresh (Nm (s,j)) = do { n <- ask; return (Nm (s, max j (n+1))) }
@@ -821,13 +825,12 @@ instance LFresh (Reader Integer) where
 -- | A monad instance for 'LFresh' which renames to the lowest 
 --  number not currently being used
 instance LFresh (Reader (Set Name)) where
-  lfresh (Nm (s,j)) = do
+  lfresh nm = do
+    let s = name2String nm
     used <- ask;
     return $ head (filter (\x -> not (S.member x used))
-                          (map (\i -> Nm (s,i)) [0..]))
+                          (map (makeName s) [0..]))
   avoid names = local (S.union (S.fromList names))
-
-
 
 
 -- | Destruct a binding in an 'LFresh' monad.

@@ -366,7 +366,7 @@ match1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Maybe (Perm Name)
 match1 MNil _ Nil Nil = Just empty
 match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l1 <- matchD r c p1 p2
-  l2 <- match1 rs c t1 t2
+  l2 <- match1 rs c t1 t2
   (l1 `join` l2)
 
 freshenR1 :: Fresh m => R1 (AlphaD) a -> AlphaCtx -> a -> m (a,Perm Name)
