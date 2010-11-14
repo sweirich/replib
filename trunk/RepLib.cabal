@@ -18,7 +18,7 @@ description:    Generic programming library providing structural
 
 Library
   build-depends: base >= 4.2 && < 5, 
-                 template-haskell >= 2.4 && < 2.5, mtl >= 1.1 && < 1.2,
+                 template-haskell >= 2.4 && < 2.5, mtl >= 1.1 && < 2.1,
                  fingertree >= 0.0.1 && < 0.1, containers >= 0.3 && < 0.4
   exposed-modules:
     Data.RepLib,
