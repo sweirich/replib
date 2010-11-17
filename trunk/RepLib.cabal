@@ -18,8 +18,8 @@ description:    Generic programming library providing structural
 
 Library
   build-depends: base >= 4.2 && < 5, 
-                 template-haskell >= 2.4 && < 2.5, mtl >= 1.1 && < 2.1,
-                 fingertree >= 0.0.1 && < 0.1, containers >= 0.3 && < 0.4
+                 template-haskell >= 2.4 && < 2.6, mtl >= 1.1 && < 2.1,
+                 containers >= 0.3 && < 0.5
   exposed-modules:
     Data.RepLib,
     Data.RepLib.R,
@@ -34,6 +34,5 @@ Library
     Data.RepLib.Unify,
     Data.RepLib.Bind.Nominal,
     Data.RepLib.Bind.LocallyNameless,
-    Data.RepLib.Bind.Perm,
     Data.RepLib.Bind.PermM
   extensions: GADTs
