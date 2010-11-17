@@ -1,11 +1,13 @@
-{-# OPTIONS -fglasgow-exts #-}
+{-# LANGUAGE RankNTypes
+           , ScopedTypeVariables
+           #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RSchemes
 -- Copyright   :  (c) The University of Pennsylvania 2006
 -- License     :  BSD
--- 
+--
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
@@ -17,7 +19,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Data.RepLib.SYB.Schemes ( 
+module Data.RepLib.SYB.Schemes (
 
    everywhere,
    everywhere',
@@ -53,7 +55,7 @@ everywhere :: (forall a. Rep a => a -> a)
 -- Use gmapT to recurse into immediate subterms;
 -- recall: gmapT preserves the outermost constructor;
 -- post-process recursively transformed result via f
--- 
+--
 everywhere f = f . gmapT (everywhere f)
 
 
@@ -88,7 +90,7 @@ everywhereM f x = do x' <- gmapM (everywhereM f) x
 -- We try "f" in top-down manner, but descent into "x" when we fail
 -- at the root of the term. The transformation fails if "f" fails
 -- everywhere, say succeeds nowhere.
--- 
+--
 -- somewhere f x = f x `mplus` gmapMp (somewhere f) x
 
 
@@ -98,8 +100,8 @@ everything :: (r -> r -> r) -> GenericQ r -> GenericQ r
 -- Apply f to x to summarise top-level node;
 -- use gmapQ to recurse into immediate subterms;
 -- use ordinary foldl to reduce list of intermediate results
--- 
-everything k f x 
+--
+everything k f x
   = foldl k (f x) (gmapQ (everything k f) x)
 
 
@@ -114,7 +116,7 @@ something :: GenericQ (Maybe u) -> GenericQ (Maybe u)
 
 -- "something" can be defined in terms of "everything"
 -- when a suitable "choice" operator is used for reduction
--- 
+--
 something = everything orElse
 
 

@@ -1,19 +1,19 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleContexts, FlexibleInstances,
     TypeSynonymInstances, GADTs
-  #-} 
+  #-}
 
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepLib.Lib
 -- License     :  BSD
--- 
+--
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
--- A library of type-indexed functions 
+-- A library of type-indexed functions
 --
 -----------------------------------------------------------------------------
 module Data.RepLib.Lib (
@@ -24,8 +24,8 @@ module Data.RepLib.Lib (
   GSum(..),
   Zero(..),
   Generate(..),
-  Enumerate(..), 
-  Shrink(..), 
+  Enumerate(..),
+  Shrink(..),
   Lreduce(..),
   Rreduce(..),
 
@@ -36,24 +36,24 @@ module Data.RepLib.Lib (
   -- * Auxiliary types and generators for derivable classes
   GSumD(..), ZeroD(..), GenerateD(..), EnumerateD(..), ShrinkD(..), LreduceD(..), RreduceD(..),
   rnfR, deepSeqR, gsumR1, zeroR1, generateR1, enumerateR1, lreduceR1, rreduceR1
-  
+
 ) where
 
-import Data.RepLib.R 
+import Data.RepLib.R
 import Data.RepLib.R1
 import Data.RepLib.RepAux
 import Data.RepLib.PreludeReps()
 
 ------------------- Subtrees --------------------------
 -- there is no point in using R1 for subtrees
--- From Mark P. Jones, Functional programming with 
+-- From Mark P. Jones, Functional programming with
 -- overloading and higher-order polymorphism
 -- Also the same function as "children" from SYB III
 
 -- | Produce all children of a datastructure with the same type.
--- Note that subtrees is available for all representable types. For those that 
+-- Note that subtrees is available for all representable types. For those that
 -- are not recursive datatypes, subtrees will always return the
--- empty list. But, these trivial instances are convenient to have 
+-- empty list. But, these trivial instances are convenient to have
 -- for the Shrink operation below.
 
 subtrees :: forall a. Rep a => a -> [a]
@@ -63,46 +63,46 @@ subtrees x = [y | Just y <- gmapQ (cast :: Query (Maybe a)) x]
 
 
 -- | Recursively force the evaluation of the first
--- argument. For example, 
+-- argument. For example,
 -- @
---  deepSeq ( x , y ) z where 
+--  deepSeq ( x , y ) z where
 --    x = ...
 --    y = ...
--- @ 
--- will evaluate both @x@ and @y@ then return @z@ 
+-- @
+-- will evaluate both @x@ and @y@ then return @z@
 deepSeq :: Rep a => a -> b -> b
 deepSeq = deepSeqR rep
 
--- | Force the evaluation of *datatypes* to their normal 
+-- | Force the evaluation of *datatypes* to their normal
 -- forms. Other types are left alone and not forced.
-rnf :: Rep a => a -> a 
+rnf :: Rep a => a -> a
 rnf = rnfR rep
 
 
 rnfR :: R a -> a -> a
-rnfR (Data dt cons) x = 
-    case (findCon cons x) of 
-      Val emb reps args -> to emb (map_l rnfR reps args)       
+rnfR (Data dt cons) x =
+    case (findCon cons x) of
+      Val emb reps args -> to emb (map_l rnfR reps args)
 rnfR _ x = x
 
 deepSeqR :: R a -> a -> b -> b
 deepSeqR (Data dt cons) = \x ->
-    case (findCon cons x) of 
+    case (findCon cons x) of
       Val _ reps args -> foldl_l (\ra bb a -> (deepSeqR ra a) . bb) id reps args
-deepSeqR _ = seq 
+deepSeqR _ = seq
 
 deepSeq_l :: MTup R l -> l -> b -> b
 deepSeq_l MNil Nil = id
-deepSeq_l (rb :+: rs) (b :*: bs) = deepSeqR rb b . deepSeq_l rs bs 
+deepSeq_l (rb :+: rs) (b :*: bs) = deepSeqR rb b . deepSeq_l rs bs
 
 ------------------- Generic Sum ----------------------
 -- | Add together all of the @Int@s in a datastructure
 -- For example:
 -- gsum ( 1 , True, ("a", Maybe 3, []) , Nothing)
 -- 4
--- 
+--
 class Rep1 GSumD a => GSum a where
-   gsum :: a -> Int 
+   gsum :: a -> Int
    gsum = gsumR1 rep1
 
 data GSumD a = GSumD { gsumD :: a -> Int }
@@ -110,9 +110,9 @@ data GSumD a = GSumD { gsumD :: a -> Int }
 gsumR1 :: R1 GSumD a -> a -> Int
 gsumR1 Int1              x  = x
 gsumR1 (Arrow1 r1 r2)    f  = error "urk"
-gsumR1 (Data1 dt cons)   x  =  
-  case (findCon cons x) of 
-      Val emb rec kids -> 
+gsumR1 (Data1 dt cons)   x  =
+  case (findCon cons x) of
+      Val emb rec kids ->
         foldl_l (\ca a b -> (gsumD ca b) + a) 0 rec kids
 gsumR1 _                 x  = 0
 
@@ -144,7 +144,7 @@ data ZeroD a = ZD { zeroD :: a }
 instance Zero a => Sat (ZeroD a) where
     dict = ZD zero
 
-zeroR1 :: R1 ZeroD a -> a 
+zeroR1 :: R1 ZeroD a -> a
 zeroR1 Int1 = 0
 zeroR1 Char1 = minBound
 zeroR1 (Arrow1 z1 z2) = \x -> zeroD z2
@@ -173,7 +173,7 @@ instance Zero a => Zero [a]
 data GenerateD a = GenerateD { generateD :: Int -> [a] }
 
 -- | Generate elements of a type up to a certain depth
--- 
+--
 class Rep1 GenerateD a => Generate a where
   generate :: Int -> [a]
   generate = generateR1 rep1
@@ -191,8 +191,8 @@ generateR1 Integer1 d = genEnum d
 generateR1 Float1 d = genEnum d
 generateR1 Double1 d = genEnum d
 generateR1 (Data1 dt cons) 0 = []
-generateR1 (Data1 dt cons) d = 
-  [ to emb l | (Con emb rec) <- cons, 
+generateR1 (Data1 dt cons) d =
+  [ to emb l | (Con emb rec) <- cons,
                l <- fromTupM (\x -> generateD x (d-1)) rec]
 generateR1 r1 x = error ("No way to generate type: " ++ show r1)
 
@@ -215,17 +215,17 @@ instance Enumerate a => Sat (EnumerateD a) where
     dict = EnumerateD { enumerateD = enumerate }
 
 -- | enumerate the elements of a type, in DFS order.
-class Rep1 EnumerateD a => Enumerate a where 
+class Rep1 EnumerateD a => Enumerate a where
     enumerate :: [a]
     enumerate = enumerateR1 rep1
 
-enumerateR1 :: R1 EnumerateD a -> [a] 
+enumerateR1 :: R1 EnumerateD a -> [a]
 enumerateR1 Int1 =  [minBound .. (maxBound::Int)]
 enumerateR1 Char1 = [minBound .. (maxBound::Char)]
 enumerateR1 (Data1 dt cons) = enumerateCons cons
 enumerateR1 r1 = error ("No way to enumerate type: " ++ show r1)
 
-enumerateCons :: [Con EnumerateD a] -> [a] 
+enumerateCons :: [Con EnumerateD a] -> [a]
 enumerateCons (Con emb rec:rest) = (map (to emb) (fromTupM enumerateD rec)) ++ (enumerateCons rest)
 enumerateCons [] = []
 
@@ -240,9 +240,10 @@ instance Shrink a => Sat (ShrinkD a) where
 -- for example, to automatically find small counterexamples when testing
 class (Rep1 ShrinkD a) => Shrink a where
     shrink :: a -> [a]
-    shrink a = subtrees a ++ shrinkStep a 
+    shrink a = subtrees a ++ shrinkStep a
                where shrinkStep t = let M _ ts = gmapM1 m a
                                     in ts
+                     m :: forall a. ShrinkD a -> a -> M a
                      m dict x = M x ((shrinkD dict) x)
 
 data M a = M a [a]
@@ -268,11 +269,11 @@ data LreduceD b a = LreduceD { lreduceD :: b -> a -> b }
 -- | A general version of fold right, use for Fold class below
 class Rep1 (RreduceD b) a => Rreduce b a where
     rreduce :: a -> b -> b
-    rreduce = rreduceR1 rep1 
+    rreduce = rreduceR1 rep1
 
 -- | A general version of fold left, use for Fold class below
 class Rep1 (LreduceD b) a => Lreduce b a where
-    lreduce :: b -> a -> b 
+    lreduce :: b -> a -> b
     lreduce = lreduceR1 rep1
 
 -- For example
@@ -289,29 +290,29 @@ instance Lreduce b a => Sat (LreduceD b a) where
     dict = LreduceD { lreduceD = lreduce }
 
 lreduceR1 :: R1 (LreduceD b) a -> b -> a -> b
-lreduceR1 (Data1 dt cons) b a = case (findCon cons a) of 
+lreduceR1 (Data1 dt cons) b a = case (findCon cons a) of
   Val emb rec args -> foldl_l lreduceD b rec args
 lreduceR1 _               b a = b
 
 rreduceR1 :: R1 (RreduceD b) a -> a -> b -> b
-rreduceR1 (Data1 dt cons) a b = case (findCon cons a) of 
+rreduceR1 (Data1 dt cons) a b = case (findCon cons a) of
   Val emb rec args -> foldr_l rreduceD b rec args
 rreduceR1 _               a b = b
 
 -- Instances for standard types
-instance Lreduce b Int 
+instance Lreduce b Int
 instance Lreduce b ()
 instance Lreduce b Char
 instance Lreduce b Bool
 instance (Lreduce c a, Lreduce c b) => Lreduce c (a,b)
-instance Lreduce c a => Lreduce c[a] 
+instance Lreduce c a => Lreduce c[a]
 
-instance Rreduce b Int 
+instance Rreduce b Int
 instance Rreduce b ()
 instance Rreduce b Char
 instance Rreduce b Bool
 instance (Rreduce c a, Rreduce c b) => Rreduce c (a,b)
-instance Rreduce c a => Rreduce c[a] 
+instance Rreduce c a => Rreduce c[a]
 
 -------------------- Fold -------------------------------
 -- | All of the functions below are defined using instances
@@ -321,12 +322,12 @@ class Fold f where
 	 foldLeft  :: Rep a => (b -> a -> b) -> b -> f a -> b
 
 -- | Fold a bindary operation left over a datastructure
-crush      :: (Rep a, Fold t) => (a -> a -> a) -> a -> t a -> a 
+crush      :: (Rep a, Fold t) => (a -> a -> a) -> a -> t a -> a
 crush op   = foldLeft op
 
 -- | Multiply all elements together
 gproduct   :: (Rep a, Num a, Fold t) => t a -> a
-gproduct t = foldLeft (*) 1 t 
+gproduct t = foldLeft (*) 1 t
 
 -- | Ensure all booleans are true
 gand       :: (Fold t) => t Bool -> Bool
@@ -338,11 +339,11 @@ gor  t     = foldLeft (||) False t
 
 -- | Convert to list
 flatten    :: (Rep a, Fold t) => t a -> [a]
-flatten t  = foldRight (:) t [] 
+flatten t  = foldRight (:) t []
 
 -- | Count number of @a@s that appear in the argument
 count      :: (Rep a, Fold t) => t a -> Int
-count t    = foldRight (const (+1)) t 0 
+count t    = foldRight (const (+1)) t 0
 
 -- | Compose all functions in the datastructure together
 comp       :: (Rep a, Fold t) => t (a -> a) -> a -> a
@@ -355,7 +356,7 @@ gconcat t  = foldLeft (++) []  t
 -- | Ensure property holds of all data
 gall       :: (Rep a, Fold t) => (a -> Bool) -> t a -> Bool
 gall p t   = foldLeft (\a b -> a && p b) True t
-			  
+
 
 -- | Ensure property holds of some element
 gany       :: (Rep a, Fold t) => (a -> Bool) -> t a -> Bool
@@ -363,7 +364,7 @@ gany p t   = foldLeft (\a b -> a || p b) False t
 
 -- | Is an element stored in a datastructure
 gelem      :: (Rep a, Eq a, Fold t) => a -> t a -> Bool
-gelem x t  = foldRight (\a b -> a == x || b) t False 
+gelem x t  = foldRight (\a b -> a == x || b) t False
 
 
 instance Fold [] where

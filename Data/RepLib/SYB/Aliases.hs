@@ -1,11 +1,10 @@
-{-# OPTIONS -fglasgow-exts #-}
-
+{-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RAliases
 -- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
--- 
+--
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
@@ -14,18 +13,18 @@
 -- This module is derived from Data.Generics.Aliases
 --
 -- The present module provides a number of declarations for typical
--- generic function types, corresponding type case, and others.  
+-- generic function types, corresponding type case, and others.
 --
--- 
+--
 -----------------------------------------------------------------------------
-module Data.RepLib.SYB.Aliases ( 
+module Data.RepLib.SYB.Aliases (
 
 	-- * Combinators to \"make\" generic functions via cast
 	mkT, mkQ, mkM, mkMp, mkR,
 	ext0, extT, extQ, extM, extMp, extB, extR,
 
 	-- * Type synonyms for generic function types
-	GenericT, 
+	GenericT,
 	GenericQ,
 	GenericM,
 	GenericB,
@@ -46,7 +45,7 @@ module Data.RepLib.SYB.Aliases (
 	choiceQ
 
 	-- * Type extension for unary type constructors
---	ext1T, 
+--	ext1T,
 --	ext1M,
 --	ext1Q,
 --	ext1R
@@ -76,7 +75,7 @@ mkT :: ( Rep a
        , Rep b
        )
     => (b -> b)
-    -> a 
+    -> a
     -> a
 mkT = extT id
 
@@ -90,7 +89,7 @@ mkQ :: ( Rep a
        )
     => r
     -> (b -> r)
-    -> a 
+    -> a
     -> r
 (r `mkQ` br) a = case cast a of
                         Just b  -> br b
@@ -106,7 +105,7 @@ mkM :: ( Monad m
        , Rep b
        )
     => (b -> m b)
-    -> a 
+    -> a
     -> m a
 mkM = extM return
 
