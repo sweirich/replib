@@ -98,7 +98,7 @@ module Data.RepLib.Bind.LocallyNameless
     Subst(..),
 
     -- * For abstract types
-    abs_swaps',abs_fv',abs_freshen',abs_match',
+    abs_swaps,abs_fv,abs_freshen,abs_match,
     abs_nthpatrec,abs_findpatrec,abs_close,abs_open,
 
    -- * Advanced
@@ -128,20 +128,11 @@ import System.IO.Unsafe (unsafePerformIO)
 -- Basic types
 ------------------------------------------------------------
 
--- $(derive_abstract [''R])
--- The above should work with GHC 7/template-haskell 2.5, but
--- currently the replib deriving module generates invalid code...?
+$(derive_abstract [''R])
+-- The above only works with GHC 7.
 
-rR :: forall a. Rep a => R (R a)
-rR = Data (DT "Data.RepLib.R.R" ((rep::R a) :+: MNil))
-     [error "Internal Error: Cannot use generic functions for R type"]
-instance Rep a => Rep (R a) where
-  rep = rR
 instance Ord (R a) where
   compare r1 r2 = EQ  -- R a is a singleton
-instance Rep a => Rep1 ctx (R a) where
-  rep1 = Data1 (DT "Data.RepLib.R.R" ((rep::R a) :+: MNil))
-         [error "Internal Error: Cannot use generic functions for R type"]
 
 -- | 'Name's are things that get bound.  This type is intentionally
 --   abstract; to create a 'Name' you can use 'string2Name' or
@@ -186,18 +177,7 @@ $(derive [''Bind, ''Name, ''Annot, ''Rebind])
 -- AnyName has an existential in it, so we cannot create a complete
 -- representation for it, unfortunately.
 
--- $(derive_abstract [''AnyName])
--- The above ought to work with GHC-7 + template-haskell-2.5 but
--- replib currently generates invalid code...
-
-rAnyName :: R AnyName
-rAnyName = Data (DT "AnyName" MNil)
-  [error "BUG: cannot use generic functions for AnyName"]
-
-instance Rep AnyName where rep = rAnyName
-instance (Sat (ctx AnyName)) => Rep1 ctx AnyName where
-   rep1 = Data1 (DT "AnyName" MNil)
-          [error "Cannot use generic functions for AnyName"]
+$(derive_abstract [''AnyName])
 
 instance Show AnyName where
   show (AnyName n1) = show n1
@@ -520,6 +500,57 @@ nthpatL (r :+: rs) (t :*: ts) i =
 -- Specific Alpha instances
 -----------------------------------------------------------
 
+instance Rep a => Alpha (Name a) where
+  fv' c n@(Nm _ _)  | mode c == Term = S.singleton (AnyName n)
+  fv' c (Bn _ _ _)  | mode c == Term = S.empty
+  fv' c n           | mode c == Pat  = S.empty
+
+  swaps' c p x = case mode c of
+                   Term ->
+                     case apply p (AnyName x) of
+                       AnyName y ->
+                         case gcastR (getR y) (getR x) y of
+                           Just y' -> y'
+                           Nothing -> error "Internal error in swaps': sort mismatch"
+                   Pat  -> x
+
+  match' _ x  y   | x == y         = Just empty
+  match' c n1 n2  | mode c == Term = Just $ single (AnyName n1) (AnyName n2)
+  match' c _ _    | mode c == Pat  = Just empty
+
+  freshen' c nm = case mode c of
+     Term -> do x <- fresh nm
+                return (x, single (AnyName nm) (AnyName x))
+     Pat  -> return (nm, empty)
+
+  --lfreshen' :: LFresh m => Pat a -> (a -> Perm Name -> m b) -> m b
+  lfreshen' c nm f = case mode c of
+     Term -> do x <- lfresh nm
+                avoid [AnyName x] $ f x (single (AnyName nm) (AnyName x))
+     Pat  -> f nm empty
+
+  open c a (Bn r j x) | level c == j =
+    case nthpat a x of
+      AnyName nm -> case gcastR (getR nm) r nm of
+        Just nm' -> nm'
+        Nothing  -> error "Internal error in open: sort mismatch"
+  open _ _ n = n
+
+  close c a nm@(Nm r n) =
+    case findpat a (AnyName nm) of
+      Just x  -> Bn r (level c) x
+      Nothing -> nm
+
+  close _ _ n = n
+
+  findpatrec nm1 (AnyName nm2) =
+    case gcastR (getR nm1) (getR nm2) nm1 of
+      Just nm1' -> if nm1' == nm2 then (0, True) else (1, False)
+      Nothing -> (1, False)
+
+  nthpatrec nm 0 = (0, Just (AnyName nm))
+  nthpatrec nm i = (i - 1, Nothing)
+
 instance Alpha AnyName  where
   fv' c n@(AnyName (Nm _ _))  | mode c == Term = S.singleton n
   fv' c (AnyName (Bn _ _ _))  | mode c == Term = S.empty
@@ -703,12 +734,23 @@ instance (Alpha a, Alpha b,Alpha c, Alpha d) => Alpha (a,b,c,d)
 instance (Alpha a, Alpha b,Alpha c, Alpha d, Alpha e) =>
    Alpha (a,b,c,d,e)
 
+instance (Rep a) => Alpha (R a) where
+  swaps'      = abs_swaps
+  fv'         = abs_fv
+  freshen'    = abs_freshen
+  match'      = abs_match
+  nthpatrec  = abs_nthpatrec
+  findpatrec = abs_findpatrec
+  close      = abs_close
+  open       = abs_open
+
+
 -- Definitions of the class members for abstract types.
 -- These will go away soon.
-abs_swaps' _ p s = s
-abs_fv' _ s = S.empty
-abs_freshen' _ b = return (b, empty)
-abs_match' _ x1 x2 = if x1 == x2 then Just empty else Nothing
+abs_swaps _ p s = s
+abs_fv _ s = S.empty
+abs_freshen _ b = return (b, empty)
+abs_match _ x1 x2 = if x1 == x2 then Just empty else Nothing
 abs_nthpatrec b i = (i, Nothing)
 abs_findpatrec b n = (0, False)
 abs_close i b x = x
@@ -1048,8 +1090,6 @@ data Exp = V (Name Exp)
 $(derive [''Exp])
 
 instance Alpha Exp
-instance Alpha (Name Exp)
-instance Alpha (R Exp)        -- should we really have to do this?
 instance Subst Exp Exp where
    isvar (V n) = Just (n, id)
    isvar _     = Nothing

@@ -59,7 +59,7 @@ repty (ConT n) = do
        "String"  -> (VarE 'rList)
        c         -> (VarE (rName n))
 repty (TupleT i)
-  | i <= 7 = return $ VarE (mkName $ "rTup" ++ show i)
+  | i <= 7    = return $ VarE (mkName $ "rTup" ++ show i)
   | otherwise = error $ "Why on earth are you using " ++ (show i) ++ "-tuples??"
 
 repty (ArrowT)   = return (ConE 'Arrow)
@@ -213,7 +213,7 @@ lookupName t l ((n, t1, t2):rest) = if t == t2 then n else lookupName t l rest
 lookupName t l [] = error ("lookupName: Cannot find type " ++ show t ++ " in " ++ show l)
 
 repcon1 :: Type                               -- result type of the constructor
-   		  -> Bool
+          -> Bool
           -> Exp                              -- recursive call (rList1 ra pa)
           -> [(Name,Type,Type)]               -- ctxParams
           -> (Name, [(Maybe Name, Type)])     -- name of data constructor + args
@@ -236,7 +236,9 @@ repr1 f n = do info' <- reify n
                   let rTypeName = rName1 n
 
                   ctx <- newName "ctx"
-                  ctxParams <- ctx_params ty ctx terms
+                  ctxParams <- case f of
+                                    Conc -> ctx_params ty ctx terms
+                                    Abs  -> return []
 
                   -- parameters to the rep function
                   -- let rparams = map (\p -> SigP (VarP p) ((ConT ''R) `AppT` (VarT p))) param
@@ -329,6 +331,7 @@ typeInfo m =
         termA (NormalC c xs)        = (c, map (\x -> (Nothing, snd x)) xs)
         termA (RecC c xs)           = (c, map (\(n, _, t) -> (Just $ simpleName n, t)) xs)
         termA (InfixC t1 c t2)      = (c, [(Nothing, snd t1), (Nothing, snd t2)])
+        termA (ForallC _ _ n)       = termA n
 
         conA (NormalC c xs)         = (simpleName c, length xs)
         conA (RecC c xs)            = (simpleName c, length xs)
