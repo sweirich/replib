@@ -1,12 +1,12 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ExistentialQuantification,
     TypeOperators, GADTs, TypeSynonymInstances, FlexibleInstances,
     ScopedTypeVariables
- #-} 
+ #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Data.RepLib.R
+-- Module      :  Generics.RepLib.R
 -- License     :  BSD
--- 
+--
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
@@ -15,14 +15,14 @@
 --
 -----------------------------------------------------------------------------
 
-module Data.RepLib.R where
+module Generics.RepLib.R where
 
 import Data.List
 
--- | A value of type @R a@ is a representation of a type @a@. 
+-- | A value of type @R a@ is a representation of a type @a@.
 data R a where
    Int      :: R Int
-   Char     :: R Char 
+   Char     :: R Char
    Integer  :: R Integer
    Float    :: R Float
    Double   :: R Double
@@ -30,7 +30,7 @@ data R a where
    IOError  :: R IOError
    IO       :: (Rep a) => R a -> R (IO a)
    Arrow    :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
-   Data     :: DT -> [Con R a] -> R a 
+   Data     :: DT -> [Con R a] -> R a
    Abstract :: DT -> R a
 
 -- | Representation of a data constructor includes an
@@ -38,13 +38,13 @@ data R a where
 -- as well as the representation of that list of other types.
 data Con r a  = forall l. Con (Emb l a) (MTup r l)
 
--- | An embedding between a list of types @l@ and 
+-- | An embedding between a list of types @l@ and
 -- a datatype @a@, based on a particular data constructor.
--- The to function is a wrapper for the constructor, the 
+-- The to function is a wrapper for the constructor, the
 -- from function pattern matches on the constructor.
-data Emb l a  = Emb { to     :: l -> a, 
-                      from   :: a -> Maybe l, 
-                      labels :: Maybe [String],  
+data Emb l a  = Emb { to     :: l -> a,
+                      from   :: a -> Maybe l,
+                      labels :: Maybe [String],
                       name   :: String,
                       fixity :: Fixity
                      }
@@ -55,13 +55,13 @@ data Fixity =  Nonfix
                 | Infixr     { prec      :: Int }
 
 -- | Information about a datatype, including its
--- fully qualified name and representation of 
+-- fully qualified name and representation of
 -- its type arguments.
-data DT       = forall l. DT String (MTup R l) 
+data DT       = forall l. DT String (MTup R l)
 
 
 -- | An empty list of types
-data Nil = Nil 
+data Nil = Nil
 -- | Cons for a list of types
 data a :*: l = a :*: l
 
@@ -91,19 +91,19 @@ instance Show (R a) where
   show Rational= "Rational"
   show (IO t)  = "(IO " ++ show t ++ ")"
   show IOError = "IOError"
-  show (Arrow r1 r2) = 
+  show (Arrow r1 r2) =
      "(" ++ (show r1) ++ " -> " ++ (show r2) ++ ")"
-  show (Data dt _) = 
+  show (Data dt _) =
      "(Data" ++ show dt ++ ")"
-  show (Abstract dt) = 
+  show (Abstract dt) =
      "(Abstract" ++ show dt ++ ")"
 
 instance Show DT where
-  show (DT str reps) = str ++ show reps 
-  
+  show (DT str reps) = str ++ show reps
+
 instance Show (MTup R l) where
   show MNil         = ""
-  show (r :+: MNil) = show r 
+  show (r :+: MNil) = show r
   show (r :+: rs)   = " " ++ show r ++ show rs
 
 instance Eq (R a) where
@@ -120,23 +120,23 @@ instance Rep Integer where rep = Integer
 instance Rep a => Rep (IO a) where rep = IO rep
 instance Rep IOError where rep = IOError
 instance (Rep a, Rep b) => Rep (a -> b) where rep = Arrow rep rep
-      
+
 -- Unit
 
 rUnitEmb :: Emb Nil ()
-rUnitEmb = Emb { to = \Nil -> (), 
-                 from = \() -> Just Nil, 
-			        labels = Nothing, 
-                 name = "()", 
+rUnitEmb = Emb { to = \Nil -> (),
+                 from = \() -> Just Nil,
+			        labels = Nothing,
+                 name = "()",
                  fixity = Nonfix }
 
 rUnit :: R ()
-rUnit = Data (DT "()" MNil) 
+rUnit = Data (DT "()" MNil)
         [Con rUnitEmb MNil]
- 
+
 instance Rep () where rep = rUnit
 
--- Tuples 
+-- Tuples
 
 instance (Rep a, Rep b) => Rep (a,b) where
    rep = rTup2
@@ -146,10 +146,10 @@ rTup2 = let args =  ((rep :: R a) :+: (rep :: R b) :+: MNil) in
 			Data (DT "," args) [ Con rPairEmb args ]
 
 rPairEmb :: Emb (a :*: b :*: Nil) (a,b)
-rPairEmb = 
+rPairEmb =
   Emb { to = \( t1 :*: t2 :*: Nil) -> (t1,t2),
         from = \(a,b) -> Just (a :*: b :*: Nil),
-        labels = Nothing, 
+        labels = Nothing,
         name = "(,)",
         fixity = Nonfix -- ???
       }
@@ -161,26 +161,26 @@ rList = Data (DT "[]" ((rep :: R a) :+: MNil))
 
 rNilEmb :: Emb Nil [a]
 rNilEmb = Emb {   to   = \Nil -> [],
-                  from  = \x -> case x of 
+                  from  = \x -> case x of
                            (x:xs) -> Nothing
                            []     ->  Just Nil,
-                  labels = Nothing, 
+                  labels = Nothing,
                   name = "[]",
 		  fixity = Nonfix
                  }
 
 rConsEmb :: Emb (a :*: [a] :*: Nil) [a]
-rConsEmb = 
-   Emb { 
+rConsEmb =
+   Emb {
             to   = (\ (hd :*: tl :*: Nil) -> (hd : tl)),
-            from  = \x -> case x of 
+            from  = \x -> case x of
                     (hd : tl) -> Just (hd :*: tl :*: Nil)
                     []        -> Nothing,
-            labels = Nothing, 
+            labels = Nothing,
             name = ":",
 	    fixity = Nonfix -- ???
           }
 
 instance Rep a => Rep [a] where
-   rep = rList 
+   rep = rList
 

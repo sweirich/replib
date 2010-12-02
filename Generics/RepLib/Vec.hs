@@ -5,18 +5,18 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | A definition of length-indexed vectors plus their representations
-module Data.RepLib.Vec (
+module Generics.RepLib.Vec (
        Z,rZ,rZ1,S,rS,rS1,
        SNat(..),toSNat,
        Vec(..),rVec,rVec1
        )
 where
 
-import Data.RepLib
+import Generics.RepLib
 import GHC.Base (unsafeCoerce#)
 
 -- | Natural numbers
-data Z 
+data Z
 data S n
 
 $(derive [''Z, ''S])
@@ -30,16 +30,16 @@ data SNat a where
 -- WARNING: Only call this on *numbers*
 -- It demonstrates a deficiency of reps for void/abstract datatypes
 toSNat :: forall n. R n -> (SNat n)
-toSNat r = 
-  case gcast (SZ :: SNat n) of 
+toSNat r =
+  case gcast (SZ :: SNat n) of
     Just sz -> sz
-    Nothing -> case gcast (SS (toSNat rm)) of 
-                 
-toSNat r@(Data (DT "Data.RepLib.Vec.Z" MNil) []) = 
-    case gcastR r rZ SZ of 
+    Nothing -> case gcast (SS (toSNat rm)) of
+
+toSNat r@(Data (DT "Generics.RepLib.Vec.Z" MNil) []) =
+    case gcastR r rZ SZ of
       Just sz -> sz
       Nothing -> error "BUG"
-toSNat r@(Data (DT "Data.RepLib.Vec.S" (rm :+: MNil)) []) = 
+toSNat r@(Data (DT "Generics.RepLib.Vec.S" (rm :+: MNil)) []) =
     case gcastR r (rS (toSNat rm)) of
        Just i -> i
        Nothing -> error "impossible"
@@ -58,13 +58,13 @@ data Vec a n where
  VCons :: Rep n => a -> Vec a n -> Vec a (S n)
 
 gTo :: forall a n . Rep n => SNat n -> (Tup a n) -> (Vec a n)
-gTo s = case s of 
+gTo s = case s of
   SZ -> \Nil -> VNil
   SS sm -> \(a :*: l ) -> VCons a (gTo sm l)
 gFrom :: forall a n. Rep n => SNat n -> (Vec a n) -> Maybe (Tup a n)
 gFrom SZ = \ VNil -> Just Nil
-gFrom (SS sm) = \ (VCons a tl) -> do 
-     tl' <- gFrom sm tl  
+gFrom (SS sm) = \ (VCons a tl) -> do
+     tl' <- gFrom sm tl
      return (a :*: tl')
 
 gMTup :: forall a n. (Rep a, Rep n) => R a -> SNat n -> MTup R (Tup a n)
@@ -72,19 +72,19 @@ gMTup ra SZ = MNil
 gMTup ra (SS sm) = ra :+: gMTup ra sm
 
 vecEmb :: forall a n . Rep n => SNat n -> Emb (Tup a n) (Vec a n)
-vecEmb sn =   (Emb { to = gTo sn, 
-                    from = gFrom sn, 
-                    labels = Nothing, 
-                    name = "", 
+vecEmb sn =   (Emb { to = gTo sn,
+                    from = gFrom sn,
+                    labels = Nothing,
+                    name = "",
                     fixity = Nonfix })
 
 -- | Rep of the vector type
 rVec :: forall a n. (Rep a, Rep n) => R (Vec a n)
 rVec =
-  Data (DT "Data.RepLib.Vec.Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
+  Data (DT "Generics.RepLib.Vec.Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
        [ Con (vecEmb sn)
              (gMTup (rep :: R a) sn) ]  where
-     sn :: SNat n 
+     sn :: SNat n
      sn = toSNat rep
 
 gMTup1 :: forall a n ctx. (Rep a, Rep n, Sat (ctx a)) => R a -> SNat n -> MTup ctx (Tup a n)
@@ -93,10 +93,10 @@ gMTup1 ra (SS sm) = dict :+: gMTup1 ra sm
 
 rVec1 :: forall a n ctx. (Rep a, Rep n, Sat (ctx a)) => R1 ctx (Vec a n)
 rVec1 =
-  Data1 (DT "Data.RepLib.Vec.Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
+  Data1 (DT "Generics.RepLib.Vec.Vec" ((rep :: R a) :+: (rep :: R n) :+: MNil))
        [ Con (vecEmb sn)
              (gMTup1 (rep :: R a) sn) ]  where
-     sn :: SNat n 
+     sn :: SNat n
      sn = toSNat rep
 
 

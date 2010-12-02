@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  RAliases
+-- Module      :  Generics.RepLib.SYB.Aliases
 -- Copyright   :  (c) The University of Pennsylvania, 2006
 -- License     :  BSD
 --
@@ -17,7 +17,7 @@
 --
 --
 -----------------------------------------------------------------------------
-module Data.RepLib.SYB.Aliases (
+module Generics.RepLib.SYB.Aliases (
 
 	-- * Combinators to \"make\" generic functions via cast
 	mkT, mkQ, mkM, mkMp, mkR,
@@ -53,8 +53,8 @@ module Data.RepLib.SYB.Aliases (
   ) where
 
 import Control.Monad
-import Data.RepLib.R
-import Data.RepLib.RepAux
+import Generics.RepLib.R
+import Generics.RepLib.RepAux
 
 -- Derived from Data.Generics.Aliases
 -- Only modification: "Data" and "Typeable" classes become "Rep" class

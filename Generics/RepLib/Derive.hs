@@ -21,12 +21,12 @@
 -----------------------------------------------------------------------------
 
 
-module Data.RepLib.Derive (
+module Generics.RepLib.Derive (
 	derive, derive_abstract
 ) where
 
-import Data.RepLib.R
-import Data.RepLib.R1
+import Generics.RepLib.R
+import Generics.RepLib.R1
 import Language.Haskell.TH
 import Data.List (nub)
 import Data.Tuple

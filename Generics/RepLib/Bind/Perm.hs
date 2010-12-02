@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 ----------------------------------------------------------------------
 -- |
--- Module      :  Data.RepLib.Bind.Perm
+-- Module      :  Generics.RepLib.Bind.Perm
 -- License     :  BSD
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -12,7 +12,7 @@
 --
 ----------------------------------------------------------------------
 
-module Data.RepLib.Bind.Perm (
+module Generics.RepLib.Bind.Perm (
     Perm, single, (<>), apply, support, isid
   ) where
 

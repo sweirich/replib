@@ -9,7 +9,7 @@
              RankNTypes,
              GADTs,
              EmptyDataDecls,
-             StandaloneDeriving, 
+             StandaloneDeriving,
              FunctionalDependencies
   #-}
 {- LANGUAGE  KitchenSink -}
@@ -43,7 +43,7 @@ each other.
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  Data.RepLib.Bind.LocallyNameless
+-- Module      :  Generics.RepLib.Bind.LocallyNameless
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -65,7 +65,7 @@ each other.
 -- 'Fresh' and 'LFresh' classes.
 ----------------------------------------------------------------------
 
-module Data.RepLib.Bind.LocallyNameless2
+module Generics.RepLib.Bind.LocallyNameless2
   ( -- * Basic types
     Name, Bind, Annot(..), Rebind,
 
@@ -77,8 +77,8 @@ module Data.RepLib.Bind.LocallyNameless2
     Alpha(..), aeq,
 
     -- * Terms and Patterns
-    AlphaTerm(..), Pattern(..), 
-    fv, binders, fvAnnots, 
+    AlphaTerm(..), Pattern(..),
+    fv, binders, fvAnnots,
     swaps, swapsBinders, swapsAnnots,
     match, matchBinders, matchAnnots,
 
@@ -86,7 +86,7 @@ module Data.RepLib.Bind.LocallyNameless2
     bind, unsafeUnBind,
 
     -- ** The 'Fresh' class
-    Fresh(..),     
+    Fresh(..),
     unbind, unbind2, unbind3,
     freshen, -- freshenBinders, freshenAnnots,
 
@@ -113,8 +113,8 @@ module Data.RepLib.Bind.LocallyNameless2
    rName, rBind, rRebind, rAnnot
 ) where
 
-import Data.RepLib
-import Data.RepLib.Bind.PermM
+import Generics.RepLib
+import Generics.RepLib.Bind.PermM
 
 import qualified Data.List as List
 import qualified Data.Char as Char
@@ -436,7 +436,7 @@ instance Alpha Name  where
   fv' c (Nm n)   | mode c == Term = S.singleton (Nm n)
   fv' c (Bn _ _) | mode c == Term = S.empty
 
-  fv' c n        | mode c == Pat  = S.empty 
+  fv' c n        | mode c == Pat  = S.empty
 
   swaps' c p x = case mode c of
                    Term -> apply p x
@@ -510,7 +510,7 @@ instance (Pattern a, AlphaTerm b) => Alpha (Bind a b) where
         (B (swaps' (pat c) pm x)
            (swaps' (incr c) pm y))
 
-    fv' c (B x y) = fvAnnots x 
+    fv' c (B x y) = fvAnnots x
                     `S.union` fv' (incr c) y
 
     freshen' c (B x y) = do
@@ -528,7 +528,7 @@ instance (Pattern a, AlphaTerm b) => Alpha (Bind a b) where
       px <- match' (pat c) x1 x2
       --- check this!
       py <- match' (incr c) y1 y2
-      -- need to make sure that all permutations of 
+      -- need to make sure that all permutations of
       -- bound variables at this
       -- level are the identity
       (px `join` py)
@@ -544,7 +544,7 @@ instance (Pattern a, Pattern b) => Alpha (Rebind a b) where
      -- ensure that p is Pat???
 --  fv' p _ | mode p == Term = error "WAAAAAH!!!"
 
-  lfreshen' p (R x y) g = 
+  lfreshen' p (R x y) g =
     lfreshen' p x $ \ x' pm1 ->
       lfreshen' (incr p) (swaps' (incr p) pm1 y) $ \ y' pm2 ->
         g (R x' y') (pm1 <> pm2)
@@ -655,7 +655,7 @@ instance (Pattern a, AlphaTerm b) => Eq (Bind a b) where
 -- e.g.
 --   compare (bind [name1] name1) (bind [name1,name1] name1) == LT
 --   compare (bind [name3] name3) (bind [name1,name1] name1) == GT
--- 
+--
 -- I think we are going to need a new generic fcn for comparison
 -- to implement this.
 {-
@@ -732,7 +732,7 @@ fvAnnots = fv' (pat initial)
 swaps :: AlphaTerm a => Perm Name -> a -> a
 swaps = swaps' initial
 
--- | Apply a permutation to the binding variables in a pattern. 
+-- | Apply a permutation to the binding variables in a pattern.
 -- Annotations are left alone by the permutation.
 swapsBinders :: Pattern a => Perm Name -> a -> a
 swapsBinders = swaps' initial
@@ -743,9 +743,9 @@ swapsAnnots :: AlphaTerm a => Perm Name -> a -> a
 swapsAnnots = swaps' (pat initial)
 
 {-
--- | \"Locally\" freshen a term. Replace all free variables with 
--- fresh variables. The second argument is the scope of the freshness, 
--- calls to lfreshen within this scope will avoid the names chosen 
+-- | \"Locally\" freshen a term. Replace all free variables with
+-- fresh variables. The second argument is the scope of the freshness,
+-- calls to lfreshen within this scope will avoid the names chosen
 -- here. TODO: explain more.
 lfreshen :: (AlphaTerm a, LFresh m) => a -> (a -> Perm Name -> m b) -> m b
 lfreshen = lfreshen' initial
@@ -780,7 +780,7 @@ freshen :: (Fresh m, Pattern a) => a -> m (a, Perm Name)
 freshen = freshen' initial
 
 -- | Compare two data structures and produce a permutation of their
--- 'Name's that will make them alpha-equivalent to each other. 
+-- 'Name's that will make them alpha-equivalent to each other.
 -- Return 'Nothing'
 -- if no such renaming is possible.  Note that two terms are
 -- alpha-equivalent if the empty permutation is returned.
@@ -788,7 +788,7 @@ match   :: AlphaTerm a => a -> a -> Maybe (Perm Name)
 match   = match' initial
 
 -- | Compare two patterns, ignoring the names of binders, and produce
--- a permitation of their annotations to make them alpha-equivalent 
+-- a permitation of their annotations to make them alpha-equivalent
 -- to eachother. Return 'Nothing' if no such renaming is possible.
 matchAnnots :: Pattern a => a -> a -> Maybe (Perm Name)
 matchAnnots = match' (pat initial)
@@ -796,7 +796,7 @@ matchAnnots = match' (pat initial)
 -- | Compare two patterns for equality and produce a permutation of
 -- their binding 'Names' to make them alpha-equivalent to each other
 -- ('Name's that appear in annotations must match exactly). Return
--- 'Nothing' if no such renaming is possible.  
+-- 'Nothing' if no such renaming is possible.
 matchBinders ::  Pattern a => a -> a -> Maybe (Perm Name)
 matchBinders = match' initial
 
@@ -816,7 +816,7 @@ nthpat' x i = case nthpatrec x i of
 
 -- | Find the (first) index of the name in the pattern, if it exists.
 findpat :: Pattern a => a -> Name -> Maybe Integer
-findpat = findpat' 
+findpat = findpat'
 
 findpat' :: Alpha a => a -> Name -> Maybe Integer
 findpat' x n = case findpatrec x n of
@@ -914,10 +914,10 @@ lunbind (B a b) g =
 -- | Unbind two terms with the same fresh names, provided the
 --   binders match.
 lunbind2  :: (LFresh m, Pattern b, AlphaTerm c, AlphaTerm d) =>
-            Bind b c -> Bind b d -> (Maybe (b,c,d) -> m e) -> m e 
+            Bind b c -> Bind b d -> (Maybe (b,c,d) -> m e) -> m e
 lunbind2 (B b1 c) (B b2 d) g =
       case matchBinders b1 b2 of
-         Just _ -> 
+         Just _ ->
            lunbind (B b1 c) $ \ (b', c') ->
              g $ Just (b', c', open initial b' d)  -- BAY: the c' used to be c,
          Nothing -> g Nothing                    -- am I correct in assuming
@@ -926,10 +926,10 @@ lunbind2 (B b1 c) (B b2 d) g =
 -- | Unbind three terms with the same fresh names, provided the
 --   binders match.
 lunbind3  :: (LFresh m, Pattern b, AlphaTerm c, AlphaTerm d, AlphaTerm e) =>
-            Bind b c -> Bind b d -> Bind b e ->  (Maybe (b,c,d,e) -> m f) -> m f 
+            Bind b c -> Bind b d -> Bind b e ->  (Maybe (b,c,d,e) -> m f) -> m f
 lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
       case (matchBinders b1 b2, matchBinders b1 b3) of
-         (Just _, Just _) -> 
+         (Just _, Just _) ->
            lunbind (B b1 c) $ \ (b', c') ->
               g $ Just (b', c', open initial b' d, open initial b' e)
          _ -> g Nothing
@@ -938,26 +938,26 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
 
 
 data Nat = Zero | Suc Nat
- 
+
 data Cons a b
 
-class Subterm a b | b -> a where 
+class Subterm a b | b -> a where
 instance Subterm (Cons Nat Nil) Nat
-instance Subterm Nil Cons 
+instance Subterm Nil Cons
 instance Subterm Nil Nil
 
 instance Pattern Nil
-instance (Pattern a, Pattern b) => Pattern (Cons a b) 
+instance (Pattern a, Pattern b) => Pattern (Cons a b)
 
 class (Pattern l, Subterm l a) => Pattern a where
 
 instance Pattern Nat
 
-class AlphaTerm a 
+class AlphaTerm a
 
 {-
 class Alpha a => Pattern a where
-class Alpha a => AlphaTerm a where 
+class Alpha a => AlphaTerm a where
 
 instance AlphaTerm Name where
 instance (Pattern a, AlphaTerm b) => AlphaTerm (Bind a b) where

@@ -44,7 +44,7 @@
 -- operations, because the behavior of these operations should match the
 -- deriving mechanism specified by Haskell 98.
 --
-module Data.RepLib.PreludeLib (
+module Generics.RepLib.PreludeLib (
   EqD,
   eqR1,
   OrdD,
@@ -56,9 +56,9 @@ module Data.RepLib.PreludeLib (
   showsPrecR1
 )where
 
-import Data.RepLib.R
-import Data.RepLib.R1
-import Data.RepLib.RepAux
+import Generics.RepLib.R
+import Generics.RepLib.R1
+import Generics.RepLib.RepAux
 
 --- Polymorphic equality -------------------------
 

@@ -23,7 +23,6 @@ X - Easier instances for Patterns/Alphas
   - as there does not seem to be a good reason to distinguish them.
 Extensive testing
 X - Nominal version
-Multiple name types -- see GenericBindLNa.hs
 
 -}
 
@@ -42,7 +41,7 @@ each other.
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  Data.RepLib.Bind.LocallyNameless
+-- Module      :  Generics.RepLib.Bind.LocallyNameless
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -64,7 +63,7 @@ each other.
 -- 'Fresh' and 'LFresh' classes.
 ----------------------------------------------------------------------
 
-module Data.RepLib.Bind.LocallyNameless
+module Generics.RepLib.Bind.LocallyNameless
   ( -- * Basic types
     Name, AnyName(..), Bind, Annot(..), Rebind,
 
@@ -109,8 +108,8 @@ module Data.RepLib.Bind.LocallyNameless
    rName, rBind, rRebind, rAnnot
 ) where
 
-import Data.RepLib
-import Data.RepLib.Bind.PermM
+import Generics.RepLib
+import Generics.RepLib.Bind.PermM
 
 import qualified Data.List as List
 import qualified Data.Char as Char

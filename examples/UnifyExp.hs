@@ -8,20 +8,20 @@
 -- Module      :  UnifyExp
 -- Copyright   :  (c) Ben Kavanagh 2008
 -- License     :  BSD
--- 
+--
 -- Maintainer  :  ben.kavanagh@gmail.com
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
--- A file demonstrating the use of Data.Replib.Unify
+-- A file demonstrating the use of Generics.Replib.Unify
 --
 -----------------------------------------------------------------------------
 
 module UnifyExp
 where
 
-import Data.RepLib
-import Data.RepLib.Unify
+import Generics.RepLib
+import Generics.RepLib.Unify
 import Test.HUnit
 import Control.Monad.Error
 
@@ -71,7 +71,7 @@ instance HasVar Int Term where
     var = TVar
 
 -- There are two ways to override the unify [Char] [Char] problem. the first is to implement
--- unify and only offer the case for K2, defaulting to generic unify in other cases. The other 
+-- unify and only offer the case for K2, defaulting to generic unify in other cases. The other
 -- is to implement unify for String using equality, overriding the default Cons/Nil case handling
 
 
@@ -79,9 +79,9 @@ instance HasVar Int Term where
 -- Writing an instance for String which leaves 'special' term 'a' abstract has a problem with case a = String,
 -- which leads to overlap with a a case.. So we can only specialise String for a known 'special' term (here Term)
 instance (Eq n, Show n, HasVar n Term) => Unify n Term String where
-    unifyStep _ x y = if x == y 
+    unifyStep _ x y = if x == y
 		      then return ()
-		      else throwError $ strMsg ("unify failed when testing equality for " ++ show x ++ " = " ++ show y) 
+		      else throwError $ strMsg ("unify failed when testing equality for " ++ show x ++ " = " ++ show y)
 
 
 
@@ -95,9 +95,9 @@ test5 = solveUnification [(App (K2 "f") (App (K2 "g") (TVar 1)), App (K2 "f") (T
 test6 :: Maybe [(Int, Term)]
 test6 = solveUnification [(App (App (K2 "f") (App (K2 "g") (TVar 1))) (TVar 1), App (App (K2 "f") (TVar 2)) (K2 "xyz"))]
 
--- f(A) = f(B, C) ==> fail. constructor mismatch. App vs K2. This is in essence an 'arity' failure. 
--- in a term datatype that had Application as an arity plus list, the arity would not be equal and would call failure. 
--- I'm not sure the error message would be adequate. Perhaps I could use a typeclass/newtype to get better error messages 
+-- f(A) = f(B, C) ==> fail. constructor mismatch. App vs K2. This is in essence an 'arity' failure.
+-- in a term datatype that had Application as an arity plus list, the arity would not be equal and would call failure.
+-- I'm not sure the error message would be adequate. Perhaps I could use a typeclass/newtype to get better error messages
 -- on equality failures.
 test7 :: Maybe [(Int, Term)]
 test7 = solveUnification [(App (K2 "f") (TVar 1),  App (App (K2 "f") (TVar 2)) (TVar 3))]
@@ -126,26 +126,26 @@ $(derive [''OuterTerm])
 
 -- H(f(g(A), A)) = H(f(B, xyz)) ==> [(A, xyz), (B, g(xyz))]  where H is outer
 test11 :: Maybe [(Int, Term)]
-test11 = solveUnification' 
+test11 = solveUnification'
 	   (undefined :: Proxy (Int, Term))
-	   [(App3 (K3 "H") (Inner $ App (App (K2 "f") (App (K2 "g") (TVar 1))) (TVar 1)), 
+	   [(App3 (K3 "H") (Inner $ App (App (K2 "f") (App (K2 "g") (TVar 1))) (TVar 1)),
 	     App3 (K3 "H") (Inner $ App (App (K2 "f") (TVar 2)) (K2 "xyz")))]
 
 
 -- H(f(g(A), A)) = H(f(B, xyz)) ==> [(A, xyz), (B, g(xyz))]  where H is outer
 test12 :: Maybe [(Int, Term)]
-test12 = solveUnification' 
+test12 = solveUnification'
 	   (undefined :: Proxy (Int, Term))
-	   [(App3 (K3 "H") (Inner $ App (App (K2 "f") (App (K2 "g") (TVar 1))) (TVar 1)), 
+	   [(App3 (K3 "H") (Inner $ App (App (K2 "f") (App (K2 "g") (TVar 1))) (TVar 1)),
 	     App3 (K3 "I") (Inner $ App (App (K2 "f") (TVar 2)) (K2 "xyz")))]
 
 
 
 
--- todo. fix tests so that errors are tested properly. 
-tests = test [ test1 ~?= Just [(1,K "f")], 
-	       test2 ~?= error "***Exception: occurs check failed", 
-	       test3 ~?= Just [(1,Var 2)], 
+-- todo. fix tests so that errors are tested properly.
+tests = test [ test1 ~?= Just [(1,K "f")],
+	       test2 ~?= error "***Exception: occurs check failed",
+	       test3 ~?= Just [(1,Var 2)],
 	       test4 ~?= Just [(1,Var 3),(2,Var 3)],
 	       test5 ~?= Just [(2,App (K2 "g") (TVar 1))],
 	       test6 ~?= Just [(2,App (K2 "g") (K2 "xyz")),(1,K2 "xyz")],

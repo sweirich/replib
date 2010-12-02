@@ -4,7 +4,7 @@
 
 -----------------------------------------------------------------------------
 -- |
--- Module      :  RSchemes
+-- Module      :  Generics.RepLib.SYB.Schemes
 -- Copyright   :  (c) The University of Pennsylvania 2006
 -- License     :  BSD
 --
@@ -19,7 +19,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Data.RepLib.SYB.Schemes (
+module Generics.RepLib.SYB.Schemes (
 
    everywhere,
    everywhere',
@@ -43,9 +43,9 @@ module Data.RepLib.SYB.Schemes (
 ------------------------------------------------------------------------------
 
 
-import Data.RepLib.R
-import Data.RepLib.RepAux
-import Data.RepLib.SYB.Aliases
+import Generics.RepLib.R
+import Generics.RepLib.RepAux
+import Generics.RepLib.SYB.Aliases
 
 
 -- | Apply a transformation everywhere in bottom-up manner

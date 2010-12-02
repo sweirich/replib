@@ -5,9 +5,9 @@
 
 module Issue15 where
 
-import Data.RepLib
-import qualified Data.RepLib.Bind.LocallyNameless as LN
+import Generics.RepLib
+import qualified Generics.RepLib.Bind.LocallyNameless as LN
 
 data Foo = Foo (LN.Name Foo)
 
-$(derive [''Foo])  
+$(derive [''Foo])

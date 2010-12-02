@@ -10,7 +10,7 @@ maintainer:     Chris Casinghino <ccasin@cis.upenn.edu>
                 Brent Yorgey <byorgey@cis.upenn.edu>
                 Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       http://www.cis.upenn.edu/~sweirich/RepLib
-category:       Data
+category:       Generics
 extra-source-files: README, examples/Main.hs, examples/UnifyExp.hs
 synopsis:       Generic programming library with representation types
 description:    Generic programming library providing structural
@@ -21,18 +21,18 @@ Library
                  template-haskell >= 2.4 && < 2.6, mtl >= 1.1 && < 2.1,
                  containers >= 0.3 && < 0.5
   exposed-modules:
-    Data.RepLib,
-    Data.RepLib.R,
-    Data.RepLib.R1,
-    Data.RepLib.Lib,
-    Data.RepLib.PreludeReps,
-    Data.RepLib.PreludeLib,
-    Data.RepLib.RepAux,
-    Data.RepLib.Derive,
-    Data.RepLib.SYB.Aliases,
-    Data.RepLib.SYB.Schemes,
-    Data.RepLib.Unify,
-    Data.RepLib.Bind.Nominal,
-    Data.RepLib.Bind.LocallyNameless,
-    Data.RepLib.Bind.PermM
+    Generics.RepLib,
+    Generics.RepLib.R,
+    Generics.RepLib.R1,
+    Generics.RepLib.Lib,
+    Generics.RepLib.PreludeReps,
+    Generics.RepLib.PreludeLib,
+    Generics.RepLib.RepAux,
+    Generics.RepLib.Derive,
+    Generics.RepLib.SYB.Aliases,
+    Generics.RepLib.SYB.Schemes,
+    Generics.RepLib.Unify,
+    Generics.RepLib.Bind.Nominal,
+    Generics.RepLib.Bind.LocallyNameless,
+    Generics.RepLib.Bind.PermM
   extensions: GADTs
