@@ -10,7 +10,7 @@
 --     'Subst' -- for subtitution functions.
 -- A generic substitution function requires implementing the case for
 -- variables and then calling the function 'substR1' for the other cases.
-module Data.RepLib.Bind.Nominal
+module Generics.RepLib.Bind.Nominal
   (Fresh(..),Alpha(..),HasNext(..)
   ,aeq
   ,AlphaCtx
@@ -25,8 +25,8 @@ module Data.RepLib.Bind.Nominal
   ,abs_swaps',abs_fv',abs_freshen',abs_match'
   ) where
 
-import Data.RepLib
-import Data.RepLib.Bind.PermM
+import Generics.RepLib
+import Generics.RepLib.Bind.PermM
 
 import qualified Data.List as List
 import qualified Text.Read as R
@@ -177,7 +177,7 @@ aeq t1 t2 = case match t1 t2 of
               _       -> False
 
 -- | List the binding variables in a pattern
-binders :: Alpha b => b -> Set Name 
+binders :: Alpha b => b -> Set Name
 binders = fv
 
 -- | List variables that occur freely in annotations (not binding)
@@ -354,7 +354,7 @@ lfreshenL (r :+: rs) p (t :*: ts) f =
 
 instance Alpha Name  where
 
-  fv' Term n = S.singleton n 
+  fv' Term n = S.singleton n
   fv' Pat n  = S.empty
 
   swaps' Term p x = apply p x
@@ -388,30 +388,30 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         f (B x' y') (pm1 <> pm2)))
 
     -- basic idea of match
-    -- if binders x1 == binders x2 then 
+    -- if binders x1 == binders x2 then
         --- match the annots in x1 and x2 and match the bodies y1 y2
     -- if binders x1 /= binders x2 then
-        -- make sure binders of x1 are not free in (B x2 y2) 
+        -- make sure binders of x1 are not free in (B x2 y2)
         -- swap x1,x2 in y2
         -- match the annots & match the bodies
-    -- ingredients:  
+    -- ingredients:
         -- match the binders, ignoring the annots
         -- match the annots, ignoring the binders
         -- list the binding variables
     match' Term (B x1 y1) (B x2 y2) =
-        case (match' Term x1 x2) of 
-          Just pmt | isid pmt -> do 
+        case (match' Term x1 x2) of
+          Just pmt | isid pmt -> do
             pm1 <- match' Pat x1 x2
-            pm2 <- match' Term y1 y2 
+            pm2 <- match' Term y1 y2
             (pm1 `join` pm2)
-          Just pmt -> 
+          Just pmt ->
             let xs = binders x1 in
             if xs `S.intersection` fv y2 == S.empty then do
                pm1 <- match' Pat x1 x2
                pm2 <- match' Term y1 (swaps' Term pmt y2)
                (pm1 `join` pm2)
              else Nothing
-          _ -> Nothing 
+          _ -> Nothing
     match' Pat _ _ = error "cannot match binders here."
 
 

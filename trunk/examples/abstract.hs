@@ -16,16 +16,16 @@
 --
 -----------------------------------------------------------------------------
 
--- | This example demonstrates how to use abstract types as part of 
+-- | This example demonstrates how to use abstract types as part of
 -- the syntax of the untyped lambda calculus
 --
 -- Suppose we wish to include Source positions in our Abstract Syntax
--- 
+--
 module Abstract where
 
-import Data.RepLib
-import Data.RepLib.Bind.LocallyNameless
-import Data.RepLib.Bind.PermM
+import Generics.RepLib
+import Generics.RepLib.Bind.LocallyNameless
+import Generics.RepLib.Bind.PermM
 import qualified Data.Set as S
 
 import Control.Monad.Reader (Reader, runReader)
@@ -35,7 +35,7 @@ import Control.Monad.Reader (Reader, runReader)
 -- all we know about it is that it is an instance of the Eq, Show and Ord classes.
 import Text.ParserCombinators.Parsec.Pos (SourcePos, newPos)
 
--- Since we don't know the structure of the type, we create an "abstract" 
+-- Since we don't know the structure of the type, we create an "abstract"
 -- representation for it. This defines rSourcePos :: R SourcePos and makes
 -- SourcePos an instance of the Rep and Rep1 type classes.
 --
@@ -59,7 +59,7 @@ $(derive [''Exp])
 --
 -- (1) match no source positions together  --- default definition
 --      match' c s1 s2 = Nothing
--- (2) match all source positions together 
+-- (2) match all source positions together
 --      match' c s1 s2 = Just empty
 -- (3) only match equal source positions together
 --      match' c s1 s2 | s1 == s2 = Just empty
@@ -69,7 +69,7 @@ $(derive [''Exp])
 -- (alpha-)equivalence for Exp to ignore the source position
 -- information. Two free variables with the same name but with
 -- different source positions should be equal.
--- 
+--
 -- The other defaults for Alpha are fine.
 instance Alpha SourcePos where
    match' c s1 s2 = Just empty
@@ -104,7 +104,7 @@ red (App e1 e2) = do
   e2' <- red e2
   case e1' of
     -- look for a beta-reduction
-    Lam bnd -> 
+    Lam bnd ->
       lunbind bnd $ \ (x, e1'') ->
         return $ subst x e2' e1''
     otherwise -> return $ App e1' e2'

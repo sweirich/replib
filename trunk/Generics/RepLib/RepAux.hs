@@ -1,11 +1,11 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, MagicHash,
     ScopedTypeVariables, GADTs, Rank2Types
-  #-} 
+  #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepAux
 -- License     :  BSD
--- 
+--
 -- Maintainer  :  sweirich@cis.upenn.edu
 -- Stability   :  experimental
 -- Portability :  non-portable
@@ -13,18 +13,18 @@
 -- Auxiliary operations to aid in the definition of type-indexed functions
 --
 -----------------------------------------------------------------------------
-module Data.RepLib.RepAux (
-  -- ** Casting operations 
+module Generics.RepLib.RepAux (
+  -- ** Casting operations
   eqR, cast, castR, gcast, gcastR,
 
   -- ** Comparison
   compareR,
 
-  -- ** Operations for heterogeneous lists 
+  -- ** Operations for heterogeneous lists
   findCon, Val(..), foldl_l, foldr_l, map_l, mapQ_l, mapM_l, fromTup, fromTupM, toList,
 
   -- ** SYB style operations (Rep)
-  Traversal, Query, MapM, 
+  Traversal, Query, MapM,
   gmapT, gmapQ, gmapM,
 
   -- ** SYB style operations (Rep1)
@@ -35,8 +35,8 @@ module Data.RepLib.RepAux (
   Typed(..),Spine(..), toSpine, fromSpine
 ) where
 
-import Data.RepLib.R
-import Data.RepLib.R1
+import Generics.RepLib.R
+import Generics.RepLib.R1
 import GHC.Base (unsafeCoerce#)
 
 
@@ -68,7 +68,7 @@ eqRTup (r1 :+: rt1) (r2 :+: rt2) = eqR r1 r2 && eqRTup rt1 rt2
 
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
-castR (ra::R a) (rb::R b) = 
+castR (ra::R a) (rb::R b) =
     if eqR ra rb then \(x::a) -> Just (unsafeCoerce# x::b) else \x -> Nothing
 
 -- | The type-safe cast operation, implicit arguments
@@ -83,12 +83,12 @@ gcastR ra rb = if eqR ra rb
 
 -- | Leibniz equality between types, implicit representations
 gcast :: forall a b c. (Rep a, Rep b) => c a -> Maybe (c b)
-gcast = gcastR (rep :: R a) (rep :: R b)      
+gcast = gcastR (rep :: R a) (rep :: R b)
 
 ---------- (Heterogeneous) Ordering -------------------------
 
--- | Heterogeneous Ordering    
-compareR :: R a -> R b -> Ordering 
+-- | Heterogeneous Ordering
+compareR :: R a -> R b -> Ordering
 compareR Int Int = EQ
 compareR Int _   = LT
 compareR _   Int = GT
@@ -111,23 +111,23 @@ compareR (IO r1) (IO r2) = compareR r1 r2
 compareR (IO _) _  = LT
 compareR _ (IO _)  = GT
 compareR (Arrow r1 r2) (Arrow r3 r4) =
-   case compareR r1 r3 of 
+   case compareR r1 r3 of
       EQ -> compareR r2 r4
       ord -> ord
 compareR (Arrow _ _) _  = LT
 compareR _ (Arrow _ _)  = GT
-compareR (Data dt1 _) (Data dt2 _) = 
+compareR (Data dt1 _) (Data dt2 _) =
    compare dt1 dt2
 compareR (Data _ _) _ = LT
 compareR _ (Data _ _) = GT
-compareR (Abstract dt1) (Abstract dt2) = 
+compareR (Abstract dt1) (Abstract dt2) =
    compare dt1 dt2
 compareR (Abstract _) _ = LT
 compareR _ (Abstract _) = GT
 
 instance Ord DT where
-  compare (DT str1 reps1) (DT str2 reps2) = 
-    case compare str1 str2 of 
+  compare (DT str1 reps1) (DT str2 reps2) =
+    case compare str1 str2 of
        EQ -> compareMTup reps1 reps2
        other -> other
 
@@ -135,10 +135,10 @@ compareMTup :: MTup R l -> MTup R l' -> Ordering
 compareMTup MNil MNil = EQ
 compareMTup MNil _    = LT
 compareMTup _    MNil = GT
-compareMTup (a :+: as) (b :+: bs) = 
-  case compareR a b of 
+compareMTup (a :+: as) (b :+: bs) =
+  case compareR a b of
      EQ -> compareMTup as bs
-     other -> other  
+     other -> other
 
 
 
@@ -147,28 +147,28 @@ compareMTup (a :+: as) (b :+: bs) =
 -- | A datastructure to store the results of findCon
 data Val ctx a = forall l.  Val (Emb l a) (MTup ctx l) l
 
--- | Given a list of constructor representations for a datatype, 
+-- | Given a list of constructor representations for a datatype,
 -- determine which constructor formed the datatype.
 findCon :: [Con ctx a] -> a -> Val ctx a
-findCon (Con rcd rec : rest) x = case (from rcd x) of 
+findCon (Con rcd rec : rest) x = case (from rcd x) of
        Just ys -> Val rcd rec ys
        Nothing -> findCon rest x
 
--- | A fold right operation for heterogeneous lists, that folds a function 
+-- | A fold right operation for heterogeneous lists, that folds a function
 -- expecting a type type representation across each element of the list.
-foldr_l :: (forall a. Rep a => ctx a -> a -> b -> b) -> b 
+foldr_l :: (forall a. Rep a => ctx a -> a -> b -> b) -> b
             -> (MTup ctx l) -> l -> b
 foldr_l f b MNil Nil = b
-foldr_l f b (ca :+: cl) (a :*: l) = f ca a (foldr_l f b cl l ) 
+foldr_l f b (ca :+: cl) (a :*: l) = f ca a (foldr_l f b cl l )
 
 -- | A fold left for heterogeneous lists
-foldl_l :: (forall a. Rep a => ctx a -> b -> a -> b) -> b 
+foldl_l :: (forall a. Rep a => ctx a -> b -> a -> b) -> b
             -> (MTup ctx l) ->  l -> b
 foldl_l f b MNil Nil = b
-foldl_l f b (ca :+: cl) (a :*: l) = foldl_l f (f ca b a) cl l 
+foldl_l f b (ca :+: cl) (a :*: l) = foldl_l f (f ca b a) cl l
 
 -- | A map for heterogeneous lists
-map_l :: (forall a. Rep a => ctx a -> a -> a) 
+map_l :: (forall a. Rep a => ctx a -> a -> a)
            -> (MTup ctx l) ->  l ->  l
 map_l f MNil Nil = Nil
 map_l f (ca :+: cl) (a :*: l) = (f ca a) :*: (map_l f cl l)
@@ -181,7 +181,7 @@ mapQ_l q (r :+: rs) (a :*: l) = q r a : mapQ_l q rs l
 -- | mapM for heterogeneous lists
 mapM_l :: (Monad m) => (forall a. Rep a => ctx a -> a -> m a) -> MTup ctx l -> l -> m l
 mapM_l f MNil Nil = return Nil
-mapM_l f (ca :+: cl) (a :*: l) = do 
+mapM_l f (ca :+: cl) (a :*: l) = do
   x1 <- f ca a
   x2 <- mapM_l f cl l
   return (x1 :*: x2)
@@ -208,23 +208,23 @@ toList f (b :+: l) = f b : toList f l
 -- | A SYB style traversal
 type Traversal = forall a. Rep a => a -> a
 
--- | Map a traversal across the kids of a data structure 
+-- | Map a traversal across the kids of a data structure
 gmapT :: forall a. Rep a => Traversal -> a -> a
-gmapT t = 
-  case (rep :: R a) of 
-   (Data dt cons) -> \x -> 
-     case (findCon cons x) of 
+gmapT t =
+  case (rep :: R a) of
+   (Data dt cons) -> \x ->
+     case (findCon cons x) of
       Val emb reps ys -> to emb (map_l (const t) reps ys)
    _ -> id
 
 
 -- | SYB style query type
-type Query r = forall a. Rep a => a -> r 
+type Query r = forall a. Rep a => a -> r
 
 gmapQ :: forall a r. Rep a => Query r -> a -> [r]
 gmapQ q =
-  case (rep :: R a) of 
-    (Data dt cons) -> \x -> case (findCon cons x) of 
+  case (rep :: R a) of
+    (Data dt cons) -> \x -> case (findCon cons x) of
 		Val emb reps ys -> mapQ_l (const q) reps ys
     _ -> const []
 
@@ -234,42 +234,42 @@ type MapM m = forall a. Rep a => a -> m a
 
 gmapM   :: forall a m. (Rep a, Monad m) => MapM m -> a -> m a
 gmapM m = case (rep :: R a) of
-   (Data dt cons) -> \x -> case (findCon cons x) of 
+   (Data dt cons) -> \x -> case (findCon cons x) of
      Val emb reps ys -> do l <- mapM_l (const m) reps ys
                            return (to emb l)
-   _ -> return 
+   _ -> return
 
 
 -------------- Generalized  SYB ops ---------------------------
 
 type Traversal1 ctx = forall a. Rep a => ctx a -> a -> a
-gmapT1 :: forall a ctx. (Rep1 ctx a) => Traversal1 ctx -> a -> a 
-gmapT1 t = 
-  case (rep1 :: R1 ctx a) of 
-   (Data1 dt cons) -> \x -> 
-     case (findCon cons x) of 
+gmapT1 :: forall a ctx. (Rep1 ctx a) => Traversal1 ctx -> a -> a
+gmapT1 t =
+  case (rep1 :: R1 ctx a) of
+   (Data1 dt cons) -> \x ->
+     case (findCon cons x) of
       Val emb recs kids -> to emb (map_l t recs kids)
    _ -> id
 
 type Query1 ctx r = forall a. Rep a => ctx a -> a -> r
 gmapQ1 :: forall a ctx r. (Rep1 ctx a) => Query1 ctx r -> a -> [r]
 gmapQ1 q  =
-  case (rep1 :: R1 ctx a) of 
-    (Data1 dt cons) -> \x -> case (findCon cons x) of 
+  case (rep1 :: R1 ctx a) of
+    (Data1 dt cons) -> \x -> case (findCon cons x) of
 		Val emb recs kids -> mapQ_l q recs kids
     _ -> const []
 
 type MapM1 ctx m = forall a. Rep a => ctx a -> a -> m a
 gmapM1  :: forall a ctx m. (Rep1 ctx a, Monad m) => MapM1 ctx m -> a -> m a
 gmapM1 m = case (rep1 :: R1 ctx a) of
-   (Data1 dt cons) -> \x -> case (findCon cons x) of 
+   (Data1 dt cons) -> \x -> case (findCon cons x) of
      Val emb rec ys -> do l <- mapM_l m rec ys
                           return (to emb l)
-   _ -> return 
+   _ -> return
 
 -------------- Spine from SYB Reloaded ---------------------------
 
-data Typed a = a ::: R a 
+data Typed a = a ::: R a
 infixr 7 :::
 
 data Spine a where
@@ -277,18 +277,18 @@ data Spine a where
 	 (:<>)  :: Spine (a -> b) -> Typed a -> Spine b
 
 toSpineR :: R a -> a -> Spine a
-toSpineR (Data _ cons) a = 
-	 case (findCon cons a) of 
+toSpineR (Data _ cons) a =
+	 case (findCon cons a) of
 	    Val emb reps kids -> toSpineRl reps kids (to emb)
 toSpineR _ a = Constr a
 
-toSpineRl :: MTup R l -> l -> (l -> a) -> Spine a 
+toSpineRl :: MTup R l -> l -> (l -> a) -> Spine a
 toSpineRl MNil Nil into = Constr (into Nil)
-toSpineRl (ra :+: rs) (a :*: l) into = 
+toSpineRl (ra :+: rs) (a :*: l) into =
 	 (toSpineRl rs l into') :<> (a ::: ra)
 		  where into' tl1 x1 = into (x1 :*: tl1)
 
-toSpine :: Rep a => a -> Spine a 
+toSpine :: Rep a => a -> Spine a
 toSpine = toSpineR rep
 
 fromSpine :: Spine a -> a

@@ -16,7 +16,7 @@
 -- A library of type-indexed functions
 --
 -----------------------------------------------------------------------------
-module Data.RepLib.Lib (
+module Generics.RepLib.Lib (
   -- * Available for all representable types
   subtrees, deepSeq, rnf,
 
@@ -39,10 +39,10 @@ module Data.RepLib.Lib (
 
 ) where
 
-import Data.RepLib.R
-import Data.RepLib.R1
-import Data.RepLib.RepAux
-import Data.RepLib.PreludeReps()
+import Generics.RepLib.R
+import Generics.RepLib.R1
+import Generics.RepLib.RepAux
+import Generics.RepLib.PreludeReps()
 
 ------------------- Subtrees --------------------------
 -- there is no point in using R1 for subtrees
