@@ -535,10 +535,11 @@ instance Rep a => Alpha (Name a) where
         Nothing  -> error "Internal error in open: sort mismatch"
   open _ _ n = n
 
-  close c a nm@(Nm r n) =
-    case findpat a (AnyName nm) of
-      Just x  -> Bn r (level c) x
-      Nothing -> nm
+  close c a nm@(Nm r n)
+    | mode c == Term =
+      case findpat a (AnyName nm) of
+        Just x  -> Bn r (level c) x
+        Nothing -> nm
 
   close _ _ n = n
 
