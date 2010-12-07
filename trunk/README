@@ -1,7 +1,6 @@
 -----------------------------------------------------------------------------
--- |
 -- 
--- Copyright   :  (c) The University of Pennsylvania, 2006
+-- Copyright   :  (c) 2006-2010, RepLib team (see LICENSE)
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu, byorgey@cis.upenn.edu
@@ -11,27 +10,36 @@
 -- RepLib 
 --    a library of derivable type classes based on representation types
 --
---  See http://www.cis.upenn.edu/~sweirich/RepLib for more information.
+--  See http://code.google.com/p/replib/ for more information.
 -----------------------------------------------------------------------------
 
-RepLib has been tested with GHC 6.8.3 and 6.10.3.
+RepLib has been tested with GHC 7.0.1.  It currently does not compile with 
+GHC 6.12.x or earlier.
 
 This library contains the following modules:
 
-RepLib.R           - Basic type representations
-RepLib.R1          - Parameterized type representations
-RepLib.Derive      - Template Haskell code to automatically derive 
-                     representations of datatypes.
-RepLIb.PreludeReps - Reps of Prelude types
-RepLib.RepAux      - Helper functions to define type-indexed functions
+Generics.RepLib.R           - Basic type representations
+Generics.RepLib.R1          - Parameterized type representations
+Generics.RepLib.Derive      - Template Haskell code to automatically derive 
+                              representations of datatypes.
+Generics.RepLib.PreludeReps - Reps of Prelude types
+Generics.RepLib.RepAux      - Helper functions to define type-indexed functions
 
-RepLib.Lib         - Examples of specializable type-indexed functions
-RepLib.PreludeLib  - Examples type-indexed functions from prelude
+Generics.RepLib.Lib         - Examples of specializable type-indexed functions
+Generics.RepLib.PreludeLib  - Examples type-indexed functions from prelude
 
-RepLib.SYB.Aliases - SYB: Port of Data.Generics.Aliases
-RepLib.SYB.Schemes - SYB: Port of Data.Generics.Schemes
+Generics.RepLib.SYB.Aliases - SYB: Port of Data.Generics.Aliases
+Generics.RepLib.SYB.Schemes - SYB: Port of Data.Generics.Schemes
 
-RepLib   - Toplevel module that imports all of the above
+RepLib                      - Top-level module that re-exports all of the above
+
+Generics.RepLib.Bind.LocallyNameless
+                             - Tools for generic programming with
+                               binders (alpha renaming, substitution,
+                               unification, etc.)
+
+Generics.RepLib.Bind.Nominal - Tools for generic programming with
+                               binders (alternate implementation)
 
 To use this library, import RepLib and derive representations of your
 datatypes. The "Lib" module contains a number of type-indexed
@@ -41,4 +49,3 @@ Main.hs.
 
 Currently, the representations of datatypes with record components,
 GADTs and nested datatypes cannot be automatically derived.
-
