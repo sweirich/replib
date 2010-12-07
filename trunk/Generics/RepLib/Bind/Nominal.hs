@@ -11,7 +11,8 @@
 --
 --
 -- Generic implementation of name binding functions, based on the library
--- RepLib.
+-- RepLib. This version uses a nominal representation of binding structure.
+--
 -- Datatypes with binding defined using the 'Name' and 'Bind' types.
 -- Important classes are
 --     'Alpha' -- the class of types that include binders.
@@ -30,7 +31,8 @@ module Generics.RepLib.Bind.Nominal
 
     -- * The 'Alpha' class
     Alpha(..),
-    swaps, match,
+    swaps, -- is a bit wonky
+    -- match is not working yet
     binders, patfv, fv,
     aeq,
 
@@ -269,9 +271,12 @@ reopen (R a1 (B names b)) = (a1, swaps p b) where
 ----------------------------------------------------------
 
 aeq :: Alpha a => a -> a -> Bool
-aeq t1 t2 = case match t1 t2 of
+aeq t1 t2 = aeq' initial t1 t2
+{- 
+  case match t1 t2 of
               Just p -> isid p
               _       -> False
+-}
 
 -- | calculate the free variables of the term
 fv :: (Rep b, Alpha a) => a -> Set (Name b)
@@ -361,6 +366,12 @@ mode = id
 
 class (Rep1 (AlphaD) a) => Alpha a where
 
+  aeq' :: AlphaCtx -> a -> a -> Bool
+  aeq' = aeqR1 rep1
+
+  swapall' :: AlphaCtx -> Perm AnyName -> a -> a 
+  swapall' = swapallR1 rep1
+
   -- | The method "swaps'" applys a compound permutation.
   swaps' :: AlphaCtx -> Perm AnyName -> a -> a
   swaps' = swapsR1 rep1
@@ -393,6 +404,8 @@ class (Rep1 (AlphaD) a) => Alpha a where
 -- class constraint hackery to allow us to override the
 -- default definitions for certain classes
 data AlphaD a = AlphaD {
+  aeqD     :: AlphaCtx -> a -> a -> Bool,
+  swapallD   :: AlphaCtx -> (Perm AnyName) -> a -> a,
   swapsD   :: AlphaCtx -> (Perm AnyName) -> a -> a,
   fvD      :: AlphaCtx -> a -> Set AnyName,
   bindersD :: AlphaCtx -> a -> [AnyName],
@@ -403,11 +416,29 @@ data AlphaD a = AlphaD {
  }
 
 instance Alpha a => Sat (AlphaD a) where
-  dict = AlphaD swaps' fv' binders' match' freshen' lfreshen'
+  dict = AlphaD aeq' swapall' swaps' fv' binders' match' freshen' lfreshen'
 
 -- Generic definitions of the class functions.
 -- (All functions that take representations end
 -- in 'R1')
+aeqR1 :: R1 AlphaD a -> AlphaCtx -> a -> a -> Bool
+aeqR1 (Data1 _ cons) = loop cons where
+  loop (Con emb reps : rest) p x y =
+    case (from emb x, from emb y) of
+      (Just p1, Just p2) -> aeq1 reps p p1 p2
+      (Nothing, Nothing) -> loop rest p x y
+      (_,_)              -> False
+  loop [] _ _ _ = error "Impossible"
+aeqR1 Int1 = \ _ x y -> x == y
+aeqR1 Integer1 = \ _ x y -> x == y 
+aeqR1 Char1 = \ _ x y -> x == y 
+aeqR1 _ = \ _ _ _ -> error "Cannot aeq this type"
+
+aeq1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Bool
+aeq1 MNil _ Nil Nil = True
+aeq1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = 
+  aeqD r c p1 p2 && aeq1 rs c t1 t2
+
 swapsR1 :: R1 (AlphaD) a -> AlphaCtx -> (Perm AnyName) -> a -> a
 swapsR1 Char1           = \ _ _ c -> c
 swapsR1 Int1            = \ _ _ c -> c
@@ -417,6 +448,17 @@ swapsR1 (Data1 _ cons)  = \ p x d ->
   case (findCon cons d) of
   Val c rec kids -> to c (map_l (\z -> swapsD z p x) rec kids)
 swapsR1 r               = error ("Cannot swap type " ++ (show r))
+
+
+swapallR1 :: R1 (AlphaD) a -> AlphaCtx -> (Perm AnyName) -> a -> a
+swapallR1 Char1           = \ _ _ c -> c
+swapallR1 Int1            = \ _ _ c -> c
+swapallR1 Float1          = \ _ _ c -> c
+swapallR1 Integer1        = \ _ _ c -> c
+swapallR1 (Data1 _ cons)  = \ p x d ->
+  case (findCon cons d) of
+  Val c rec kids -> to c (map_l (\z -> swapallD z p x) rec kids)
+swapallR1 r               = error ("Cannot swap type " ++ (show r))
 
 fvR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> Set AnyName
 fvR1 (Data1 _ cons) = \ p  d ->
@@ -500,6 +542,12 @@ instance (Rep a) => Alpha (Name a) where
   binders' c n@(Nm _ _)  | mode c == Term = [AnyName n]
   binders' c n           | mode c == Pat  = []
 
+  swapall' c p x = 
+      case apply p (AnyName x) of 
+       AnyName y ->
+        case cast y of
+          Just y' -> y'
+          Nothing -> error "Internal error in swaps': sort mismatch"
 
   swaps' c p x | mode c == Term = 
       case apply p (AnyName x) of 
@@ -508,6 +556,8 @@ instance (Rep a) => Alpha (Name a) where
           Just y' -> y'
           Nothing -> error "Internal error in swaps': sort mismatch"
   swaps' c p x | mode c == Pat = x
+
+  aeq' c x y = x == y 
 
   match' c x y  | x == y         = Just empty
   match' c x y  | mode c == Term = 
@@ -533,9 +583,12 @@ instance Alpha AnyName  where
   binders' Term n = [n]
   binders' Pat n  = []
 
+  swapall' c p x = apply p x 
 
   swaps' Term p x = apply p x
   swaps' Pat perm x = x
+
+  aeq' c x y = x == y
 
   match' Term x y = if x == y then Just empty else Just (single x y)
   match' Pat x y = Just empty
@@ -550,6 +603,7 @@ instance Alpha AnyName  where
      Pat  -> f (AnyName nm) empty
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
+
     -- to swap in a binder, swap the free variables in the 
     -- pattern, then remove the binders from the permutation
     -- and swap in the body
@@ -579,18 +633,49 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         lfreshen' c (swaps' c pm1 y) (\ y' pm2 ->
         f (B x' y') (pm1 <> pm2)))
 
+    -- this version of aeq seems to work
+    aeq' p (B x1 y1) (B x2 y2) = 
+       case () of 
+         () | bx1 == bx2 -> aeq' p x1 x2 && aeq' p y1 y2
+         () | (S.fromList bx1) `S.intersection` (fv' Term y2 S.\\ fv' Term y1) 
+            /= S.empty -> False
+         _ -> aeq' p x1 (swaps' Term pm x2) && aeq' p y1 (swapall' Term pm y2)
+       where bx1 = binders' Term x1
+             bx2 = binders' Term x2 
+             pm  = foldl (<>) empty (zipWith single bx1 bx2)
     -- basic idea of match
     -- if binders x1 == binders x2 then 
         --- match the annots in x1 and x2 and match the bodies y1 y2
     -- if binders x1 /= binders x2 then
-        -- make sure binders of x1 are not free in (B x2 y2) 
-        -- swap x1,x2 in y2
+        -- make sure binders of x1 are not free in the body of y2
+        -- swap (x1,x2) in y2
         -- match the annots & match the bodies
+        -- make sure none of the binders escapes in the resulting match
     -- ingredients:  
         -- match the binders, ignoring the annots
         -- match the annots, ignoring the binders
         -- list the binding variables
-    match' p (B x1 y1) (B x2 y2)  =
+    match' p (B x1 y1) (B x2 y2)  = 
+      case () of 
+        () | bx1 == bx2 -> do 
+            pm1 <- match' Pat x1 x2
+            pm2 <- match' p y1 y2 
+            pm1 `join` pm2
+        () | (S.fromList bx1) `S.intersection` (fv' Term y2 S.\\ fv' Term y1) 
+            /= S.empty -> Nothing
+        _ -> do 
+            pm1 <- match' Pat x1 x2'
+            pm2 <- match' p y1 y2' 
+            if S.fromList bx1 `S.intersection` S.fromList (support pm2) /= S.empty 
+              then Nothing
+              else pm1 `join` pm2       
+            -- note pm2 should not have any of the binders in the support     
+       where bx1 = binders' Term x1
+             bx2 = binders' Term x2 
+             pm  = foldl (<>) empty (zipWith single bx1 bx2)       
+             x2' = swaps' Term pm x2
+             y2' = swaps' Term pm (swaps' Pat pm y2)
+{-
         case (match' Term x1 x2) of 
           Just pmt | isid pmt -> do 
             pm1 <- match' Pat x1 x2
@@ -605,7 +690,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
              else Nothing
           _ -> Nothing 
    -- match' Pat _ _ = error "cannot match binders here."
-
+-}
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
@@ -863,7 +948,7 @@ instance (Subst c a, Alpha a, Subst c b, Alpha b) =>
     Subst c (Bind a b) where
   lsubst n u (B a b) =
       lfreshen' Term a ( \ a' p -> do
-         let b' = swaps' Term p b
+         let b' = swapall' Term p b
          a'' <- lsubst n u a'
          b'' <- lsubst n u b'
          return (B a'' b''))
@@ -871,7 +956,7 @@ instance (Subst c a, Alpha a, Subst c b, Alpha b) =>
   lsubsts n u (B a b) =
       lfreshen' Term a ( \ a' p -> do
          a'' <- lsubsts n u a'
-         let b' = swaps' Term p b
+         let b' = swaps' Pat p (swaps' Term p b)
          b'' <- lsubsts n u b'
          return (B a'' b''))
 
@@ -910,14 +995,17 @@ do_tests =
    tests_aeq
    tests_fv
    tests_big
+   tests_subst
 
-
-perm = single nameA nameB
+perm = single (AnyName nameA)(AnyName nameB)
 
 naeq x y = not (aeq x y)
 
 a10a = bind (rebind (nameA, Annot nameC) ()) nameA
 a10b = bind (rebind (nameB, Annot nameC) ()) nameB 
+
+a10c = bind (rebind (nameA, Annot nameA) ()) nameA
+a10d = bind (rebind (nameB, Annot nameA) ()) nameB
 
 tests_aeq = do
    assert "a1" $ (bind nameA nameA) `naeq` (bind nameA nameB)
@@ -949,6 +1037,7 @@ tests_aeq = do
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
    assert "a18" $ (nameA, nameA) `naeq` (nameA, nameB)
    assert "a19" $ match (nameA, nameA) (nameB, nameC) == Nothing
+   assert "a20" $ (L (bind name2 (L (bind name3 (L (bind name4  (A (V name2) (A (V name3) (V name4))))))))) `aeq`  (L (bind name1 (L (bind name2 (L (bind name3  (A (V name1) (A (V name2) (V name3))))))))) 
 
 emptyNE :: Set (Name Exp)
 emptyNE = S.empty
@@ -976,6 +1065,30 @@ tests_fv = do
    assert "f14" $ fv (rebind (Annot nameA) ()) == emptyNE
    assert "f14a" $ fv' Pat (rebind (Annot nameA) ()) == S.singleton (AnyName nameA)
 
+tests_subst = do 
+   assert "s1" $ subst nameA (V nameB) (V nameA) `aeq` (V nameB)
+   assert "s2" $ subst nameA (V nameB) (V nameC) `aeq` (V nameC)
+   assert "s3" $ subst nameA (V nameB) (L (bind nameA (V nameA))) `aeq`
+                                       (L (bind nameA (V nameA)))
+
+   assert "s4" $ subst nameA (V nameB) (L (bind nameB (V nameB))) `aeq`
+                                       (L (bind nameA (V nameA)))
+
+   assert "s5" $ subst nameA (V nameB) (L (bind nameC (V nameA))) `aeq`
+                                       (L (bind nameC (V nameB)))
+
+   assert "s6" $ subst nameA (V nameA) (L (bind nameC (V nameA))) `aeq`
+                                       (L (bind nameC (V nameA)))
+
+   assert "s7" $ subst nameA (V nameA) (L (bind nameA (V nameB))) `aeq`
+                                       (L (bind nameA (V nameB)))
+   assert "s9" $ subst name1 (V name1) 
+                  (L (bind name1 (L (bind name2 (L (bind name3 
+                           (A (V name1) (A (V name2) (V name3))))))))) `aeq`
+                  (L (bind name1 (L (bind name2 (L (bind name3 
+                           (A (V name1) (A (V name2) (V name3)))))))))
+
+
 mkbig :: [Name Exp] -> Exp -> Exp
 mkbig (n : names) body =
     L (bind n (mkbig names (A (V n) body)))
@@ -990,114 +1103,3 @@ tests_big = do
    assert "b3" $ big1 `aeq` subst name11 (V name11) big1
 
 
-
-
--- swaps' Term perm (rebind (nameA, Annot nameA) nameA)
-
-{-
-
-
-data V = V (Name V) deriving (Show,Eq,Ord)
-$(derive [''V])
-
-
-ftest :: Alpha a => a -> (a , Perm AnyName)
-ftest x = runReader
-          (lfreshen x (\ x' p' -> return (x', p'))) (5 :: Integer)
-
-
-instance Alpha V where
-instance Subst V V where
-   isvar (V n) =  Just (n, id)
-
-
-assert :: String -> Bool -> IO ()
-assert s True = return ()
-assert s False = print ("Assertion " ++ s ++ " failed")
-
-do_tests :: ()
-do_tests =
-   unsafePerformIO $ do
-   tests_aeq
-   tests_fv
-   tests_big
-
-perm = single name1 name2
-
-naeq x y = not (aeq x y)
-
-tests_aeq = do
-   assert "a1" $ (bind name1 name1) `naeq` (bind name1 name2)
-   assert "a2" $ (bind name1 name1) `aeq` (bind name1 name1)
-   assert "a3" $ (bind name1 name1) `aeq` (bind name2 name2)
-   assert "a4" $ (bind name1 name2) `naeq` (bind name2 name1)
-   assert "a5" $ (bind (name1, Annot name2) name1) `naeq`
-                 (bind (name1, Annot name3) name1)
-   assert "a6" $ (bind (name1, Annot name2) name1) `aeq`
-                 (bind (name1, Annot name2) name1)
-   assert "a7" $ (bind (name1, Annot name2) name1) `aeq`
-                 (bind (name2, Annot name2) name2)
-   assert "a8" $ rebind name1 name2 `naeq` rebind name2 name2
-   assert "a9" $ rebind name1 name1 `naeq` rebind name2 name2
-   assert "a9a" $ (bind (rebind name1 (Annot name1)) name1) `aeq`
-                  (bind (rebind name2 (Annot name2)) name2)
-   assert "a10" $ bind (rebind (name1, Annot name1) ()) name1 `aeq`
-                  bind (rebind (name2, Annot name1) ()) name2
-   assert "a11" $ bind (rebind (name1, Annot name1) ()) name1 `naeq`
-                  bind (rebind (name2, Annot name2) ()) name2
-   assert "a12" $ bind (Annot name1) () `naeq` bind (Annot name2) ()
-   assert "a13" $ bind (Annot name1) () `aeq` bind (Annot name1) ()
-   assert "a14" $ bind (rebind (Annot name1) ()) () `naeq`
-                  bind (rebind (Annot name2) ()) ()
-   assert "a15" $ (rebind (name1, Annot name1) ()) `naeq`
-                  (rebind (name4, Annot name3) ())
-   assert "a16" $ bind (name1, name2) name1 `naeq` bind (name2, name1) name1
-   assert "a17" $ bind (name1, name2) name1 `naeq` bind (name1, name2) name2
-
-tests_fv = do
-   assert "f1" $ fv (bind name1 name1) == S.empty
-   assert "f2" $ fv' (pat initial) (bind name1 name1) == S.empty
-   assert "f4" $ fv (bind name1 name2) == S.singleton name2
-   assert "f5" $ fv (bind (name1, Annot name2) name1) == S.singleton name2
-   assert "f7" $ fv (bind (name2, Annot name2) name2) == S.singleton name2
-   assert "f8" $ fv (rebind name1 name2) == S.fromList [name1, name2]
-   assert "f9" $ fv' (pat initial) (rebind name1 name1) == S.empty
-   assert "f3" $ fv (bind (rebind name1 (Annot name1)) name1) == S.empty
-   assert "f10" $ fv (rebind (name1, Annot name1) ()) == S.singleton name1
-   assert "f11" $ fv' (pat initial) (rebind (name1, Annot name1) ()) == S.singleton name1
-   assert "f12" $ fv (bind (Annot name1) ()) == S.singleton name1
-   assert "f14" $ fv (rebind (Annot name1) ()) == S.empty
-
-big1 =
-    bind name1
-      (bind name2
-       (bind name3
-        (bind name4
-          (bind name5
-            (bind name6
-              (bind name7
-                (bind name8
-                  (bind name9
-                   (bind name10
-                     (name1, name2, name3, (name4, name5, name6, (name7, name8, name9, name10, V name11))))))))))))
-
-big2 =
-    bind name2
-      (bind name1
-       (bind name3
-        (bind name4
-          (bind name5
-            (bind name6
-              (bind name7
-                (bind name8
-                  (bind name9
-                   (bind name10
-                     (name2, name1, name3, (name4, name5, name6, (name7, name8, name9, name10, V name11))))))))))))
-
-tests_big = do
-   assert "b1" $ big1 `aeq` big2
-   assert "b2" $ fv big1 == S.singleton name11
-   assert "b3" $ big1 == subst name11 (V name11) big1
-
-
--}
