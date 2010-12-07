@@ -9,6 +9,8 @@
            , MultiParamTypeClasses
            , FlexibleContexts
            , UndecidableInstances
+           , TypeSynonymInstances
+           , TypeFamilies
   #-}
 
 module LF where
@@ -17,6 +19,7 @@ import Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib
 
 import qualified Data.Set as S
+import qualified Data.Map as M
 
 -- Kinds
 data Kind = KPi (Bind (Name Tm, Annot Ty) Kind) -- {x:ty} k
@@ -69,3 +72,42 @@ data Prog = Nil
 
 -- A signature is a set of declarations.
 type Sig = S.Set Decl
+
+-- A context is a mapping from term variables to types.
+type Context = M.Map (Name Tm) Ty
+
+--------------------
+-- Erasure ---------
+--------------------
+
+-- Simple kinds and types (no dependency)
+data SKind = SKType
+           | SKArr STy SKind
+data STy   = STyConst (Name Ty)  -- XXX should this be (Name STy)?
+           | STyArr STy STy
+
+-- Simple contexts map variables to simple types.
+type SContext = M.Map (Name Tm) STy
+
+class Erasable t where
+  type Erased t :: *
+  erase :: t -> Erased t
+
+instance Erasable Kind where
+  type Erased Kind = SKind
+  erase Type = SKType
+  erase (KPi b) = SKArr (erase ty) (erase k)
+    where ((_, Annot ty), k) = unsafeUnBind b
+          -- this is actually safe since we ignore the name
+          -- and promise to erase it from k.
+
+instance Erasable Ty where
+  type Erased Ty = STy
+  erase (TyPi b)      = STyArr (erase t1) (erase t2)
+    where ((_, Annot t1), t2) = unsafeUnBind b
+  erase (TyApp ty tm) = erase ty
+  erase (TyConst c)   = STyConst c
+
+instance Erasable Context where
+  type Erased Context = SContext
+  erase = M.map erase
