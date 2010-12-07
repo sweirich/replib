@@ -9,9 +9,12 @@
 -- Stability   :  experimental
 -- Portability :  non-portable (-XKitchenSink)
 --
---
 -- Generic implementation of name binding functions, based on the library
 -- RepLib. This version uses a nominal representation of binding structure.
+--
+-- DISCLAIMER: this module probably contains bugs and is noticeably
+-- slower than "Generics.RepLib.Bind.LocallyNameless".  At this point
+-- we recommend it only for the curious or intrepid.
 --
 -- Datatypes with binding defined using the 'Name' and 'Bind' types.
 -- Important classes are
@@ -41,7 +44,7 @@ module Generics.RepLib.Bind.Nominal
 
     -- * The 'Fresh' class
     Fresh(..), freshen,
-    unbind, unbind2, unbind3, 
+    unbind, unbind2, unbind3,
 
     -- * The 'LFresh' class
     HasNext(..), LFresh(..),
@@ -93,7 +96,7 @@ data Name a = Nm (R a) (String,Integer) deriving (Eq, Ord)
 -- can create "fresh" a objects, and Names can be
 -- swapped in "b" objects. Often "a" is Name
 -- but that need not be the case.
-data Bind a b = B a b 
+data Bind a b = B a b
 
 
 -- | A name with a hidden (existentially quantified) sort.
@@ -108,7 +111,7 @@ newtype Annot a = Annot a deriving (Read, Eq)
 
 -- | Rebinding is for telescopes --- i.e. to support patterns that
 -- also bind variables that appear later
-data Rebind a b = R a (Bind [AnyName] b) 
+data Rebind a b = R a (Bind [AnyName] b)
 
 -- Fragily deriving the replib instances for Bind and Name
 -- in the same file that they are defined in. This shouldn't
@@ -240,7 +243,7 @@ instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
          readListPrec = R.readListPrecDefault
 
 ----------------------------------------------------------
--- Rebinding operations 
+-- Rebinding operations
 ----------------------------------------------------------
 
 -- | Constructor for binding in patterns
@@ -253,9 +256,9 @@ instance (Eq a, Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
 -}
 
 instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
-  showsPrec p (R a (B a' b)) =  showParen (p>0)  
-      (showString "<<" . showsPrec p a . sa' . showString ">> " . showsPrec 0 b) 
-   where sa' =  if binders' initial a == a' then showString "" 
+  showsPrec p (R a (B a' b)) =  showParen (p>0)
+      (showString "<<" . showsPrec p a . sa' . showString ">> " . showsPrec 0 b)
+   where sa' =  if binders' initial a == a' then showString ""
                   else showString "/" . showsPrec p a'
 
 -- | destructor for binding patterns, the external names should have already
@@ -263,7 +266,7 @@ instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
 -- external names
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 reopen (R a1 (B names b)) = (a1, swaps p b) where
-   p = foldl (<>) empty (zipWith single (S.elems $ fv' initial a1) 
+   p = foldl (<>) empty (zipWith single (S.elems $ fv' initial a1)
                                         names)
 
 ----------------------------------------------------------
@@ -272,7 +275,7 @@ reopen (R a1 (B names b)) = (a1, swaps p b) where
 
 aeq :: Alpha a => a -> a -> Bool
 aeq t1 t2 = aeq' initial t1 t2
-{- 
+{-
   case match t1 t2 of
               Just p -> isid p
               _       -> False
@@ -295,7 +298,7 @@ patfv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' (pat initial
 swaps :: Alpha a => Perm AnyName -> a -> a
 swaps = swaps' initial
 
--- | Apply a permutation to the binding variables in a pattern. 
+-- | Apply a permutation to the binding variables in a pattern.
 -- Annotations are left alone by the permutation.
 swapsBinders :: Alpha a => Perm AnyName -> a -> a
 swapsBinders = swaps' initial
@@ -327,7 +330,7 @@ match   = match' initial
 
 
 -- | Compare two patterns, ignoring the names of binders, and produce
--- a permutation of their annotations to make them alpha-equivalent 
+-- a permutation of their annotations to make them alpha-equivalent
 -- to eachother. Return 'Nothing' if no such renaming is possible.
 matchAnnots :: Alpha a => a -> a -> Maybe (Perm AnyName)
 matchAnnots = match' (pat initial)
@@ -335,7 +338,7 @@ matchAnnots = match' (pat initial)
 -- | Compare two patterns for equality and produce a permutation of
 -- their binding 'Names' to make them alpha-equivalent to each other
 -- ('Name's that appear in annotations must match exactly). Return
--- 'Nothing' if no such renaming is possible.  
+-- 'Nothing' if no such renaming is possible.
 matchBinders ::  Alpha a => a -> a -> Maybe (Perm AnyName)
 matchBinders = match' initial
 
@@ -369,7 +372,7 @@ class (Rep1 (AlphaD) a) => Alpha a where
   aeq' :: AlphaCtx -> a -> a -> Bool
   aeq' = aeqR1 rep1
 
-  swapall' :: AlphaCtx -> Perm AnyName -> a -> a 
+  swapall' :: AlphaCtx -> Perm AnyName -> a -> a
   swapall' = swapallR1 rep1
 
   -- | The method "swaps'" applys a compound permutation.
@@ -430,13 +433,13 @@ aeqR1 (Data1 _ cons) = loop cons where
       (_,_)              -> False
   loop [] _ _ _ = error "Impossible"
 aeqR1 Int1 = \ _ x y -> x == y
-aeqR1 Integer1 = \ _ x y -> x == y 
-aeqR1 Char1 = \ _ x y -> x == y 
+aeqR1 Integer1 = \ _ x y -> x == y
+aeqR1 Char1 = \ _ x y -> x == y
 aeqR1 _ = \ _ _ _ -> error "Cannot aeq this type"
 
 aeq1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Bool
 aeq1 MNil _ Nil Nil = True
-aeq1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = 
+aeq1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) =
   aeqD r c p1 p2 && aeq1 rs c t1 t2
 
 swapsR1 :: R1 (AlphaD) a -> AlphaCtx -> (Perm AnyName) -> a -> a
@@ -542,25 +545,25 @@ instance (Rep a) => Alpha (Name a) where
   binders' c n@(Nm _ _)  | mode c == Term = [AnyName n]
   binders' c n           | mode c == Pat  = []
 
-  swapall' c p x = 
-      case apply p (AnyName x) of 
+  swapall' c p x =
+      case apply p (AnyName x) of
        AnyName y ->
         case cast y of
           Just y' -> y'
           Nothing -> error "Internal error in swaps': sort mismatch"
 
-  swaps' c p x | mode c == Term = 
-      case apply p (AnyName x) of 
+  swaps' c p x | mode c == Term =
+      case apply p (AnyName x) of
        AnyName y ->
         case cast y of
           Just y' -> y'
           Nothing -> error "Internal error in swaps': sort mismatch"
   swaps' c p x | mode c == Pat = x
 
-  aeq' c x y = x == y 
+  aeq' c x y = x == y
 
   match' c x y  | x == y         = Just empty
-  match' c x y  | mode c == Term = 
+  match' c x y  | mode c == Term =
     Just $ single (AnyName x) (AnyName y)
   match' c _ _  | mode c == Pat  = Just empty
 
@@ -577,13 +580,13 @@ instance (Rep a) => Alpha (Name a) where
 
 instance Alpha AnyName  where
 
-  fv' Term n = S.singleton n 
+  fv' Term n = S.singleton n
   fv' Pat n  = S.empty
 
   binders' Term n = [n]
   binders' Pat n  = []
 
-  swapall' c p x = apply p x 
+  swapall' c p x = apply p x
 
   swaps' Term p x = apply p x
   swaps' Pat perm x = x
@@ -598,26 +601,26 @@ instance Alpha AnyName  where
   freshen' Pat nm = return (nm, empty)
 
   lfreshen' c (AnyName nm) f = case mode c of
-     Term -> do { x <- lfresh nm; avoid [AnyName x] $ f (AnyName x) 
+     Term -> do { x <- lfresh nm; avoid [AnyName x] $ f (AnyName x)
                      (single (AnyName nm) (AnyName x)) }
      Pat  -> f (AnyName nm) empty
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
 
-    -- to swap in a binder, swap the free variables in the 
+    -- to swap in a binder, swap the free variables in the
     -- pattern, then remove the binders from the permutation
     -- and swap in the body
     -- ? why don't we just swap everywhere?
-    swaps' p pm (B x y) = 
-        B (swaps' (pat p) pm x) (swaps' p pm' y) where 
+    swaps' p pm (B x y) =
+        B (swaps' (pat p) pm x) (swaps' p pm' y) where
             pm' = restrict pm (binders x)
- 
-    -- free variables of a binder are the free variables in 
+
+    -- free variables of a binder are the free variables in
     -- the annotations in the pattern plus the free variables
     -- of the body, minus the binders.
     fv' p (B x y) = fv' Pat x `S.union` (fv' p y S.\\ fv' Term x)
 
-    binders' p (B x y) = binders' Pat x ++ 
+    binders' p (B x y) = binders' Pat x ++
                          (binders' p y List.\\ binders' Term x)
 
 {-
@@ -634,61 +637,61 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         f (B x' y') (pm1 <> pm2)))
 
     -- this version of aeq seems to work
-    aeq' p (B x1 y1) (B x2 y2) = 
-       case () of 
+    aeq' p (B x1 y1) (B x2 y2) =
+       case () of
          () | bx1 == bx2 -> aeq' p x1 x2 && aeq' p y1 y2
-         () | (S.fromList bx1) `S.intersection` (fv' Term y2 S.\\ fv' Term y1) 
+         () | (S.fromList bx1) `S.intersection` (fv' Term y2 S.\\ fv' Term y1)
             /= S.empty -> False
          _ -> aeq' p x1 (swaps' Term pm x2) && aeq' p y1 (swapall' Term pm y2)
        where bx1 = binders' Term x1
-             bx2 = binders' Term x2 
+             bx2 = binders' Term x2
              pm  = foldl (<>) empty (zipWith single bx1 bx2)
     -- basic idea of match
-    -- if binders x1 == binders x2 then 
+    -- if binders x1 == binders x2 then
         --- match the annots in x1 and x2 and match the bodies y1 y2
     -- if binders x1 /= binders x2 then
         -- make sure binders of x1 are not free in the body of y2
         -- swap (x1,x2) in y2
         -- match the annots & match the bodies
         -- make sure none of the binders escapes in the resulting match
-    -- ingredients:  
+    -- ingredients:
         -- match the binders, ignoring the annots
         -- match the annots, ignoring the binders
         -- list the binding variables
-    match' p (B x1 y1) (B x2 y2)  = 
-      case () of 
-        () | bx1 == bx2 -> do 
+    match' p (B x1 y1) (B x2 y2)  =
+      case () of
+        () | bx1 == bx2 -> do
             pm1 <- match' Pat x1 x2
-            pm2 <- match' p y1 y2 
+            pm2 <- match' p y1 y2
             pm1 `join` pm2
-        () | (S.fromList bx1) `S.intersection` (fv' Term y2 S.\\ fv' Term y1) 
+        () | (S.fromList bx1) `S.intersection` (fv' Term y2 S.\\ fv' Term y1)
             /= S.empty -> Nothing
-        _ -> do 
+        _ -> do
             pm1 <- match' Pat x1 x2'
-            pm2 <- match' p y1 y2' 
-            if S.fromList bx1 `S.intersection` S.fromList (support pm2) /= S.empty 
+            pm2 <- match' p y1 y2'
+            if S.fromList bx1 `S.intersection` S.fromList (support pm2) /= S.empty
               then Nothing
-              else pm1 `join` pm2       
-            -- note pm2 should not have any of the binders in the support     
+              else pm1 `join` pm2
+            -- note pm2 should not have any of the binders in the support
        where bx1 = binders' Term x1
-             bx2 = binders' Term x2 
-             pm  = foldl (<>) empty (zipWith single bx1 bx2)       
+             bx2 = binders' Term x2
+             pm  = foldl (<>) empty (zipWith single bx1 bx2)
              x2' = swaps' Term pm x2
              y2' = swaps' Term pm (swaps' Pat pm y2)
 {-
-        case (match' Term x1 x2) of 
-          Just pmt | isid pmt -> do 
+        case (match' Term x1 x2) of
+          Just pmt | isid pmt -> do
             pm1 <- match' Pat x1 x2
-            pm2 <- match' p y1 y2 
+            pm2 <- match' p y1 y2
             pm1 `join` pm2
-          Just pmt -> 
+          Just pmt ->
             let xs = fv' Term x1 in
             if xs `S.intersection` fv' Term (B x2 y2) == S.empty then do
                pm1 <- match' Pat x1 (swaps' p pmt x2)
-               pm2 <- match' p y1 (swaps' p pmt y2) 
+               pm2 <- match' p y1 (swaps' p pmt y2)
                pm1 `join` pm2
              else Nothing
-          _ -> Nothing 
+          _ -> Nothing
    -- match' Pat _ _ = error "cannot match binders here."
 -}
 
@@ -696,20 +699,20 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
    -- free variables of the external binder
    -- plus free vars of the annots in the binder
-   -- plus free vars of the body minus any 
+   -- plus free vars of the body minus any
    --     binding vars of internal binder
-   fv' p (R x (B ns y)) = fv' p x `S.union` 
+   fv' p (R x (B ns y)) = fv' p x `S.union`
       (fv' p y S.\\ S.fromList ns)
 
    binders' p (R x (B ns y)) = binders' p x ++
       (binders' p y List.\\ ns)
 
 
-   swaps' Term pm (R x (B ns y)) = 
+   swaps' Term pm (R x (B ns y)) =
       R (swaps' Term pm x) (B ns (swaps' Term pm' y)) where
             pm' = restrict pm ns
 
-   match' p (R x1 (B n1 y1)) (R x2 (B n2 y2)) = do 
+   match' p (R x1 (B n1 y1)) (R x2 (B n2 y2)) = do
       px  <- match' p x1 x2   -- external names
       pb  <- match' p (B n1 y1) (B n2 y2)
       px `join` pb
@@ -1002,7 +1005,7 @@ perm = single (AnyName nameA)(AnyName nameB)
 naeq x y = not (aeq x y)
 
 a10a = bind (rebind (nameA, Annot nameC) ()) nameA
-a10b = bind (rebind (nameB, Annot nameC) ()) nameB 
+a10b = bind (rebind (nameB, Annot nameC) ()) nameB
 
 a10c = bind (rebind (nameA, Annot nameA) ()) nameA
 a10d = bind (rebind (nameB, Annot nameA) ()) nameB
@@ -1037,7 +1040,7 @@ tests_aeq = do
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
    assert "a18" $ (nameA, nameA) `naeq` (nameA, nameB)
    assert "a19" $ match (nameA, nameA) (nameB, nameC) == Nothing
-   assert "a20" $ (L (bind name2 (L (bind name3 (L (bind name4  (A (V name2) (A (V name3) (V name4))))))))) `aeq`  (L (bind name1 (L (bind name2 (L (bind name3  (A (V name1) (A (V name2) (V name3))))))))) 
+   assert "a20" $ (L (bind name2 (L (bind name3 (L (bind name4  (A (V name2) (A (V name3) (V name4))))))))) `aeq`  (L (bind name1 (L (bind name2 (L (bind name3  (A (V name1) (A (V name2) (V name3)))))))))
 
 emptyNE :: Set (Name Exp)
 emptyNE = S.empty
@@ -1065,7 +1068,7 @@ tests_fv = do
    assert "f14" $ fv (rebind (Annot nameA) ()) == emptyNE
    assert "f14a" $ fv' Pat (rebind (Annot nameA) ()) == S.singleton (AnyName nameA)
 
-tests_subst = do 
+tests_subst = do
    assert "s1" $ subst nameA (V nameB) (V nameA) `aeq` (V nameB)
    assert "s2" $ subst nameA (V nameB) (V nameC) `aeq` (V nameC)
    assert "s3" $ subst nameA (V nameB) (L (bind nameA (V nameA))) `aeq`
@@ -1082,10 +1085,10 @@ tests_subst = do
 
    assert "s7" $ subst nameA (V nameA) (L (bind nameA (V nameB))) `aeq`
                                        (L (bind nameA (V nameB)))
-   assert "s9" $ subst name1 (V name1) 
-                  (L (bind name1 (L (bind name2 (L (bind name3 
+   assert "s9" $ subst name1 (V name1)
+                  (L (bind name1 (L (bind name2 (L (bind name3
                            (A (V name1) (A (V name2) (V name3))))))))) `aeq`
-                  (L (bind name1 (L (bind name2 (L (bind name3 
+                  (L (bind name1 (L (bind name2 (L (bind name3
                            (A (V name1) (A (V name2) (V name3)))))))))
 
 
