@@ -106,7 +106,7 @@ newtype Annot a = Annot a deriving (Read, Eq)
 
 -- | Rebinding is for telescopes --- i.e. to support patterns that
 -- also bind variables that appear later
-data Rebind a b = R a (Bind a b) 
+data Rebind a b = R a (Bind [AnyName] b) 
 
 -- Fragily deriving the replib instances for Bind and Name
 -- in the same file that they are defined in. This shouldn't
@@ -243,26 +243,26 @@ instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
 
 -- | Constructor for binding in patterns
 rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (bind a b)
+rebind a b = R a (bind (binders' initial a) b)
 
 {-
 instance (Eq a, Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
    (R a1 b1) == (R a2 b2) = a1 == a2 && b1 == b2
 -}
 
-instance (Show a, Show b) => Show (Rebind a b) where
+instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
   showsPrec p (R a (B a' b)) =  showParen (p>0)  
       (showString "<<" . showsPrec p a . sa' . showString ">> " . showsPrec 0 b) 
-   where sa' =  if (show a == show a') then showString "" 
+   where sa' =  if binders' initial a == a' then showString "" 
                   else showString "/" . showsPrec p a'
 
 -- | destructor for binding patterns, the external names should have already
 -- been freshen'ed. We swap the internal names so that they use the
 -- external names
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-reopen (R a1 (B a2 b)) = (a1, swaps p b) where
+reopen (R a1 (B names b)) = (a1, swaps p b) where
    p = foldl (<>) empty (zipWith single (S.elems $ fv' initial a1) 
-                                        (S.elems $ fv' initial a2))
+                                        names)
 
 ----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
@@ -278,14 +278,15 @@ fv :: (Rep b, Alpha a) => a -> Set (Name b)
 fv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' initial
 
 -- | List the binding variables in a pattern
-binders :: (Rep b, Alpha b) => b -> Set (Name b)
-binders = fv
+binders :: (Rep b, Alpha b) => b -> [AnyName]
+binders = binders' initial
 
--- | List variables that occur freely in annotations (not binding)
+-- | Set of variables that occur freely in annotations (not binding)
 patfv :: (Rep a, Alpha b) => b -> Set (Name a)
 patfv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' (pat initial)
 
--- | The method "swaps" applys a permutation
+-- | The method "swaps" applys a permutation to all free variables
+-- in the term.
 swaps :: Alpha a => Perm AnyName -> a -> a
 swaps = swaps' initial
 
@@ -368,6 +369,9 @@ class (Rep1 (AlphaD) a) => Alpha a where
   fv' :: AlphaCtx -> a -> Set AnyName
   fv' = fvR1 rep1
 
+  binders' :: AlphaCtx -> a -> [AnyName]
+  binders' = bindersR1 rep1
+
   -- | Match' compares two data structures and produces a
   -- permutation of their free variables that will make them
   -- alpha-equivalent to eachother.
@@ -391,13 +395,15 @@ class (Rep1 (AlphaD) a) => Alpha a where
 data AlphaD a = AlphaD {
   swapsD   :: AlphaCtx -> (Perm AnyName) -> a -> a,
   fvD      :: AlphaCtx -> a -> Set AnyName,
+  bindersD :: AlphaCtx -> a -> [AnyName],
+
   matchD   :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
   freshenD :: forall m. Fresh m => AlphaCtx -> a -> m (a,Perm AnyName),
   lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b
  }
 
 instance Alpha a => Sat (AlphaD a) where
-  dict = AlphaD swaps' fv' match' freshen' lfreshen'
+  dict = AlphaD swaps' fv' binders' match' freshen' lfreshen'
 
 -- Generic definitions of the class functions.
 -- (All functions that take representations end
@@ -422,6 +428,18 @@ fv1 :: MTup (AlphaD) l -> AlphaCtx -> l -> Set AnyName
 fv1 MNil _ Nil = S.empty
 fv1 (r :+: rs) p (p1 :*: t1) =
    fvD r p p1 `S.union` fv1 rs p t1
+
+bindersR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> [AnyName]
+bindersR1 (Data1 _ cons) = \ p  d ->
+  case (findCon cons d) of
+    Val _ rec kids -> binders1 rec p kids
+bindersR1 _ = \ _ _ -> []
+
+binders1 :: MTup (AlphaD) l -> AlphaCtx -> l -> [AnyName]
+binders1 MNil _ Nil = []
+binders1 (r :+: rs) p (p1 :*: t1) =
+   bindersD r p p1 ++ binders1 rs p t1
+
 
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm AnyName)
 matchR1 (Data1 _ cons) = loop cons where
@@ -479,18 +497,22 @@ instance (Rep a) => Alpha (Name a) where
   fv' c n@(Nm _ _)  | mode c == Term = S.singleton (AnyName n)
   fv' c n           | mode c == Pat  = S.empty
 
-  swaps' c p x = case mode c of
-                   Term ->
-                     case apply p (AnyName x) of
-                       AnyName y ->
-                         case cast y of
-                           Just y' -> y'
-                           Nothing -> error "Internal error in swaps': sort mismatch"
-                   Pat  -> x
+  binders' c n@(Nm _ _)  | mode c == Term = [AnyName n]
+  binders' c n           | mode c == Pat  = []
 
-  match' _ x  y   | x == y         = Just empty
-  match' c n1 n2  | mode c == Term = Just $ single (AnyName n1) (AnyName n2)
-  match' c _ _    | mode c == Pat  = Just empty
+
+  swaps' c p x | mode c == Term = 
+      case apply p (AnyName x) of 
+       AnyName y ->
+        case cast y of
+          Just y' -> y'
+          Nothing -> error "Internal error in swaps': sort mismatch"
+  swaps' c p x | mode c == Pat = x
+
+  match' c x y  | x == y         = Just empty
+  match' c x y  | mode c == Term = 
+    Just $ single (AnyName x) (AnyName y)
+  match' c _ _  | mode c == Pat  = Just empty
 
   freshen' c nm = case mode c of
      Term -> do x <- fresh nm
@@ -508,11 +530,15 @@ instance Alpha AnyName  where
   fv' Term n = S.singleton n 
   fv' Pat n  = S.empty
 
+  binders' Term n = [n]
+  binders' Pat n  = []
+
+
   swaps' Term p x = apply p x
   swaps' Pat perm x = x
 
   match' Term x y = if x == y then Just empty else Just (single x y)
-  match' Pat x y = if x == y then Just empty else Nothing
+  match' Pat x y = Just empty
 
   freshen' Term (AnyName nm) = do { x <- fresh nm; return(AnyName x,
                                   (single (AnyName nm) (AnyName x))) }
@@ -524,12 +550,22 @@ instance Alpha AnyName  where
      Pat  -> f (AnyName nm) empty
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
-  
+    -- to swap in a binder, swap the free variables in the 
+    -- pattern, then remove the binders from the permutation
+    -- and swap in the body
+    -- ? why don't we just swap everywhere?
     swaps' p pm (B x y) = 
         B (swaps' (pat p) pm x) (swaps' p pm' y) where 
-            pm' = restrict pm (S.toList (fv' Term x))
+            pm' = restrict pm (binders x)
  
-    fv' p (B x y) = fv' (pat p) x `S.union` (fv' p y S.\\ fv' Term x)
+    -- free variables of a binder are the free variables in 
+    -- the annotations in the pattern plus the free variables
+    -- of the body, minus the binders.
+    fv' p (B x y) = fv' Pat x `S.union` (fv' p y S.\\ fv' Term x)
+
+    binders' p (B x y) = binders' Pat x ++ 
+                         (binders' p y List.\\ binders' Term x)
+
 {-
     freshen' p (B x y) = do
 --       (x', p1)  <- freshen' (all p) x -- freshen the binders & annots
@@ -554,7 +590,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         -- match the binders, ignoring the annots
         -- match the annots, ignoring the binders
         -- list the binding variables
-    match' p (B x1 y1) (B x2 y2) | mode p == Term =
+    match' p (B x1 y1) (B x2 y2)  =
         case (match' Term x1 x2) of 
           Just pmt | isid pmt -> do 
             pm1 <- match' Pat x1 x2
@@ -568,15 +604,30 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
                pm1 `join` pm2
              else Nothing
           _ -> Nothing 
-    match' Pat _ _ = error "cannot match binders here."
+   -- match' Pat _ _ = error "cannot match binders here."
 
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
    -- free variables of the external binder
-   --     plus free vars of the body minus any binding vars of internal binder
-   fv' p (R x (B x' y)) = fv' p x `S.union` 
-       ((fv' p y) S.\\ (fv' Term x'))
+   -- plus free vars of the annots in the binder
+   -- plus free vars of the body minus any 
+   --     binding vars of internal binder
+   fv' p (R x (B ns y)) = fv' p x `S.union` 
+      (fv' p y S.\\ S.fromList ns)
+
+   binders' p (R x (B ns y)) = binders' p x ++
+      (binders' p y List.\\ ns)
+
+
+   swaps' Term pm (R x (B ns y)) = 
+      R (swaps' Term pm x) (B ns (swaps' Term pm' y)) where
+            pm' = restrict pm ns
+
+   match' p (R x1 (B n1 y1)) (R x2 (B n2 y2)) = do 
+      px  <- match' p x1 x2   -- external names
+      pb  <- match' p (B n1 y1) (B n2 y2)
+      px `join` pb
 
    freshen' p (R x (B x1 y)) = do
       (x', pm1) <- freshen' p x
@@ -589,8 +640,12 @@ instance (Eq a, Alpha a) => Alpha (Annot a) where
    swaps' Pat  pm (Annot t) = Annot (swaps' Term pm t)
    swaps' Term pm (Annot t) = Annot t
 
-   fv' Pat (Annot t)       = fv' Term t
-   fv' Term _              = S.empty
+   fv' Pat (Annot t)        = fv' Term t
+   fv' Term _               = S.empty
+
+   binders' Pat (Annot t)   = binders' Term t
+   binders' Term _          = []
+
 
    freshen' Pat (Annot t)  = do
      (t', p) <- freshen' Term t
@@ -782,6 +837,8 @@ substsR1 (Data1 _ cons) = \ x y d ->
       return (to c z)
 substsR1 _               = \ _ _ c -> return c
 
+instance Subst c AnyName where
+
 instance Subst b Int where
 instance Subst b Bool where
 instance Subst b () where
@@ -859,6 +916,9 @@ perm = single nameA nameB
 
 naeq x y = not (aeq x y)
 
+a10a = bind (rebind (nameA, Annot nameC) ()) nameA
+a10b = bind (rebind (nameB, Annot nameC) ()) nameB 
+
 tests_aeq = do
    assert "a1" $ (bind nameA nameA) `naeq` (bind nameA nameB)
    assert "a2" $ (bind nameA nameA) `aeq` (bind nameA nameA)
@@ -876,6 +936,7 @@ tests_aeq = do
                   (bind (rebind nameB (Annot nameB)) nameB)
    assert "a10" $ bind (rebind (nameA, Annot nameA) ()) nameA `aeq`
                   bind (rebind (nameB, Annot nameA) ()) nameB
+   assert "a10a" $ a10a `aeq` a10b
    assert "a11" $ bind (rebind (nameA, Annot nameA) ()) nameA `naeq`
                   bind (rebind (nameB, Annot nameB) ()) nameB
    assert "a12" $ bind (Annot nameA) () `naeq` bind (Annot nameB) ()
@@ -894,17 +955,26 @@ emptyNE = S.empty
 
 tests_fv = do
    assert "f1" $ fv (bind nameA nameA) == emptyNE
-   assert "f2" $ fv' (pat initial) (bind nameA nameA) == S.empty
+   assert "f2" $ fv' Pat (bind nameA nameA) == S.empty
+   assert "f3" $ fv (bind (rebind nameA (Annot nameA)) nameA) == emptyNE
    assert "f4" $ fv (bind nameA nameB) == S.singleton nameB
    assert "f5" $ fv (bind (nameA, Annot nameB) nameA) == S.singleton nameB
    assert "f7" $ fv (bind (nameB, Annot nameB) nameB) == S.singleton nameB
    assert "f8" $ fv (rebind nameA nameB) == S.fromList [nameA, nameB]
-   assert "f9" $ fv' (pat initial) (rebind nameA nameA) == S.empty
-   assert "f3" $ fv (bind (rebind nameA (Annot nameA)) nameA) == emptyNE
+   assert "f9" $ fv' Pat (rebind nameA nameA) == S.empty
+   assert "f9a" $ fv (rebind nameA (Annot nameA)) == S.singleton nameA
+   assert "f9b" $ fv' Pat (rebind nameA (Annot nameA)) == S.empty
    assert "f10" $ fv (rebind (nameA, Annot nameA) ()) == S.singleton nameA
-   assert "f11" $ fv' (pat initial) (rebind (nameA, Annot nameA) ()) == S.singleton (AnyName nameA)
+   assert "f11" $ fv' Pat (rebind (nameA, Annot nameA) ()) == S.singleton (AnyName nameA)
+   assert "f10a" $ fv (rebind (nameA, Annot nameB) ()) == S.singleton nameA
+   assert "f11a" $ fv' Pat (rebind (nameA, Annot nameB) ()) == S.singleton (AnyName nameB)
+
+
    assert "f12" $ fv (bind (Annot nameA) ()) == S.singleton nameA
+   assert "f12a" $ fv' Pat (bind (Annot nameA) ()) == S.singleton (AnyName nameA)
+
    assert "f14" $ fv (rebind (Annot nameA) ()) == emptyNE
+   assert "f14a" $ fv' Pat (rebind (Annot nameA) ()) == S.singleton (AnyName nameA)
 
 mkbig :: [Name Exp] -> Exp -> Exp
 mkbig (n : names) body =

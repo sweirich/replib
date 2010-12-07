@@ -292,7 +292,6 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
    compare'   = compareR1 rep1
 -}
 
-  -- | See 'match'.
   match'   :: AlphaCtx -> a -> a -> Maybe (Perm AnyName)
   match'   = matchR1 rep1
 
@@ -390,6 +389,7 @@ openR1 (Data1 _ cons) = \i a d ->
 openR1 _               = \_ _ d -> d
 
 
+
 swapsR1 :: R1 AlphaD a -> AlphaCtx -> Perm AnyName -> a -> a
 swapsR1 (Data1 _ cons)  = \ p x d ->
   case (findCon cons d) of
@@ -409,7 +409,6 @@ fv1 (r :+: rs) p (p1 :*: t1) =
    fvD r p p1 `S.union` fv1 rs p t1
 
 -- Generic definition of freshen and match
-
 {-
 toPOrdering :: Ordering -> POrdering 
 toPOrdering LT = PLT
@@ -436,6 +435,7 @@ compare1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) =
                   otherwise -> otherwise
     otherwise -> otherwise
 -}
+
 
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm AnyName)
 matchR1 (Data1 _ cons) = loop cons where
@@ -827,6 +827,7 @@ unsafeUnBind (B a b) = (a, open initial a b)
 
 -- | The 'Eq' instance for 'Bind' compares bindings for
 -- alpha-equality.
+
 --- SCW: REMOVE THIS INSTANCE
 {-
 instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
@@ -836,6 +837,7 @@ instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
 -- e.g.
 --   compare (bind [name1] name1) (bind [name1,name1] name1) == LT
 --   compare (bind [name3] name3) (bind [name1,name1] name1) == GT
+
 --- SCW: REMOVE THIS INSTANCE
 {-
 instance (Alpha a, Alpha b, Ord a, Ord b) => Ord (Bind a b) where

@@ -46,14 +46,14 @@ instance Show (R1 c a) where
     show Double1        = "Double1"
     show Rational1      = "Rational1"
     show IOError1       = "IOError1"
-    show (IO1 cb)       = "(IO1 " ++ show (getRep cb) ++ ")"
-    show (Arrow1 cb cc) = "(Arrow1 " ++ show (getRep cb) ++ " " ++ show (getRep cc) ++ ")"
+    show (IO1 cb)       = "(IO1 " ++ show (getRepC cb) ++ ")"
+    show (Arrow1 cb cc) = "(Arrow1 " ++ show (getRepC cb) ++ " " ++ show (getRepC cc) ++ ")"
     show (Data1 dt _)   = "(Data1 " ++ show dt ++ ")"
     show (Abstract1 dt) = "(Abstract1 " ++ show dt ++ ")"
 
 -- | Access a representation, given a proxy
-getRep :: Rep b => c b -> R b
-getRep cb = rep
+getRepC :: Rep b => c b -> R b
+getRepC cb = rep
 
 -- | Transform a parameterized rep to a vanilla rep
 toR :: R1 c a -> R a
@@ -64,13 +64,13 @@ toR Float1          = Float
 toR Double1         = Double
 toR Rational1       = Rational
 toR IOError1        = IOError
-toR (Arrow1 t1 t2)  = Arrow (getRep t1) (getRep t2)
-toR (IO1 t1)        = IO (getRep t1)
+toR (Arrow1 t1 t2)  = Arrow (getRepC t1) (getRepC t2)
+toR (IO1 t1)        = IO (getRepC t1)
 toR (Data1 dt cons) = (Data dt (map toCon cons))
   where toCon (Con emb rec) = Con emb (toRs rec)
         toRs           :: MTup c a -> MTup R a
         toRs MNil      = MNil
-        toRs (c :+: l) = (getRep c :+: toRs l)
+        toRs (c :+: l) = (getRepC c :+: toRs l)
 toR (Abstract1 dt) = Abstract dt
 
 ---------------  Representations of Prelude types
