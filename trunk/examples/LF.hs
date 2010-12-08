@@ -20,7 +20,6 @@ import Generics.RepLib
 
 import Control.Monad.Trans.Maybe
 import Control.Monad.Reader
-import Control.Applicative ((<$>), Applicative(..))
 
 import qualified Data.Map as M
 
@@ -87,6 +86,9 @@ type Sig = (TySig, TmSig)
 -- A context is a mapping from term variables to types.
 type Context = M.Map (Name Tm) Ty
 
+extend :: Ord k => M.Map k a -> k -> a -> M.Map k a
+extend g x a = M.insert x a g
+
 --------------------
 -- Erasure ---------
 --------------------
@@ -132,28 +134,32 @@ instance Erasable Context where
 -- Weak head reduction -------
 ------------------------------
 
--- TODO: move this to replib
+-- TODO: move these to replib
 instance (Functor m, LFresh m) => LFresh (MaybeT m) where
   lfresh    = MaybeT . fmap Just . lfresh
   avoid nms = MaybeT . avoid nms . runMaybeT
 
+instance LFresh m => LFresh (ReaderT e m) where
+  lfresh    = ReaderT . const . lfresh
+  avoid nms = ReaderT . fmap (avoid nms) . runReaderT
+
 -- Reduce a term to weak-head normal form, if it is head-reducible.
 --   (Note, this fails if the term is already in WHNF.)
-whr :: (LFresh m, MonadPlus m, Applicative m)
+whr :: (LFresh m, MonadPlus m)
     => Tm -> m Tm
 whr (TmApp (Lam b) m1) =
   lunbind b $ \((x,_),m2) ->
     return $ subst x m1 m2
 
-whr (TmApp m1 m2) = TmApp <$> whr m1 <*> pure m2
+whr (TmApp m1 m2) = TmApp `liftM` whr m1 `ap` return m2
 
 whr _ = mzero
 
 -- Reduce a term to weak-head normal form, or return it unchanged if
 -- it is not head-reducible.
-wh :: (LFresh m, MonadPlus m, Applicative m)
+wh :: (LFresh m, MonadPlus m)
    => Tm -> m Tm
-wh t = whr t `mplus` pure t
+wh t = whr t `mplus` return t
 
 ------------------------------
 -- Term equality -------------
@@ -161,7 +167,7 @@ wh t = whr t `mplus` pure t
 
 -- Type-directed term equality.  In context Delta, is M <==> N at
 -- simple type tau?
-tmEq :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+tmEq :: (LFresh m, MonadPlus m, MonadReader Sig m)
      => SContext -> Tm -> Tm -> STy -> m ()
 tmEq delta m n t = do
   m' <- wh m
@@ -171,12 +177,12 @@ tmEq delta m n t = do
   -- XXX todo: might be nice to have 'lfresh' and 'lfreshen', the
   -- first NOT taking an argument
 -- Type-directed term equality on terms in WHNF
-tmEq' :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+tmEq' :: (LFresh m, MonadPlus m, MonadReader Sig m)
       => SContext -> Tm -> Tm -> STy -> m ()
 tmEq' delta m n (STyArr t1 t2) = do
   x <- lfresh (string2Name "_x")
   avoid [AnyName x] $
-    tmEq' (M.insert x t1 delta) (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
+    tmEq' (extend delta x t1) (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
 tmEq' delta m n a@(STyConst {}) = do
   a' <- tmEqS delta m n
   guard $ a == a'
@@ -186,7 +192,7 @@ embedMaybe = maybe mzero return
 
 -- Structural term equality.  Check whether two terms are structurally
 -- equal, and return their "approximate type" if so.
-tmEqS :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+tmEqS :: (LFresh m, MonadPlus m, MonadReader Sig m)
       => SContext -> Tm -> Tm -> m STy
 tmEqS delta (TmVar x) (TmVar y) = do
   guard $ x == y
@@ -210,14 +216,14 @@ tmEqS _ _ _ = mzero
 ------------------------------
 
 -- Kind-directed type equality.
-tyEq :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+tyEq :: (LFresh m, MonadPlus m, MonadReader Sig m)
      => SContext -> Ty -> Ty -> SKind -> m ()
 
 tyEq delta (TyPi bnd1) (TyPi bnd2) SKType =
   lunbind bnd1 $ \((x, Annot a1), a2) ->
   lunbind bnd2 $ \((_, Annot b1), b2) -> do
     tyEq delta a1 b1 SKType
-    tyEq (M.insert x (erase a1) delta) a2 b2 SKType
+    tyEq (extend delta x (erase a1)) a2 b2 SKType
 
 tyEq delta a b SKType = do
   t <- tyEqS delta a b
@@ -226,10 +232,10 @@ tyEq delta a b SKType = do
 tyEq delta a b (SKArr t k) = do
   x <- lfresh (string2Name "_x")
   avoid [AnyName x] $
-    tyEq (M.insert x t delta) (TyApp a (TmVar x)) (TyApp b (TmVar x)) k
+    tyEq (extend delta x t) (TyApp a (TmVar x)) (TyApp b (TmVar x)) k
 
 -- Structural type equality.
-tyEqS :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+tyEqS :: (LFresh m, MonadPlus m, MonadReader Sig m)
       => SContext -> Ty -> Ty -> m SKind
 tyEqS _ (TyConst a) (TyConst b) = do
   guard $ a == b
@@ -248,7 +254,7 @@ tyEqS _ _ _ = mzero
 ------------------------------
 
 -- Algorithmic kind equality.
-kEq :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+kEq :: (LFresh m, MonadPlus m, MonadReader Sig m)
     => SContext -> Kind -> Kind -> m ()
 
 kEq _ Type Type = return ()
@@ -257,6 +263,52 @@ kEq delta (KPi bnd1) (KPi bnd2) =
   lunbind bnd1 $ \((x, Annot a), k) ->
   lunbind bnd2 $ \((_, Annot b), l) -> do
     tyEq delta a b SKType
-    kEq (M.insert x (erase a) delta) k l
+    kEq (extend delta x (erase a)) k l
 
 kEq _ _ _ = mzero
+
+------------------------------
+-- Type checking -------------
+------------------------------
+
+-- Compute the type of a term.
+tyCheck :: (LFresh m, MonadPlus m, MonadReader Sig m)
+        => Context -> Tm -> m Ty
+tyCheck gamma (TmVar x)     = embedMaybe $ M.lookup x gamma
+tyCheck _     (TmConst c)   = liftM fst . embedMaybe . M.lookup c =<< asks snd
+tyCheck gamma (TmApp m1 m2) = do
+  TyPi bnd <- tyCheck gamma m1
+  a2       <- tyCheck gamma m2
+  lunbind bnd $ \((x, Annot a2'), a1) -> do
+    tyEq (erase gamma) a2' a2 SKType
+    return $ subst x m2 a1
+tyCheck gamma (Lam bnd) =
+  lunbind bnd $ \((x, Annot a1), m2) -> do
+    Type <- kCheck gamma a1
+    a2   <- tyCheck (extend gamma x a1) m2
+    return $ TyPi (bind (x, Annot a1) a2)
+
+-- Compute the kind of a type.
+kCheck :: (LFresh m, MonadPlus m, MonadReader Sig m)
+       => Context -> Ty -> m Kind
+kCheck _     (TyConst a) = embedMaybe . M.lookup a =<< asks fst
+kCheck gamma (TyApp a m) = do
+  KPi bnd <- kCheck gamma a
+  b       <- tyCheck gamma m
+  lunbind bnd $ \((x, Annot b'), k) -> do
+    tyEq (erase gamma) b' b SKType
+    return $ subst x m k
+kCheck gamma (TyPi bnd) =
+  lunbind bnd $ \((x, Annot a1), a2) -> do
+    Type <- kCheck gamma a1
+    Type <- kCheck (extend gamma x a1) a2
+    return Type
+
+-- Check the validity of a kind.
+sortCheck :: (LFresh m, MonadPlus m, MonadReader Sig m)
+          => Context -> Kind -> m ()
+sortCheck _     Type      = return ()
+sortCheck gamma (KPi bnd) =
+  lunbind bnd $ \((x, Annot a), k) -> do
+    Type <- kCheck gamma a
+    sortCheck (extend gamma x a) k
