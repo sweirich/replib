@@ -58,6 +58,7 @@ module Generics.RepLib.Bind.LocallyNameless
     integer2Name, string2Name, makeName,
     name2Integer, name2String, anyName2Integer, anyName2String,
     name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
+    translate,
 
     -- * The 'Alpha' class
     Alpha(..),
@@ -248,6 +249,11 @@ makeName s i = Nm rep (s,i)
 getR :: Name a -> R a
 getR (Nm r _)   = r
 getR (Bn r _ _) = r
+
+-- | Change the sort of a name
+translate :: (Rep b) => Name a -> Name b
+translate (Nm _ x) = Nm rep x
+translate (Bn _ x y) = Bn rep x y
 
 ------------------------------------------------------------
 -- The Alpha class
