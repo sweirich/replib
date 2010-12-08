@@ -19,11 +19,9 @@ import Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib
 
 import Control.Monad.Trans.Maybe
-import Control.Monad (guard, MonadPlus(..))
+import Control.Monad.Reader
 import Control.Applicative ((<$>), Applicative(..))
-import Control.Applicative ((<|>))
 
-import qualified Data.Set as S
 import qualified Data.Map as M
 
 -- Kinds
@@ -41,12 +39,8 @@ data Ty   = TyPi (Bind (Name Tm, Annot Ty) Ty)  -- {x:ty} ty
 data Tm   = Lam (Bind (Name Tm, Annot Ty) Tm)   -- [x:ty] tm
           | TmApp Tm Tm                         -- tm tm
           | TmVar (Name Tm)                     -- x
+          | TmConst (Name Tm)                   -- c
   deriving Show
-  -- Note, Harper and Pfennig distinguish between term variables and
-  -- constants.  Variables are things which can be bound by a lambda
-  -- or pi; constants are things which are bound in a signature.  For
-  -- our purposes there is little value in distinguishing between
-  -- them.
 
 $(derive [''Kind, ''Ty, ''Tm])
 
@@ -71,18 +65,27 @@ data Decl = DeclTy (Name Ty) (Annot Kind)
           | DeclTm (Name Tm) (Annot Ty) (Maybe (Annot Tm))  -- is this right?
 
 -- A program is a sequence of declarations, where each name is bound
--- in the remainder of the program.
+-- in the remainder of the program.  We parse files into a Prog, then
+-- take the Prog apart piece by piece to typecheck it.  This way we
+-- get the full power of the binding library to help us with name
+-- shadowing and so on.
 data Prog = Nil
           | Cons (Bind Decl Prog)
 
--- A signature is a set of declarations.
-type Sig = S.Set Decl
+-- Signatures/contexts
+
+-- A type signature is a mapping from type variables to kinds.
+type TySig = M.Map (Name Ty) Kind
+
+-- A term signature is a mappint from term variables to types and
+-- (optionally) a definition.
+type TmSig = M.Map (Name Tm) (Ty, Maybe Tm)
+
+-- A signature is a pair of a type and term signature.
+type Sig = (TySig, TmSig)
 
 -- A context is a mapping from term variables to types.
 type Context = M.Map (Name Tm) Ty
-
--- XXX todo create typechecking monad with MaybeT, FreshM, and Reader Sig.
---   use "capabilities style".
 
 --------------------
 -- Erasure ---------
@@ -118,7 +121,7 @@ instance Erasable Ty where
   type Erased Ty = STy
   erase (TyPi b)      = STyArr (erase t1) (erase t2)
     where ((_, Annot t1), t2) = unsafeUnBind b
-  erase (TyApp ty tm) = erase ty
+  erase (TyApp ty _)  = erase ty
   erase (TyConst c)   = STyConst c
 
 instance Erasable Context where
@@ -153,29 +156,29 @@ wh :: (LFresh m, MonadPlus m, Applicative m)
 wh t = whr t `mplus` pure t
 
 ------------------------------
--- Equality ------------------
+-- Term equality -------------
 ------------------------------
 
 -- Type-directed term equality.  In context Delta, is M <==> N at
 -- simple type tau?
-areEq :: (LFresh m, MonadPlus m, Applicative m)
-      => SContext -> Tm -> Tm -> STy -> m ()
-areEq delta m n t = do
+tmEq :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+     => SContext -> Tm -> Tm -> STy -> m ()
+tmEq delta m n t = do
   m' <- wh m
   n' <- wh n
-  areEq' delta m' n' t
+  tmEq' delta m' n' t
 
   -- XXX todo: might be nice to have 'lfresh' and 'lfreshen', the
   -- first NOT taking an argument
 -- Type-directed term equality on terms in WHNF
-areEq' :: (LFresh m, MonadPlus m, Applicative m)
-       => SContext -> Tm -> Tm -> STy -> m ()
-areEq' delta m n (STyArr t1 t2) = do
+tmEq' :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+      => SContext -> Tm -> Tm -> STy -> m ()
+tmEq' delta m n (STyArr t1 t2) = do
   x <- lfresh (string2Name "_x")
   avoid [AnyName x] $
-    areEq' (M.insert x t1 delta) (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
-areEq' delta m n a@(STyConst {}) = do
-  a' <- structEq delta m n
+    tmEq' (M.insert x t1 delta) (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
+tmEq' delta m n a@(STyConst {}) = do
+  a' <- tmEqS delta m n
   guard $ a == a'
 
 embedMaybe :: (MonadPlus m) => Maybe a -> m a
@@ -183,14 +186,77 @@ embedMaybe = maybe mzero return
 
 -- Structural term equality.  Check whether two terms are structurally
 -- equal, and return their "approximate type" if so.
-structEq :: (LFresh m, MonadPlus m, Applicative m)
-         => SContext -> Tm -> Tm -> m STy
-structEq delta (TmVar x) (TmVar y) = do
+tmEqS :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+      => SContext -> Tm -> Tm -> m STy
+tmEqS delta (TmVar x) (TmVar y) = do
   guard $ x == y
   embedMaybe $ M.lookup x delta
-  -- XXX todo need a case here for constants?  Maybe we do need those?
 
-structEq delta (TmApp m1 m2) (TmApp n1 n2) = do
-  STyArr t2 t1 <- structEq delta m1 n1
-  areEq delta m2 n2 t2
+tmEqS _ (TmConst a) (TmConst b) = do
+  guard $ a == b
+  tmSig <- asks snd
+  (tyA,_) <- embedMaybe $ M.lookup a tmSig   -- XXX this is not quite right,
+  return $ erase tyA                         -- might need to expand defn
+
+tmEqS delta (TmApp m1 m2) (TmApp n1 n2) = do
+  STyArr t2 t1 <- tmEqS delta m1 n1
+  tmEq delta m2 n2 t2
   return t1
+
+tmEqS _ _ _ = mzero
+
+------------------------------
+-- Type equality -------------
+------------------------------
+
+-- Kind-directed type equality.
+tyEq :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+     => SContext -> Ty -> Ty -> SKind -> m ()
+
+tyEq delta (TyPi bnd1) (TyPi bnd2) SKType =
+  lunbind bnd1 $ \((x, Annot a1), a2) ->
+  lunbind bnd2 $ \((_, Annot b1), b2) -> do
+    tyEq delta a1 b1 SKType
+    tyEq (M.insert x (erase a1) delta) a2 b2 SKType
+
+tyEq delta a b SKType = do
+  t <- tyEqS delta a b
+  guard $ t == SKType
+
+tyEq delta a b (SKArr t k) = do
+  x <- lfresh (string2Name "_x")
+  avoid [AnyName x] $
+    tyEq (M.insert x t delta) (TyApp a (TmVar x)) (TyApp b (TmVar x)) k
+
+-- Structural type equality.
+tyEqS :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+      => SContext -> Ty -> Ty -> m SKind
+tyEqS _ (TyConst a) (TyConst b) = do
+  guard $ a == b
+  tySig <- asks fst
+  erase `liftM` (embedMaybe $ M.lookup a tySig)
+
+tyEqS delta (TyApp a m) (TyApp b n) = do
+  SKArr t k <- tyEqS delta a b
+  tmEq delta m n t
+  return k
+
+tyEqS _ _ _ = mzero
+
+------------------------------
+-- Kind equality -------------
+------------------------------
+
+-- Algorithmic kind equality.
+kEq :: (LFresh m, MonadPlus m, Applicative m, MonadReader Sig m)
+    => SContext -> Kind -> Kind -> m ()
+
+kEq _ Type Type = return ()
+
+kEq delta (KPi bnd1) (KPi bnd2) =
+  lunbind bnd1 $ \((x, Annot a), k) ->
+  lunbind bnd2 $ \((_, Annot b), l) -> do
+    tyEq delta a b SKType
+    kEq (M.insert x (erase a) delta) k l
+
+kEq _ _ _ = mzero
