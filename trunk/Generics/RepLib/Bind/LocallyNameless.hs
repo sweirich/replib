@@ -78,6 +78,8 @@ module Generics.RepLib.Bind.LocallyNameless
     lfreshen,
     lunbind, lunbind2, lunbind3,
 
+    FreshM,
+
     -- * Rebinding operations
     rebind, reopen,
 
@@ -317,7 +319,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   findpatrec :: a -> AnyName -> (Integer, Bool)
   findpatrec = findpatR1 rep1
 
--- | Match returns a "permutation ordering". Either the terms are known 
+-- | Match returns a "permutation ordering". Either the terms are known
 -- to be LT or GT, or there is some permutation that can make them equal
 -- to eachother
 -- data POrdering = PLT | PEq (Perm AnyName) | PGT
@@ -410,12 +412,12 @@ fv1 (r :+: rs) p (p1 :*: t1) =
 
 -- Generic definition of freshen and match
 {-
-toPOrdering :: Ordering -> POrdering 
+toPOrdering :: Ordering -> POrdering
 toPOrdering LT = PLT
 toPOrdering GT = PGT
 toPOrdering EQ = PEQ empty
 
-compareR1 :: Ord a => R1 (AlphaD) a -> AlphaCtx -> a -> a -> POrdering 
+compareR1 :: Ord a => R1 (AlphaD) a -> AlphaCtx -> a -> a -> POrdering
 compareR1 (Data1 _ cons) = loop cons where
   loop (Con emb reps : rest) p x y =
     case (from emb x, from emb y) of
@@ -428,9 +430,9 @@ compareR1 _ = \ _ x y     -> toPOrdering (compare x y)
 
 compare1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> POrdering (Perm AnyName)
 compare1 MNil _ Nil Nil = PEQ empty
-compare1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = 
-  case compareD r c p1 p2 of 
-    PEQ l1 -> case compare1 rs c t1 t2 of 
+compare1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) =
+  case compareD r c p1 p2 of
+    PEQ l1 -> case compare1 rs c t1 t2 of
                   PEQ l2 -> (l1 `join` l2)
                   otherwise -> otherwise
     otherwise -> otherwise
@@ -449,7 +451,7 @@ matchR1 Int1 = \ _ x y -> if x == y then Just empty else Nothing
 matchR1 Integer1 = \ _ x y -> if x == y then Just empty else Nothing
 matchR1 Char1 = \ _ x y -> if x == y then Just empty else Nothing
 matchR1 _ = \ _ _ _ -> Nothing
- 
+
 match1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Maybe (Perm AnyName)
 match1 MNil _ Nil Nil = Just empty
 match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
@@ -602,7 +604,7 @@ instance Alpha AnyName  where
   compare' _ x y | x == y          = PEQ empty
   compare' c (AnyName n1) (AnyName n2)
     | mode c == Term =
-      case compareR (getR n1) (getR n2) of 
+      case compareR (getR n1) (getR n2) of
        EQ ->  case gcastR (getR n1) (getR n2) n1 of
           Just n1' -> PEQ $ single (AnyName n1) (AnyName n2)
           Nothing  -> error "impossible"
@@ -698,8 +700,8 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
       -- level are the identity
       (px `join` py)
 {-
-    compare' c (B x1 y1) (B x2 y2) = 
-      case compare' (pat c) x1 x2 of 
+    compare' c (B x1 y1) (B x2 y2) =
+      case compare' (pat c) x1 x2 of
         PEQ px -> case compare' (incr c) y1 y2 of
            PEQ py -> PEQ (px `join` py)
            otherwise -> otherwise
@@ -865,7 +867,7 @@ instance (Show a, Show b) => Show (Bind a b) where
       (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
 
 ----------------------------------------------------------
--- Rebinding operations 
+-- Rebinding operations
 ----------------------------------------------------------
 
 -- | Constructor for binding in patterns.
@@ -918,7 +920,7 @@ patfv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' (pat initial
 swaps :: Alpha a => Perm AnyName -> a -> a
 swaps = swaps' initial
 
--- | Apply a permutation to the binding variables in a pattern. 
+-- | Apply a permutation to the binding variables in a pattern.
 -- Annotations are left alone by the permutation.
 swapsBinders :: Alpha a => Perm AnyName -> a -> a
 swapsBinders = swaps' initial
@@ -948,7 +950,7 @@ match   :: Alpha a => a -> a -> Maybe (Perm AnyName)
 match   = match' initial
 
 -- | Compare two patterns, ignoring the names of binders, and produce
--- a permutation of their annotations to make them alpha-equivalent 
+-- a permutation of their annotations to make them alpha-equivalent
 -- to eachother. Return 'Nothing' if no such renaming is possible.
 matchAnnots :: Alpha a => a -> a -> Maybe (Perm AnyName)
 matchAnnots = match' (pat initial)
@@ -956,7 +958,7 @@ matchAnnots = match' (pat initial)
 -- | Compare two patterns for equality and produce a permutation of
 -- their binding 'Names' to make them alpha-equivalent to each other
 -- ('Name's that appear in annotations must match exactly). Return
--- 'Nothing' if no such renaming is possible.  
+-- 'Nothing' if no such renaming is possible.
 matchBinders ::  Alpha a => a -> a -> Maybe (Perm AnyName)
 matchBinders = match' initial
 
@@ -1049,6 +1051,9 @@ instance LFresh (Reader Integer) where
   avoid []          = id
   avoid names       = local (max k)
     where k = maximum (map anyName2Integer names)
+
+-- | A convenient monad which is an instance of 'LFresh'.
+type FreshM = Reader (Set AnyName)
 
 -- | A monad instance for 'LFresh' which renames to the lowest
 --  number not currently being used
