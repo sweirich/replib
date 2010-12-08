@@ -9,7 +9,8 @@
              RankNTypes,
              GADTs,
              EmptyDataDecls,
-             StandaloneDeriving
+             StandaloneDeriving,
+             GeneralizedNewtypeDeriving
   #-}
 {- LANGUAGE  KitchenSink -}
 
@@ -79,7 +80,7 @@ module Generics.RepLib.Bind.LocallyNameless
     lfreshen,
     lunbind, lunbind2, lunbind3,
 
-    FreshM,
+    FreshM, runFreshM,
 
     -- * Rebinding operations
     rebind, reopen,
@@ -110,7 +111,8 @@ import qualified Data.Set as S
 import qualified Text.Read as R
 import Prelude hiding (or)
 import Data.Monoid
-import Control.Monad.Reader (Reader,ask,local,runReader)
+import Control.Monad.Reader (Reader,ask,local,runReader,MonadReader)
+import Control.Applicative (Applicative)
 import System.IO.Unsafe (unsafePerformIO)
 
 
@@ -1059,18 +1061,21 @@ instance LFresh (Reader Integer) where
     where k = maximum (map anyName2Integer names)
 
 -- | A convenient monad which is an instance of 'LFresh'.
-type FreshM = Reader (Set AnyName)
+newtype FreshM a = FreshM { unFreshM :: Reader (Set AnyName) a }
+  deriving (Functor, Applicative, Monad, MonadReader (Set AnyName))
 
 -- | A monad instance for 'LFresh' which renames to the lowest
 --  number not currently being used
-instance LFresh (Reader (Set AnyName)) where
-  lfresh nm = do
+instance LFresh FreshM where
+  lfresh nm = FreshM $ do
     let s = name2String nm
     used <- ask
     return $ head (filter (\x -> not (S.member (AnyName x) used))
                           (map (makeName s) [0..]))
-  avoid names = local (S.union (S.fromList names))
+  avoid names = FreshM . local (S.union (S.fromList names)) . unFreshM
 
+runFreshM :: FreshM a -> a
+runFreshM (FreshM m) = runReader m (S.empty)
 
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
