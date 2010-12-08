@@ -18,8 +18,14 @@ module LF where
 import Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib
 
+import Text.Parsec hiding ((<|>))
+import qualified Text.Parsec.Token as P
+import Text.Parsec.Language (haskellDef)
+import Text.Parsec.String
+
 import Control.Monad.Trans.Maybe
 import Control.Monad.Reader
+import Control.Applicative hiding (many)
 
 import qualified Data.Map as M
 
@@ -58,6 +64,7 @@ instance Subst Tm Tm where
   isvar (TmVar v) = Just (v, id)
   isvar _         = Nothing
 
+-- TODO: do this more simply, without binding.
 -- A declaration is either a type constant declaration (a name and a kind)
 -- or a term constant declaration (a name, type, and optional definition).
 data Decl = DeclTy (Name Ty) (Annot Kind)
@@ -72,6 +79,8 @@ data Prog = Nil
           | Cons (Bind Decl Prog)
 
 -- Signatures/contexts
+
+-- todo: don't distinguish between signatures and contexts?
 
 -- A type signature is a mapping from type variables to kinds.
 type TySig = M.Map (Name Ty) Kind
@@ -97,7 +106,7 @@ extend g x a = M.insert x a g
 data SKind = SKType
            | SKArr STy SKind
   deriving (Eq, Show)
-data STy   = STyConst (Name Ty)  -- XXX should this be (Name STy)?
+data STy   = STyConst (Name Ty)
            | STyArr STy STy
   deriving (Eq, Show)  -- structural equality is OK here, since there
                        -- are no bound variables.  Otherwise we could
@@ -165,6 +174,8 @@ wh t = whr t `mplus` return t
 -- Term equality -------------
 ------------------------------
 
+-- todo: expand in whr, not in tmEqS.
+
 -- Type-directed term equality.  In context Delta, is M <==> N at
 -- simple type tau?
 tmEq :: (LFresh m, MonadPlus m, MonadReader Sig m)
@@ -176,6 +187,8 @@ tmEq delta m n t = do
 
   -- XXX todo: might be nice to have 'lfresh' and 'lfreshen', the
   -- first NOT taking an argument
+
+  -- XXX todo: need nicer way of doing "string2Name"
 -- Type-directed term equality on terms in WHNF
 tmEq' :: (LFresh m, MonadPlus m, MonadReader Sig m)
       => SContext -> Tm -> Tm -> STy -> m ()
@@ -194,22 +207,45 @@ embedMaybe = maybe mzero return
 -- equal, and return their "approximate type" if so.
 tmEqS :: (LFresh m, MonadPlus m, MonadReader Sig m)
       => SContext -> Tm -> Tm -> m STy
-tmEqS delta (TmVar x) (TmVar y) = do
+
+-- First, expand out term constants with definitions.
+tmEqS delta a b = do
+  a' <- expand a
+  b' <- expand b
+  tmEqS' delta a' b'
+
+expand :: (MonadPlus m, MonadReader Sig m)
+       => Tm -> m Tm
+expand (TmConst a) =
+  (do
+     tmSig <- asks snd
+     (_, Just defn) <- embedMaybe $ M.lookup a tmSig
+     expand defn
+  )
+  `mplus` return (TmConst a)
+expand b = return b
+
+-- Structural term equality, with the precondition that neither term
+-- is a constant with an associated definition.
+tmEqS' :: (LFresh m, MonadPlus m, MonadReader Sig m)
+       => SContext -> Tm -> Tm -> m STy
+tmEqS' delta (TmVar x) (TmVar y) = do
   guard $ x == y
   embedMaybe $ M.lookup x delta
 
-tmEqS _ (TmConst a) (TmConst b) = do
+  -- Guaranteed that these term constants have no definition.
+tmEqS' _ (TmConst a) (TmConst b) = do
   guard $ a == b
   tmSig <- asks snd
-  (tyA,_) <- embedMaybe $ M.lookup a tmSig   -- XXX this is not quite right,
-  return $ erase tyA                         -- might need to expand defn
+  (tyA,_) <- embedMaybe $ M.lookup a tmSig
+  return $ erase tyA
 
-tmEqS delta (TmApp m1 m2) (TmApp n1 n2) = do
+tmEqS' delta (TmApp m1 m2) (TmApp n1 n2) = do
   STyArr t2 t1 <- tmEqS delta m1 n1
   tmEq delta m2 n2 t2
   return t1
 
-tmEqS _ _ _ = mzero
+tmEqS' _ _ _ = mzero
 
 ------------------------------
 -- Type equality -------------
@@ -312,3 +348,52 @@ sortCheck gamma (KPi bnd) =
   lunbind bnd $ \((x, Annot a), k) -> do
     Type <- kCheck gamma a
     sortCheck (extend gamma x a) k
+
+------------------------------------------------------------
+--  Parser  ------------------------------------------------
+------------------------------------------------------------
+
+-- to do:
+--   1. parse types
+--   2. parse declarations
+--   3. handle infix operators + precedence
+
+-- XXX "_" should not be a valid name
+lexer    = P.makeTokenParser haskellDef
+
+parens   = P.parens     lexer
+braces   = P.braces     lexer
+brackets = P.brackets   lexer
+var      = P.identifier lexer
+sym      = P.symbol     lexer
+
+parseTm :: Parser Tm
+parseTm = parseAtom `chainl1` (pure TmApp)
+
+parseAtom :: Parser Tm
+parseAtom = parens parseTm
+        <|> TmVar . string2Name <$> var
+            -- parse all identifiers as TmVars for now.  Later, while typechecking,
+            -- we will decide which of them to change into TmConsts. (???)
+        <|> Lam <$> (
+              bind
+                <$> brackets ((,) <$> (string2Name <$> var)
+                                  <*> (Annot <$> (sym ":" *> parseTy))
+                             )
+                <*> parseTm
+              )
+
+parseTy :: Parser Ty
+parseTy = parens parseTy
+      <|> foldl TyApp <$> parseTyAtom <*> many parseTm
+
+parseTyAtom :: Parser Ty
+parseTyAtom = TyPi <$> (
+                bind
+                  <$> braces ((,) <$> (string2Name <$> var)
+                                  <*> (Annot <$> (sym ":" *> parseTy))
+                             )
+                  <*> parseTy
+                )
+            -- XXX parse S -> T using "_" as the name.
+          <|> TyConst . string2Name <$> var
