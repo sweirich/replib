@@ -80,7 +80,7 @@ module Generics.RepLib.Bind.LocallyNameless
     lfreshen,
     lunbind, lunbind2, lunbind3,
 
-    FreshM, runFreshM,
+    FreshM, runFreshM, contFreshM, getAvoids,
 
     -- * Rebinding operations
     rebind, reopen,
@@ -1074,8 +1074,17 @@ instance LFresh FreshM where
                           (map (makeName s) [0..]))
   avoid names = FreshM . local (S.union (S.fromList names)) . unFreshM
 
+-- | Run a FreshM computation in an empty context.
 runFreshM :: FreshM a -> a
-runFreshM (FreshM m) = runReader m (S.empty)
+runFreshM m = contFreshM m S.empty
+
+-- | Run a FreshM computation given a set of names to avoid.
+contFreshM :: FreshM a -> Set AnyName -> a
+contFreshM (FreshM m) = runReader m
+
+-- | Get the set of names currently being avoided.
+getAvoids :: FreshM (Set AnyName)
+getAvoids = FreshM ask
 
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
