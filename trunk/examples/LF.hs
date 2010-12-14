@@ -394,7 +394,6 @@ sortCheck (KPi bnd) =
 --   2. parse declarations
 --   3. handle infix operators + precedence
 
--- XXX "_" should not be a valid name
 lexer    = P.makeTokenParser haskellDef
 
 parens   = P.parens     lexer
@@ -402,6 +401,7 @@ braces   = P.braces     lexer
 brackets = P.brackets   lexer
 var      = P.identifier lexer
 sym      = P.symbol     lexer
+op       = P.reservedOp lexer
 
 parseTm :: Parser Tm
 parseTm = parseAtom `chainl1` (pure TmApp)
@@ -409,8 +409,6 @@ parseTm = parseAtom `chainl1` (pure TmApp)
 parseAtom :: Parser Tm
 parseAtom = parens parseTm
         <|> TmVar . string2Name <$> var
-            -- parse all identifiers as TmVars for now.  Later, while typechecking,
-            -- we will decide which of them to change into TmConsts. (???)
         <|> Lam <$> (
               bind
                 <$> brackets ((,) <$> (string2Name <$> var)
@@ -420,16 +418,36 @@ parseAtom = parens parseTm
               )
 
 parseTy :: Parser Ty
-parseTy = parens parseTy
-      <|> foldl TyApp <$> parseTyAtom <*> many parseTm
+parseTy  =
+      -- ty ::=
+
+      -- [x:ty] ty
+      TyPi <$> (bind
+         <$> braces ((,) <$> (string2Name <$> var)
+                         <*> (Annot <$> (sym ":" *> parseTy))
+                    )
+         <*> parseTy)
+
+      -- te -> ty
+  <|> try (TyPi <$> (bind
+             <$> ((,) (string2Name "_") . Annot <$> parseTyExpr)
+             <*> (op "->" *> parseTy)
+          ))
+
+      -- te
+  <|> parseTyExpr
+
+parseTyExpr :: Parser Ty
+  -- te ::= ta [tm ...]
+parseTyExpr = foldl TyApp <$> parseTyAtom <*> many parseTm
 
 parseTyAtom :: Parser Ty
-parseTyAtom = TyPi <$> (
-                bind
-                  <$> braces ((,) <$> (string2Name <$> var)
-                                  <*> (Annot <$> (sym ":" *> parseTy))
-                             )
-                  <*> parseTy
-                )
-            -- XXX parse S -> T using "_" as the name.
-          <|> TyConst . string2Name <$> var
+parseTyAtom =
+      -- ta ::=
+
+      -- (ty)
+      parens parseTy
+
+      -- x
+  <|> TyConst . string2Name <$> var
+
