@@ -26,13 +26,18 @@ import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as P
 import Text.Parsec.Language (haskellDef)
 import Text.Parsec.String
+import qualified Text.Parsec.Expr as PE
 
 import Control.Monad.Trans.Maybe
 import Control.Monad.Reader
+import Control.Monad.Identity
 import Control.Applicative hiding (many)
 
 import qualified Data.Map as M
 import qualified Data.Set as S
+import Data.List (sortBy, groupBy)
+import Data.Function (on)
+import Data.Ord (comparing)
 
 ------------------------------
 -- Syntax --------------------
@@ -81,7 +86,10 @@ instance Subst Tm Tm where
 --   * a fixity/precedence declaration.
 data Decl = DeclTy (Name Ty) Kind
           | DeclTm (Name Tm) Ty (Maybe Tm)
-          | DeclInfix Assoc Integer (Name Tm)
+          | DeclInfix Op
+  deriving Show
+
+data Op = Op Assoc Integer (Name Tm)  -- XXX is Name Ty needed too?
   deriving Show
 
 data Assoc = L | R
@@ -393,9 +401,24 @@ sortCheck (KPi bnd) =
 ------------------------------------------------------------
 
 -- to do:
---   1. parse types
---   2. parse declarations
 --   3. handle infix operators + precedence
+
+type OpList = [Op]
+
+mkOp :: Op -> PE.Operator String OpList Identity Tm
+mkOp (Op a _ nm) = PE.Infix (TmApp . TmApp (TmVar nm) <$ sym (name2String nm))
+                            (assoc a)
+  where assoc L = PE.AssocLeft
+        assoc R = PE.AssocRight
+
+mkOpTable :: OpList -> PE.OperatorTable String OpList Identity Tm
+mkOpTable = map (map mkOp) . groupBy ((==) `on` prec) . sortBy (flip $ comparing prec)
+  where prec (Op _ n _) = n
+
+type LFParser = Parsec String OpList
+
+lfParseTest :: Show a => LFParser a -> String -> IO ()
+lfParseTest p = print . runParser p [] ""
 
 ------------------------------
 -- Lexing --------------------
@@ -432,10 +455,15 @@ var      = string2Name <$> P.identifier lexer
 -- Terms ---------------------
 ------------------------------
 
-parseTm :: Parser Tm
-parseTm = parseAtom `chainl1` (pure TmApp)
+parseTm :: LFParser Tm
+parseTm = parseTmExpr `chainl1` (pure TmApp)
 
-parseAtom :: Parser Tm
+parseTmExpr :: LFParser Tm
+parseTmExpr = do
+  ops <- getState
+  PE.buildExpressionParser (mkOpTable ops) parseAtom
+
+parseAtom :: LFParser Tm
 parseAtom = parens parseTm
         <|> TmVar <$> var
         <|> Lam <$> (
@@ -450,7 +478,7 @@ parseAtom = parens parseTm
 -- Types ---------------------
 ------------------------------
 
-parseTy :: Parser Ty
+parseTy :: LFParser Ty
 parseTy  =
       -- ty ::=
 
@@ -470,11 +498,11 @@ parseTy  =
       -- te
   <|> parseTyExpr
 
-parseTyExpr :: Parser Ty
+parseTyExpr :: LFParser Ty
   -- te ::= ta [tm ...]
 parseTyExpr = foldl TyApp <$> parseTyAtom <*> many parseTm
 
-parseTyAtom :: Parser Ty
+parseTyAtom :: LFParser Ty
 parseTyAtom =
       -- ta ::=
 
@@ -488,7 +516,7 @@ parseTyAtom =
 -- Kinds ---------------------
 ------------------------------
 
-parseKind :: Parser Kind
+parseKind :: LFParser Kind
 parseKind =
       -- k ::=
 
@@ -508,7 +536,7 @@ parseKind =
       -- ka
   <|> parseKindAtom
 
-parseKindAtom :: Parser Kind
+parseKindAtom :: LFParser Kind
 parseKindAtom =
       -- ka ::=
 
@@ -522,13 +550,13 @@ parseKindAtom =
 -- Declarations --------------
 ------------------------------
 
-parseDecl :: Parser Decl
+parseDecl :: LFParser Decl
 parseDecl = declBody <* sym "."
  where
   declBody =
-        DeclInfix <$> (sym "%" *> reserved "infix" *> rl)
-                  <*> natural
-                  <*> var
+        DeclInfix <$> (Op <$> (sym "%" *> reserved "infix" *> rl)
+                          <*> natural
+                          <*> var)
 
     <|> try (DeclTy <$> var
                     <*> (sym ":" *> parseKind))
@@ -537,3 +565,19 @@ parseDecl = declBody <* sym "."
                     <*> (sym ":" *> parseTy)
                     <*> optionMaybe (sym "=" *> parseTm)
   rl = (L <$ reserved "left") <|> (R <$ reserved "right")
+
+------------------------------
+-- Programs ------------------
+------------------------------
+
+parseProg :: LFParser Prog
+parseProg =
+      -- stop at eof
+      [] <$ eof
+
+  <|> do d <- parseDecl  -- parse a single decl
+         case d of       -- add fixity declarations to the state
+           DeclInfix op -> modifyState (op:)
+           _ -> return ()
+
+         (d:) <$> parseProg  -- parse the rest of the program
