@@ -401,25 +401,19 @@ sortCheck (KPi bnd) =
 -- Lexing --------------------
 ------------------------------
 
-{- TODO: fix
+startStuff = letter   <|> oneOf "!#$%&*+/<=>?@\\^|-~"
+endStuff   = alphaNum <|> oneOf "!#$%&*+/<=>?@\\^|-~"
 
-identStart :: ParsecT s u m Char
+reservedNames = ["type", "infix", "right", "left"]
+             ++ [":", "=", ".", "->", "%", "{", "}", "(", ")"]
 
-    This parser should accept any start characters of identifiers. For example letter <|> char "_".
-identLetter :: ParsecT s u m Char
 
-    This parser should accept any legal tail characters of identifiers. For example alphaNum <|> char "_".
-opStart :: ParsecT s u m Char
-
-    This parser should accept any start characters of operators. For example oneOf ":!#$%&*+./<=>?@\\^|-~"
-opLetter :: ParsecT s u m Char
-
-    This parser should accept any legal tail characters of operators. Note that this parser should even be defined if the language doesn't support user-defined operators, or otherwise the reservedOp parser won't work correctly.
-
--}
-
-langDef = haskellDef { P.reservedNames   = ["type", "infix", "right", "left"]
-                     , P.reservedOpNames = [":", "=", ".", "->", "%", "{", "}", "(", ")"]
+langDef = haskellDef { P.reservedNames   = reservedNames
+                     , P.reservedOpNames = reservedNames
+                     , P.identStart      = startStuff
+                     , P.identLetter     = endStuff
+                     , P.opStart         = startStuff
+                     , P.opLetter        = endStuff
                      }
 
 lexer    = P.makeTokenParser langDef
@@ -427,11 +421,12 @@ lexer    = P.makeTokenParser langDef
 parens   = P.parens     lexer
 braces   = P.braces     lexer
 brackets = P.brackets   lexer
-var      = string2Name <$> P.identifier lexer
 sym      = P.symbol     lexer
 op       = P.reservedOp lexer
 reserved = P.reserved   lexer
 natural  = P.natural    lexer
+
+var      = string2Name <$> P.identifier lexer
 
 ------------------------------
 -- Terms ---------------------
@@ -533,7 +528,7 @@ parseDecl = declBody <* sym "."
   declBody =
         DeclInfix <$> (sym "%" *> reserved "infix" *> rl)
                   <*> natural
-                  <*> var        -- XXX not quite right!  can do operators or identifiers
+                  <*> var
 
     <|> try (DeclTy <$> var
                     <*> (sym ":" *> parseKind))
