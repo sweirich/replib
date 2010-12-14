@@ -581,3 +581,29 @@ parseProg =
            _ -> return ()
 
          (d:) <$> parseProg  -- parse the rest of the program
+
+------------------------------
+-- Typechecking programs -----
+------------------------------
+
+checkProg :: Prog -> TcM Ctx ()
+checkProg [] = return ()
+checkProg ((DeclInfix _):ds) = checkProg ds
+checkProg ((DeclTy nm k):ds) = do
+  sortCheck k
+  withTyBinding nm k $ checkProg ds
+checkProg ((DeclTm nm ty Nothing):ds) = do
+  Type <- kCheck ty
+  withTmBinding nm ty $ checkProg ds
+checkProg ((DeclTm nm ty (Just def)):ds) = do
+  Type <- kCheck ty
+  ty'  <- tyCheck def
+  withErasedCtx $ tyEq ty ty' SKType
+  withTmDefn nm (ty, Just def) $ checkProg ds
+
+checkLF :: FilePath -> IO ()
+checkLF fileName = do
+  file <- readFile fileName
+  case runParser parseProg [] fileName file of
+    Left err   -> print err
+    Right prog -> putStrLn . maybe "Fail!" (const "OK!") . runTcM . checkProg $ prog
