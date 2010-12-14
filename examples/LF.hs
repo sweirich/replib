@@ -12,6 +12,7 @@
            , TypeSynonymInstances
            , TypeFamilies
            , GeneralizedNewtypeDeriving
+           , NoMonomorphismRestriction
   #-}
 
 module LF where
@@ -80,9 +81,11 @@ instance Subst Tm Tm where
 --   * a fixity/precedence declaration.
 data Decl = DeclTy (Name Ty) Kind
           | DeclTm (Name Tm) Ty (Maybe Tm)
-          | DeclInfix (Name Tm) Assoc Int
+          | DeclInfix Assoc Integer (Name Tm)
+  deriving Show
 
 data Assoc = L | R
+  deriving Show
 
 -- A program is a sequence of declarations.
 type Prog = [Decl]
@@ -394,28 +397,63 @@ sortCheck (KPi bnd) =
 --   2. parse declarations
 --   3. handle infix operators + precedence
 
-lexer    = P.makeTokenParser haskellDef
+------------------------------
+-- Lexing --------------------
+------------------------------
+
+{- TODO: fix
+
+identStart :: ParsecT s u m Char
+
+    This parser should accept any start characters of identifiers. For example letter <|> char "_".
+identLetter :: ParsecT s u m Char
+
+    This parser should accept any legal tail characters of identifiers. For example alphaNum <|> char "_".
+opStart :: ParsecT s u m Char
+
+    This parser should accept any start characters of operators. For example oneOf ":!#$%&*+./<=>?@\\^|-~"
+opLetter :: ParsecT s u m Char
+
+    This parser should accept any legal tail characters of operators. Note that this parser should even be defined if the language doesn't support user-defined operators, or otherwise the reservedOp parser won't work correctly.
+
+-}
+
+langDef = haskellDef { P.reservedNames   = ["type", "infix", "right", "left"]
+                     , P.reservedOpNames = [":", "=", ".", "->", "%", "{", "}", "(", ")"]
+                     }
+
+lexer    = P.makeTokenParser langDef
 
 parens   = P.parens     lexer
 braces   = P.braces     lexer
 brackets = P.brackets   lexer
-var      = P.identifier lexer
+var      = string2Name <$> P.identifier lexer
 sym      = P.symbol     lexer
 op       = P.reservedOp lexer
+reserved = P.reserved   lexer
+natural  = P.natural    lexer
+
+------------------------------
+-- Terms ---------------------
+------------------------------
 
 parseTm :: Parser Tm
 parseTm = parseAtom `chainl1` (pure TmApp)
 
 parseAtom :: Parser Tm
 parseAtom = parens parseTm
-        <|> TmVar . string2Name <$> var
+        <|> TmVar <$> var
         <|> Lam <$> (
               bind
-                <$> brackets ((,) <$> (string2Name <$> var)
+                <$> brackets ((,) <$> var
                                   <*> (Annot <$> (sym ":" *> parseTy))
                              )
                 <*> parseTm
               )
+
+------------------------------
+-- Types ---------------------
+------------------------------
 
 parseTy :: Parser Ty
 parseTy  =
@@ -423,7 +461,7 @@ parseTy  =
 
       -- [x:ty] ty
       TyPi <$> (bind
-         <$> braces ((,) <$> (string2Name <$> var)
+         <$> braces ((,) <$> var
                          <*> (Annot <$> (sym ":" *> parseTy))
                     )
          <*> parseTy)
@@ -449,5 +487,58 @@ parseTyAtom =
       parens parseTy
 
       -- x
-  <|> TyConst . string2Name <$> var
+  <|> TyConst <$> var
 
+------------------------------
+-- Kinds ---------------------
+------------------------------
+
+parseKind :: Parser Kind
+parseKind =
+      -- k ::=
+
+      -- {x:ty} k
+      KPi <$> (bind
+       <$> braces ((,) <$> var
+                       <*> (Annot <$> (sym ":" *> parseTy))
+                  )
+       <*> parseKind)
+
+      -- ka -> k
+  <|> try (KPi <$> (bind
+             <$> ((,) (string2Name "_") . Annot <$> parseTyExpr)
+             <*> (op "->" *> parseKind)
+          ))
+
+      -- ka
+  <|> parseKindAtom
+
+parseKindAtom :: Parser Kind
+parseKindAtom =
+      -- ka ::=
+
+      -- (k)
+      parens parseKind
+
+      -- Type
+  <|> try (Type <$ reserved "type")
+
+------------------------------
+-- Declarations --------------
+------------------------------
+
+parseDecl :: Parser Decl
+parseDecl = declBody <* sym "."
+ where
+  declBody =
+        DeclInfix <$> (sym "%" *> reserved "infix" *> rl)
+                  <*> natural
+                  <*> var        -- XXX not quite right!  can do operators or identifiers
+
+    <|> try (DeclTy <$> var
+                    <*> (sym ":" *> parseKind))
+
+    <|>      DeclTm <$> var
+                    <*> (sym ":" *> parseTy)
+                    <*> optionMaybe (sym "=" *> parseTm)
+  rl = (L <$ reserved "left") <|> (R <$ reserved "right")
