@@ -768,8 +768,9 @@ instance Alpha a => Alpha (Annot a) where
        return (Annot t', p)
    freshen' c a | mode c == Term = return (a, empty)
 
----   lfreshen' c (Annot t) | mode c == Pat
-
+   lfreshen' c a f
+     | mode c == Term = f a empty
+     | mode c == Pat  = error "lfreshen' called on Annot in Pat mode!?"
 
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
    match' c (Annot x) (Annot y) | mode c == Term = if x `aeq` y
