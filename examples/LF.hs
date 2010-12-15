@@ -41,8 +41,6 @@ import Data.Ord (comparing)
 
 import System.Environment
 
-import Debug.Trace  -- XXX
-
 ------------------------------
 -- Syntax --------------------
 ------------------------------
@@ -86,10 +84,10 @@ instance Subst Tm Tm where
 
 -- A declaration is either
 --   * a type constant declaration (a name and a kind),
---   * a term constant declaration (a name, type, and optional definition), or
+--   * a term constant declaration (with optional type and definition), or
 --   * a fixity/precedence declaration.
 data Decl = DeclTy (Name Ty) Kind
-          | DeclTm (Name Tm) Ty (Maybe Tm)
+          | DeclTm (Name Tm) (Maybe Ty) (Maybe Tm)
           | DeclInfix Op
   deriving Show
 
@@ -233,6 +231,9 @@ withErasedCtx m = do
   nms <- getTcMAvoids
   embedEither $ contTcM m (erase c) nms
 
+unTyPi (TyPi bnd) = return bnd
+unTyPi t = throwError $ "Expected pi type, got " ++ show t ++ " instead"
+
 ------------------------------
 -- Weak head reduction -------
 ------------------------------
@@ -375,8 +376,8 @@ kEq _ _ = mzero
 tyCheck :: Tm -> TcM Ctx Ty
 tyCheck (TmVar x)     = liftM fst $ lookupTm x
 tyCheck (TmApp m1 m2) = do
-  TyPi bnd <- tyCheck m1
-  a2       <- tyCheck m2
+  bnd <- unTyPi =<< tyCheck m1
+  a2  <- tyCheck m2
   lunbind bnd $ \((x, Annot a2'), a1) -> do
     withErasedCtx $ tyEq a2' a2 SKType
     return $ subst x m2 a1
@@ -389,14 +390,14 @@ tyCheck (Lam bnd) =
 -- Compute the kind of a type.
 kCheck :: Ty -> TcM Ctx Kind
 kCheck (TyConst a) = lookupTy a
-kCheck (TyApp a m) = traceShow (TyApp a m) $ do
+kCheck (TyApp a m) = do
   KPi bnd <- kCheck a
   b       <- tyCheck m
   lunbind bnd $ \((x, Annot b'), k) -> do
     withErasedCtx $ tyEq b' b SKType
     return $ subst x m k
-kCheck (TyPi bnd) = traceShow (TyPi bnd) $
-  lunbind bnd $ \((x, Annot a1), a2) -> traceShow ((x, Annot a1), a2) $ do
+kCheck (TyPi bnd) =
+  lunbind bnd $ \((x, Annot a1), a2) -> do
     Type <- kCheck a1
     Type <- withTmBinding x a1 $ kCheck a2
     return Type
@@ -574,9 +575,13 @@ parseDecl = declBody <* sym "."
     <|> try (DeclTy <$> var
                     <*> (sym ":" *> parseKind))
 
+    <|> try (DeclTm <$> var
+                    <*> (sym ":" *> (Just <$> parseTy))
+                    <*> optionMaybe (sym "=" *> parseTm))
+
     <|>      DeclTm <$> var
-                    <*> (sym ":" *> parseTy)
-                    <*> optionMaybe (sym "=" *> parseTm)
+                    <*> pure Nothing
+                    <*> (sym "=" *> (Just <$> parseTm))
   rl = (L <$ reserved "left") <|> (R <$ reserved "right")
 
 ------------------------------
@@ -601,26 +606,32 @@ parseProg =
 
 checkProg :: Prog -> TcM Ctx ()
 checkProg [] = return ()
-checkProg ((DeclInfix _):ds) = checkProg ds
-checkProg (d@(DeclTy nm k):ds) = traceShow d $ do
+checkProg (DeclInfix _ : ds) = checkProg ds
+checkProg (DeclTy nm k : ds) = do
   sortCheck k
   withTyBinding nm k $ checkProg ds
-checkProg (d@(DeclTm nm ty Nothing):ds) = traceShow d $ do
+checkProg ((DeclTm nm Nothing Nothing):_) = do
+  throwError $ "Term " ++ show nm
+    ++ " has no type or definition! (This shouldn't happen.)"
+checkProg (DeclTm nm (Just ty) Nothing : ds) = do
   Type <- kCheck ty
   withTmBinding nm ty $ checkProg ds
-checkProg ((DeclTm nm ty (Just def)):ds) = do
+checkProg (DeclTm nm Nothing (Just def) : ds) = do
+  ty <- tyCheck def
+  withTmDefn nm (ty, Just def) $ checkProg ds
+checkProg (DeclTm nm (Just ty) (Just def) : ds) = do
   Type <- kCheck ty
   ty'  <- tyCheck def
   withErasedCtx $ tyEq ty ty' SKType
   withTmDefn nm (ty, Just def) $ checkProg ds
 
-checkLF :: FilePath -> IO ()
-checkLF fileName = do
-  file <- readFile fileName
-  case runParser parseProg [] fileName file of
+checkLF :: [FilePath] -> IO ()
+checkLF fileNames = do
+  files <- mapM readFile fileNames
+  case zipWithM (runParser parseProg []) fileNames files of
     Left err   -> print err
-    Right prog -> putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
+    Right progs -> putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ concat progs
 
 main = do
-  [fileName] <- getArgs
-  checkLF fileName
+  fileNames <- getArgs
+  checkLF fileNames
