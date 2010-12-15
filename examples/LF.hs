@@ -28,7 +28,7 @@ import Text.Parsec.Language (haskellDef)
 import Text.Parsec.String
 import qualified Text.Parsec.Expr as PE
 
-import Control.Monad.Trans.Maybe
+import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.Identity
 import Control.Applicative hiding (many)
@@ -38,6 +38,10 @@ import qualified Data.Set as S
 import Data.List (sortBy, groupBy)
 import Data.Function (on)
 import Data.Ord (comparing)
+
+import System.Environment
+
+import Debug.Trace  -- XXX
 
 ------------------------------
 -- Syntax --------------------
@@ -157,16 +161,21 @@ extendTm x t (C tm ty) = C (M.insert x t tm) ty
 extendTy :: Name Ty -> ty -> Context tm ty -> Context tm ty
 extendTy x k (C tm ty) = C tm (M.insert x k ty)
 
-lookupTm :: (MonadPlus m, MonadReader (Context tm ty) m)
+lookupTm :: (MonadError String m, MonadReader (Context tm ty) m)
          => Name Tm -> m tm
-lookupTm x = ask >>= \(C tm _) -> embedMaybe (M.lookup x tm)
+lookupTm x = ask >>= \(C tm _) -> embedMaybe ("Not in scope: term variable " ++ show x)
+                                  (M.lookup x tm)
 
-lookupTy :: (MonadPlus m, MonadReader (Context tm ty) m)
+lookupTy :: (MonadError String m, MonadReader (Context tm ty) m)
          => Name Ty -> m ty
-lookupTy x = ask >>= \(C _ ty) -> embedMaybe (M.lookup x ty)
+lookupTy x = ask >>= \(C _ ty) -> embedMaybe ("Not in scope: type constant " ++ show x)
+                                  (M.lookup x ty)
 
-embedMaybe :: (MonadPlus m) => Maybe a -> m a
-embedMaybe = maybe mzero return
+embedMaybe :: (MonadError String m) => String -> Maybe a -> m a
+embedMaybe errMsg = maybe (throwError errMsg) return
+
+embedEither :: (MonadError String m) => Either String a -> m a
+embedEither = either throwError return
 
 instance Erasable a => Erasable (M.Map k a) where
   type Erased (M.Map k a) = M.Map k (Erased a)
@@ -202,19 +211,19 @@ withTyBinding x b = do
 -- Typechecking monad --------
 ------------------------------
 
-newtype TcM ctx a = TcM { unTcM :: MaybeT (ReaderT ctx FreshM) a }
-  deriving (Functor, Applicative, Monad, MonadReader ctx, MonadPlus, LFresh)
+newtype TcM ctx a = TcM { unTcM :: ErrorT String (ReaderT ctx FreshM) a }
+  deriving (Functor, Applicative, Monad, MonadReader ctx, MonadPlus, MonadError String, LFresh)
 
 getTcMAvoids :: TcM ctx (S.Set AnyName)
 getTcMAvoids = TcM . lift . lift $ getAvoids
 
 -- | Continue a TcM computation, given a context and set of names to
 --   avoid.
-contTcM :: TcM ctx a -> ctx -> S.Set AnyName -> Maybe a
-contTcM (TcM m) c nms = flip contFreshM nms . flip runReaderT c . runMaybeT $ m
+contTcM :: TcM ctx a -> ctx -> S.Set AnyName -> Either String a
+contTcM (TcM m) c nms = flip contFreshM nms . flip runReaderT c . runErrorT $ m
 
 -- | Run a TcM computation in an empty context.
-runTcM :: TcM (Context tm ty) a -> Maybe a
+runTcM :: TcM (Context tm ty) a -> Either String a
 runTcM m = contTcM m emptyCtx S.empty
 
 -- | Run a subcomputation with an erased context.
@@ -222,16 +231,20 @@ withErasedCtx :: TcM SCtx a -> TcM Ctx a
 withErasedCtx m = do
   c <- ask
   nms <- getTcMAvoids
-  embedMaybe $ contTcM m (erase c) nms
+  embedEither $ contTcM m (erase c) nms
 
 ------------------------------
 -- Weak head reduction -------
 ------------------------------
 
 -- TODO: move these to replib
-instance (Functor m, LFresh m) => LFresh (MaybeT m) where
-  lfresh    = MaybeT . fmap Just . lfresh
-  avoid nms = MaybeT . avoid nms . runMaybeT
+-- instance (Functor m, LFresh m) => LFresh (MaybeT m) where
+--   lfresh    = MaybeT . fmap Just . lfresh
+--   avoid nms = MaybeT . avoid nms . runMaybeT
+
+instance (Functor m, LFresh m, Error e) => LFresh (ErrorT e m) where
+  lfresh    = ErrorT . fmap Right . lfresh
+  avoid nms = ErrorT . avoid nms . runErrorT
 
 instance LFresh m => LFresh (ReaderT e m) where
   lfresh    = ReaderT . const . lfresh
@@ -239,7 +252,7 @@ instance LFresh m => LFresh (ReaderT e m) where
 
 -- Reduce a term to weak-head normal form, or return it unchanged if
 -- it is not head-reducible.  Works in erased or unerased contexts.
-whr :: (LFresh m, MonadReader (Context (a,Maybe Tm) b) m, MonadPlus m)
+whr :: (LFresh m, MonadReader (Context (a,Maybe Tm) b) m, MonadError String m, MonadPlus m)
     => Tm -> m Tm
 whr (TmVar a) = (do
   (_, Just defn) <- lookupTm a
@@ -261,7 +274,7 @@ whr t = return t
 
 -- Type-directed term equality.  In context Delta, is M <==> N at
 -- simple type tau?
-tmEq :: (LFresh m, MonadPlus m, MonadReader SCtx m)
+tmEq :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
      => Tm -> Tm -> STy -> m ()
 tmEq m n t = do
   m' <- whr m
@@ -273,7 +286,7 @@ tmEq m n t = do
 
   -- XXX todo: need nicer way of doing "string2Name"
 -- Type-directed term equality on terms in WHNF
-tmEq' :: (LFresh m, MonadPlus m, MonadReader SCtx m)
+tmEq' :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
       => Tm -> Tm -> STy -> m ()
 tmEq' m n (STyArr t1 t2) = do
   x <- lfresh (string2Name "_x")
@@ -285,7 +298,7 @@ tmEq' m n a@(STyConst {}) = do
 
 -- Structural term equality.  Check whether two terms in WHNF are
 -- structurally equal, and return their "approximate type" if so.
-tmEqS :: (LFresh m, MonadPlus m, MonadReader SCtx m)
+tmEqS :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
       => Tm -> Tm -> m STy
 
 tmEqS (TmVar a) (TmVar b) = do
@@ -305,7 +318,7 @@ tmEqS _ _ = mzero
 ------------------------------
 
 -- Kind-directed type equality.
-tyEq :: (LFresh m, MonadPlus m, MonadReader SCtx m)
+tyEq :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
      => Ty -> Ty -> SKind -> m ()
 
 tyEq (TyPi bnd1) (TyPi bnd2) SKType =
@@ -323,7 +336,7 @@ tyEq a b (SKArr t k) = do
   withTmBinding x t $ tyEq (TyApp a (TmVar x)) (TyApp b (TmVar x)) k
 
 -- Structural type equality.
-tyEqS :: (LFresh m, MonadPlus m, MonadReader SCtx m)
+tyEqS :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
       => Ty -> Ty -> m SKind
 tyEqS (TyConst a) (TyConst b) = do
   guard $ a == b
@@ -341,7 +354,7 @@ tyEqS _ _ = mzero
 ------------------------------
 
 -- Algorithmic kind equality.
-kEq :: (LFresh m, MonadPlus m, MonadReader SCtx m)
+kEq :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
     => Kind -> Kind -> m ()
 
 kEq Type Type = return ()
@@ -376,14 +389,14 @@ tyCheck (Lam bnd) =
 -- Compute the kind of a type.
 kCheck :: Ty -> TcM Ctx Kind
 kCheck (TyConst a) = lookupTy a
-kCheck (TyApp a m) = do
+kCheck (TyApp a m) = traceShow (TyApp a m) $ do
   KPi bnd <- kCheck a
   b       <- tyCheck m
   lunbind bnd $ \((x, Annot b'), k) -> do
     withErasedCtx $ tyEq b' b SKType
     return $ subst x m k
-kCheck (TyPi bnd) =
-  lunbind bnd $ \((x, Annot a1), a2) -> do
+kCheck (TyPi bnd) = traceShow (TyPi bnd) $
+  lunbind bnd $ \((x, Annot a1), a2) -> traceShow ((x, Annot a1), a2) $ do
     Type <- kCheck a1
     Type <- withTmBinding x a1 $ kCheck a2
     return Type
@@ -589,10 +602,10 @@ parseProg =
 checkProg :: Prog -> TcM Ctx ()
 checkProg [] = return ()
 checkProg ((DeclInfix _):ds) = checkProg ds
-checkProg ((DeclTy nm k):ds) = do
+checkProg (d@(DeclTy nm k):ds) = traceShow d $ do
   sortCheck k
   withTyBinding nm k $ checkProg ds
-checkProg ((DeclTm nm ty Nothing):ds) = do
+checkProg (d@(DeclTm nm ty Nothing):ds) = traceShow d $ do
   Type <- kCheck ty
   withTmBinding nm ty $ checkProg ds
 checkProg ((DeclTm nm ty (Just def)):ds) = do
@@ -606,4 +619,8 @@ checkLF fileName = do
   file <- readFile fileName
   case runParser parseProg [] fileName file of
     Left err   -> print err
-    Right prog -> putStrLn . maybe "Fail!" (const "OK!") . runTcM . checkProg $ prog
+    Right prog -> putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
+
+main = do
+  [fileName] <- getArgs
+  checkLF fileName
