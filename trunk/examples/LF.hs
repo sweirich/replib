@@ -15,7 +15,13 @@
            , NoMonomorphismRestriction
   #-}
 
-module LF where
+{- TODO:
+   1. write term pretty-printer
+   2. update TcM to track context information to make better error messages?
+   3. track down bugs checking gen100.elf
+-}
+
+module Main where
 
 import Prelude hiding (lookup)
 
@@ -40,6 +46,8 @@ import Data.Function (on)
 import Data.Ord (comparing)
 
 import System.Environment
+
+import Debug.Trace
 
 ------------------------------
 -- Syntax --------------------
@@ -231,8 +239,19 @@ withErasedCtx m = do
   nms <- getTcMAvoids
   embedEither $ contTcM m (erase c) nms
 
+ensure errMsg b = if b then return () else throwError errMsg
+
+matchErr :: Show a => a -> a -> String
+matchErr x y = "Cannot match " ++ show x ++ " with " ++ show y
+
 unTyPi (TyPi bnd) = return bnd
 unTyPi t = throwError $ "Expected pi type, got " ++ show t ++ " instead"
+
+unKPi (KPi bnd) = return bnd
+unKPi t = throwError $ "Expected pi kind, got " ++ show t ++ " instead"
+
+isType Type = return ()
+isType t = throwError $ "Expected Type, got " ++ show t ++ " instead"
 
 ------------------------------
 -- Weak head reduction -------
@@ -256,7 +275,7 @@ instance LFresh m => LFresh (ReaderT e m) where
 whr :: (LFresh m, MonadReader (Context (a,Maybe Tm) b) m, MonadError String m, MonadPlus m)
     => Tm -> m Tm
 whr (TmVar a) = (do
-  (_, Just defn) <- lookupTm a
+  (_, Just defn) <- lookupTm a  -- XXX
   whr defn)
   `mplus`
   return (TmVar a)
@@ -295,7 +314,7 @@ tmEq' m n (STyArr t1 t2) = do
     tmEq' (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
 tmEq' m n a@(STyConst {}) = do
   a' <- tmEqS m n
-  guard $ a == a'
+  ensure (matchErr a a') $ a == a'
 
 -- Structural term equality.  Check whether two terms in WHNF are
 -- structurally equal, and return their "approximate type" if so.
@@ -303,16 +322,16 @@ tmEqS :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
       => Tm -> Tm -> m STy
 
 tmEqS (TmVar a) (TmVar b) = do
-  guard $ a == b
-  (tyA,_) <- lookupTm a
+  ensure (matchErr a b) $ a == b
+  (tyA,_) <- lookupTm a  -- XXX
   return tyA
 
 tmEqS (TmApp m1 m2) (TmApp n1 n2) = do
-  STyArr t2 t1 <- tmEqS m1 n1
+  STyArr t2 t1 <- tmEqS m1 n1   -- XXX
   tmEq m2 n2 t2
   return t1
 
-tmEqS _ _ = mzero
+tmEqS t1 t2 = throwError $ "Terms are not equal: " ++ show t1 ++ ", " ++ show t2
 
 ------------------------------
 -- Type equality -------------
@@ -330,7 +349,7 @@ tyEq (TyPi bnd1) (TyPi bnd2) SKType =
 
 tyEq a b SKType = do
   t <- tyEqS a b
-  guard $ t == SKType
+  ensure (matchErr t SKType) $ t == SKType
 
 tyEq a b (SKArr t k) = do
   x <- lfresh (string2Name "_x")
@@ -340,15 +359,15 @@ tyEq a b (SKArr t k) = do
 tyEqS :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
       => Ty -> Ty -> m SKind
 tyEqS (TyConst a) (TyConst b) = do
-  guard $ a == b
+  ensure (matchErr a b) $ a == b
   lookupTy a
 
 tyEqS (TyApp a m) (TyApp b n) = do
-  SKArr t k <- tyEqS a b
+  SKArr t k <- tyEqS a b  -- XXX
   tmEq m n t
   return k
 
-tyEqS _ _ = mzero
+tyEqS t1 t2 = throwError $ "Types are not equal: " ++ show t1 ++ ", " ++ show t2
 
 ------------------------------
 -- Kind equality -------------
@@ -366,7 +385,7 @@ kEq (KPi bnd1) (KPi bnd2) =
     tyEq a b SKType
     withTmBinding x (erase a) $ kEq k l
 
-kEq _ _ = mzero
+kEq k1 k2 = throwError $ "Kinds are not equal: " ++ show k1 ++ ", " ++ show k2
 
 ------------------------------
 -- Type checking -------------
@@ -374,16 +393,16 @@ kEq _ _ = mzero
 
 -- Compute the type of a term.
 tyCheck :: Tm -> TcM Ctx Ty
-tyCheck (TmVar x)     = liftM fst $ lookupTm x
-tyCheck (TmApp m1 m2) = do
+tyCheck t@(TmVar x)     = traceShow t $ liftM fst $ lookupTm x
+tyCheck t@(TmApp m1 m2) = traceShow t $ do
   bnd <- unTyPi =<< tyCheck m1
   a2  <- tyCheck m2
   lunbind bnd $ \((x, Annot a2'), a1) -> do
     withErasedCtx $ tyEq a2' a2 SKType
     return $ subst x m2 a1
-tyCheck (Lam bnd) =
+tyCheck t@(Lam bnd) = traceShow t $
   lunbind bnd $ \((x, Annot a1), m2) -> do
-    Type <- kCheck a1
+    isType =<< kCheck a1
     a2   <- withTmBinding x a1 $ tyCheck m2
     return $ TyPi (bind (x, Annot a1) a2)
 
@@ -391,15 +410,15 @@ tyCheck (Lam bnd) =
 kCheck :: Ty -> TcM Ctx Kind
 kCheck (TyConst a) = lookupTy a
 kCheck (TyApp a m) = do
-  KPi bnd <- kCheck a
-  b       <- tyCheck m
+  bnd <- unKPi =<< kCheck a
+  b   <- tyCheck m
   lunbind bnd $ \((x, Annot b'), k) -> do
     withErasedCtx $ tyEq b' b SKType
     return $ subst x m k
 kCheck (TyPi bnd) =
   lunbind bnd $ \((x, Annot a1), a2) -> do
-    Type <- kCheck a1
-    Type <- withTmBinding x a1 $ kCheck a2
+    isType =<< kCheck a1
+    isType =<< (withTmBinding x a1 $ kCheck a2)
     return Type
 
 -- Check the validity of a kind.
@@ -407,7 +426,7 @@ sortCheck :: Kind -> TcM Ctx ()
 sortCheck Type      = return ()
 sortCheck (KPi bnd) =
   lunbind bnd $ \((x, Annot a), k) -> do
-    Type <- kCheck a
+    isType =<< kCheck a
     withTmBinding x a $ sortCheck k
 
 ------------------------------------------------------------
@@ -614,13 +633,13 @@ checkProg ((DeclTm nm Nothing Nothing):_) = do
   throwError $ "Term " ++ show nm
     ++ " has no type or definition! (This shouldn't happen.)"
 checkProg (DeclTm nm (Just ty) Nothing : ds) = do
-  Type <- kCheck ty
+  isType =<< kCheck ty
   withTmBinding nm ty $ checkProg ds
 checkProg (DeclTm nm Nothing (Just def) : ds) = do
   ty <- tyCheck def
   withTmDefn nm (ty, Just def) $ checkProg ds
 checkProg (DeclTm nm (Just ty) (Just def) : ds) = do
-  Type <- kCheck ty
+  isType =<< kCheck ty
   ty'  <- tyCheck def
   withErasedCtx $ tyEq ty ty' SKType
   withTmDefn nm (ty, Just def) $ checkProg ds
@@ -628,9 +647,9 @@ checkProg (DeclTm nm (Just ty) (Just def) : ds) = do
 checkLF :: [FilePath] -> IO ()
 checkLF fileNames = do
   files <- mapM readFile fileNames
-  case zipWithM (runParser parseProg []) fileNames files of
+  case runParser parseProg [] "" (concat files) of
     Left err   -> print err
-    Right progs -> putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ concat progs
+    Right prog -> putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
 
 main = do
   fileNames <- getArgs
