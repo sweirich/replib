@@ -16,9 +16,10 @@
   #-}
 
 {- TODO:
-   1. write term pretty-printer
-   2. update TcM to track context information to make better error messages?
-   3. track down bugs checking gen100.elf
+   1. [X] write term pretty-printer
+   2. [ ] update TcM to track context information to make better error messages?
+   3. [ ] track down bugs checking gen100.elf
+   4. [ ] tune for speed?
 -}
 
 module Main where
@@ -34,6 +35,9 @@ import Text.Parsec.Language (haskellDef)
 import Text.Parsec.String
 import qualified Text.Parsec.Expr as PE
 
+import Text.PrettyPrint (Doc, (<+>), (<>), colon, text, render, empty, integer)
+import qualified Text.PrettyPrint as PP
+
 import Control.Monad.Error
 import Control.Monad.Reader
 import Control.Monad.Identity
@@ -46,8 +50,6 @@ import Data.Function (on)
 import Data.Ord (comparing)
 
 import System.Environment
-
-import Debug.Trace
 
 ------------------------------
 -- Syntax --------------------
@@ -99,7 +101,7 @@ data Decl = DeclTy (Name Ty) Kind
           | DeclInfix Op
   deriving Show
 
-data Op = Op Assoc Integer (Name Tm)  -- XXX is Name Ty needed too?
+data Op = Op Assoc Integer (Name Tm)
   deriving Show
 
 data Assoc = L | R
@@ -393,14 +395,14 @@ kEq k1 k2 = throwError $ "Kinds are not equal: " ++ show k1 ++ ", " ++ show k2
 
 -- Compute the type of a term.
 tyCheck :: Tm -> TcM Ctx Ty
-tyCheck t@(TmVar x)     = traceShow t $ liftM fst $ lookupTm x
-tyCheck t@(TmApp m1 m2) = traceShow t $ do
+tyCheck t@(TmVar x)     = liftM fst $ lookupTm x
+tyCheck t@(TmApp m1 m2) = do
   bnd <- unTyPi =<< tyCheck m1
   a2  <- tyCheck m2
   lunbind bnd $ \((x, Annot a2'), a1) -> do
     withErasedCtx $ tyEq a2' a2 SKType
     return $ subst x m2 a1
-tyCheck t@(Lam bnd) = traceShow t $
+tyCheck t@(Lam bnd) =
   lunbind bnd $ \((x, Annot a1), m2) -> do
     isType =<< kCheck a1
     a2   <- withTmBinding x a1 $ tyCheck m2
@@ -432,9 +434,6 @@ sortCheck (KPi bnd) =
 ------------------------------------------------------------
 --  Parser  ------------------------------------------------
 ------------------------------------------------------------
-
--- to do:
---   3. handle infix operators + precedence
 
 type OpList = [Op]
 
@@ -619,6 +618,83 @@ parseProg =
 
          (d:) <$> parseProg  -- parse the rest of the program
 
+----------------------------------------
+-- Pretty-printing ---------------------
+----------------------------------------
+
+class Pretty p where
+  ppr :: (LFresh m) => p -> m Doc
+
+instance Pretty (Name a) where
+  ppr = return . text . show
+
+dot = text "."
+
+instance Pretty Decl where
+  ppr (DeclTy t k) = do
+    t' <- ppr t
+    k' <- ppr k
+    return $ t' <+> colon <+> k' <> dot
+  ppr (DeclTm x mty mdef) = do
+    x'   <- ppr x
+    tyf  <- case mty of
+              Nothing -> return id
+              Just ty -> do ty' <- ppr ty
+                            return (<+> (colon <+> ty'))
+    deff <- case mdef of
+              Nothing -> return id
+              Just def -> do def' <- ppr def
+                             return (<+> (text "=" <+> def'))
+    return $ (deff . tyf $ x') <> dot
+  ppr (DeclInfix op) = do
+    op' <- ppr op
+    return $ op' <> dot
+
+instance Pretty Op where
+  ppr (Op assoc prec op) = do
+    op' <- ppr op
+    return $
+      text "%infix"
+        <+> text (case assoc of L -> "left"; R -> "right")
+        <+> integer prec
+        <+> op'
+
+instance Pretty Kind where
+  ppr Type = return $ text "type"
+  ppr (KPi bnd) = lunbind bnd $ \((x, Annot ty), k) -> do
+    x'  <- ppr x
+    ty' <- ppr ty
+    k'  <- ppr k
+    if x `S.member` fv k
+      then return $ PP.braces (x' <> colon <> ty') <+> k'
+      else return $ PP.parens ty' <+> text "->" <+> k'
+
+instance Pretty Ty where
+  ppr (TyApp ty tm) = do
+    ty' <- ppr ty
+    tm' <- ppr tm
+    return $ PP.parens ty' <+> tm'
+  ppr (TyConst c) = ppr c
+  ppr (TyPi bnd) = lunbind bnd $ \((x, Annot ty1), ty2) -> do
+    x' <- ppr x
+    ty1' <- ppr ty1
+    ty2' <- ppr ty2
+    if x `S.member` fv ty2
+      then return $ PP.braces (x' <> colon <> ty1') <+> ty2'
+      else return $ PP.parens ty1' <+> text "->" <+> ty2'
+
+instance Pretty Tm where
+  ppr (TmVar x) = ppr x
+  ppr (TmApp tm1 tm2) = do
+    tm1' <- ppr tm1
+    tm2' <- ppr tm2
+    return $ PP.parens tm1' <+> tm2'
+  ppr (Lam bnd) = lunbind bnd $ \((x, Annot ty), tm) -> do
+    x' <- ppr x
+    ty' <- ppr ty
+    tm' <- ppr tm
+    return $ PP.brackets (x' <> colon <> ty') <+> tm'
+
 ------------------------------
 -- Typechecking programs -----
 ------------------------------
@@ -649,7 +725,9 @@ checkLF fileNames = do
   files <- mapM readFile fileNames
   case runParser parseProg [] "" (concat files) of
     Left err   -> print err
-    Right prog -> putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
+    Right prog ->
+      -- putStrLn . unlines . map render . runFreshM . mapM ppr $ prog
+      putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
 
 main = do
   fileNames <- getArgs
