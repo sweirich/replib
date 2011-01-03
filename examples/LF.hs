@@ -35,7 +35,7 @@ import Text.Parsec.Language (haskellDef)
 import Text.Parsec.String
 import qualified Text.Parsec.Expr as PE
 
-import Text.PrettyPrint (Doc, (<+>), (<>), colon, text, render, empty, integer)
+import Text.PrettyPrint (Doc, (<+>), (<>), colon, text, render, empty, integer, nest, vcat, ($+$))
 import qualified Text.PrettyPrint as PP
 
 import Control.Monad.Error
@@ -169,18 +169,24 @@ extendTm x t (C tm ty) = C (M.insert x t tm) ty
 extendTy :: Name Ty -> ty -> Context tm ty -> Context tm ty
 extendTy x k (C tm ty) = C tm (M.insert x k ty)
 
-lookupTm :: (MonadError String m, MonadReader (Context tm ty) m)
-         => Name Tm -> m tm
+lookupTm :: Name Tm -> TcM (Context tm ty) tm
 lookupTm x = ask >>= \(C tm _) -> embedMaybe ("Not in scope: term variable " ++ show x)
                                   (M.lookup x tm)
 
-lookupTy :: (MonadError String m, MonadReader (Context tm ty) m)
-         => Name Ty -> m ty
+lookupTy :: Name Ty -> TcM (Context tm ty) ty
 lookupTy x = ask >>= \(C _ ty) -> embedMaybe ("Not in scope: type constant " ++ show x)
                                   (M.lookup x ty)
 
-embedMaybe :: (MonadError String m) => String -> Maybe a -> m a
-embedMaybe errMsg = maybe (throwError errMsg) return
+embedMaybe :: String -> Maybe a -> TcM ctx a
+embedMaybe errMsg m = case m of
+  Just a  -> return a
+  Nothing -> err errMsg
+
+addTrace :: String -> TcM ctx String
+addTrace msg = do
+  chks  <- getChkContext
+  trace <- vcat <$> mapM ppr chks
+  return . PP.render $ text msg $+$ trace
 
 embedEither :: (MonadError String m) => Either String a -> m a
 embedEither = either throwError return
@@ -215,45 +221,72 @@ withTyBinding :: (MonadReader (Context tm ty) m, LFresh m)
 withTyBinding x b = do
   avoid [AnyName x] . local (extendTy x b)
 
+-----------------------
+-- Error reporting ----
+-----------------------
+
+-- Keep track of what we're in the middle of checking.
+data Check = TyCheck Tm
+           | KCheck Ty
+           | SCheck Kind
+           | TmEq Tm Tm STy
+           | TyEq Ty Ty SKind
+           | KEq Kind Kind
+
 ------------------------------
 -- Typechecking monad --------
 ------------------------------
 
-newtype TcM ctx a = TcM { unTcM :: ErrorT String (ReaderT ctx FreshM) a }
+newtype TcM ctx a = TcM { unTcM :: ErrorT String (ReaderT ctx (ReaderT [Check] FreshM)) a }
   deriving (Functor, Applicative, Monad, MonadReader ctx, MonadPlus, MonadError String, LFresh)
 
 getTcMAvoids :: TcM ctx (S.Set AnyName)
-getTcMAvoids = TcM . lift . lift $ getAvoids
+getTcMAvoids = TcM . lift . lift . lift $ getAvoids
 
--- | Continue a TcM computation, given a context and set of names to
---   avoid.
-contTcM :: TcM ctx a -> ctx -> S.Set AnyName -> Either String a
-contTcM (TcM m) c nms = flip contFreshM nms . flip runReaderT c . runErrorT $ m
+getChkContext :: TcM ctx [Check]
+getChkContext = TcM . lift . lift $ ask
+
+-- | Continue a TcM computation, given a binding context, a checking
+--   context, and a set of names to avoid.
+contTcM :: TcM ctx a -> ctx -> [Check] -> S.Set AnyName -> Either String a
+contTcM (TcM m) c chks nms = flip contFreshM nms . flip runReaderT chks . flip runReaderT c . runErrorT $ m
 
 -- | Run a TcM computation in an empty context.
 runTcM :: TcM (Context tm ty) a -> Either String a
-runTcM m = contTcM m emptyCtx S.empty
+runTcM m = contTcM m emptyCtx [] S.empty
 
 -- | Run a subcomputation with an erased context.
 withErasedCtx :: TcM SCtx a -> TcM Ctx a
 withErasedCtx m = do
   c <- ask
+  chks <- getChkContext
   nms <- getTcMAvoids
-  embedEither $ contTcM m (erase c) nms
+  embedEither $ contTcM m (erase c) chks nms
 
-ensure errMsg b = if b then return () else throwError errMsg
+-- | Run a subcomputation with another check pushed on the checking
+--   context stack.
+whileChecking :: Check -> TcM ctx a -> TcM ctx a
+whileChecking chk m = do
+  c <- ask
+  chks <- getChkContext
+  nms <- getTcMAvoids
+  embedEither $ contTcM m c (chk:chks) nms
+
+ensure errMsg b = if b then return () else err errMsg
+
+err msg = addTrace msg >>= throwError
 
 matchErr :: Show a => a -> a -> String
 matchErr x y = "Cannot match " ++ show x ++ " with " ++ show y
 
 unTyPi (TyPi bnd) = return bnd
-unTyPi t = throwError $ "Expected pi type, got " ++ show t ++ " instead"
+unTyPi t = err $ "Expected pi type, got " ++ show t ++ " instead"
 
 unKPi (KPi bnd) = return bnd
-unKPi t = throwError $ "Expected pi kind, got " ++ show t ++ " instead"
+unKPi t = err $ "Expected pi kind, got " ++ show t ++ " instead"
 
 isType Type = return ()
-isType t = throwError $ "Expected Type, got " ++ show t ++ " instead"
+isType t = err $ "Expected Type, got " ++ show t ++ " instead"
 
 ------------------------------
 -- Weak head reduction -------
@@ -274,8 +307,7 @@ instance LFresh m => LFresh (ReaderT e m) where
 
 -- Reduce a term to weak-head normal form, or return it unchanged if
 -- it is not head-reducible.  Works in erased or unerased contexts.
-whr :: (LFresh m, MonadReader (Context (a,Maybe Tm) b) m, MonadError String m, MonadPlus m)
-    => Tm -> m Tm
+whr :: Tm -> TcM (Context (t, Maybe Tm) ty) Tm
 whr (TmVar a) = (do
   (_, Just defn) <- lookupTm a  -- XXX
   whr defn)
@@ -296,9 +328,11 @@ whr t = return t
 
 -- Type-directed term equality.  In context Delta, is M <==> N at
 -- simple type tau?
-tmEq :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
-     => Tm -> Tm -> STy -> m ()
-tmEq m n t = do
+tmEq :: Tm -> Tm -> STy -> TcM SCtx ()
+tmEq m n t = whileChecking (TmEq m n t) $ tmEqWhr m n t
+
+tmEqWhr :: Tm -> Tm -> STy -> TcM SCtx ()
+tmEqWhr m n t = do
   m' <- whr m
   n' <- whr n
   tmEq' m' n' t
@@ -308,8 +342,7 @@ tmEq m n t = do
 
   -- XXX todo: need nicer way of doing "string2Name"
 -- Type-directed term equality on terms in WHNF
-tmEq' :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
-      => Tm -> Tm -> STy -> m ()
+tmEq' :: Tm -> Tm -> STy -> TcM SCtx ()
 tmEq' m n (STyArr t1 t2) = do
   x <- lfresh (string2Name "_x")
   withTmBinding x t1 $
@@ -320,8 +353,7 @@ tmEq' m n a@(STyConst {}) = do
 
 -- Structural term equality.  Check whether two terms in WHNF are
 -- structurally equal, and return their "approximate type" if so.
-tmEqS :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
-      => Tm -> Tm -> m STy
+tmEqS :: Tm -> Tm -> TcM SCtx STy
 
 tmEqS (TmVar a) (TmVar b) = do
   ensure (matchErr a b) $ a == b
@@ -333,33 +365,32 @@ tmEqS (TmApp m1 m2) (TmApp n1 n2) = do
   tmEq m2 n2 t2
   return t1
 
-tmEqS t1 t2 = throwError $ "Terms are not equal: " ++ show t1 ++ ", " ++ show t2
+tmEqS t1 t2 = err $ "Terms are not equal: " ++ show t1 ++ ", " ++ show t2
 
 ------------------------------
 -- Type equality -------------
 ------------------------------
 
 -- Kind-directed type equality.
-tyEq :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
-     => Ty -> Ty -> SKind -> m ()
+tyEq :: Ty -> Ty -> SKind -> TcM SCtx ()
+tyEq ty1 ty2 k = whileChecking (TyEq ty1 ty2 k) $ tyEq' ty1 ty2 k
 
-tyEq (TyPi bnd1) (TyPi bnd2) SKType =
+tyEq' (TyPi bnd1) (TyPi bnd2) SKType =
   lunbind bnd1 $ \((x, Annot a1), a2) ->
   lunbind bnd2 $ \((_, Annot b1), b2) -> do
     tyEq a1 b1 SKType
     withTmBinding x (erase a1) $ tyEq a2 b2 SKType
 
-tyEq a b SKType = do
+tyEq' a b SKType = do
   t <- tyEqS a b
   ensure (matchErr t SKType) $ t == SKType
 
-tyEq a b (SKArr t k) = do
+tyEq' a b (SKArr t k) = do
   x <- lfresh (string2Name "_x")
   withTmBinding x t $ tyEq (TyApp a (TmVar x)) (TyApp b (TmVar x)) k
 
 -- Structural type equality.
-tyEqS :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
-      => Ty -> Ty -> m SKind
+tyEqS :: Ty -> Ty -> TcM SCtx SKind
 tyEqS (TyConst a) (TyConst b) = do
   ensure (matchErr a b) $ a == b
   lookupTy a
@@ -369,25 +400,24 @@ tyEqS (TyApp a m) (TyApp b n) = do
   tmEq m n t
   return k
 
-tyEqS t1 t2 = throwError $ "Types are not equal: " ++ show t1 ++ ", " ++ show t2
+tyEqS t1 t2 = err $ "Types are not equal: " ++ show t1 ++ ", " ++ show t2
 
 ------------------------------
 -- Kind equality -------------
 ------------------------------
 
 -- Algorithmic kind equality.
-kEq :: (LFresh m, MonadError String m, MonadPlus m, MonadReader SCtx m)
-    => Kind -> Kind -> m ()
+kEq :: Kind -> Kind -> TcM SCtx ()
 
 kEq Type Type = return ()
 
-kEq (KPi bnd1) (KPi bnd2) =
+kEq k1@(KPi bnd1) k2@(KPi bnd2) = whileChecking (KEq k1 k2) $
   lunbind bnd1 $ \((x, Annot a), k) ->
   lunbind bnd2 $ \((_, Annot b), l) -> do
     tyEq a b SKType
     withTmBinding x (erase a) $ kEq k l
 
-kEq k1 k2 = throwError $ "Kinds are not equal: " ++ show k1 ++ ", " ++ show k2
+kEq k1 k2 = err $ "Kinds are not equal: " ++ show k1 ++ ", " ++ show k2
 
 ------------------------------
 -- Type checking -------------
@@ -623,7 +653,7 @@ parseProg =
 ----------------------------------------
 
 class Pretty p where
-  ppr :: (LFresh m) => p -> m Doc
+  ppr :: (LFresh m, Functor m) => p -> m Doc
 
 instance Pretty (Name a) where
   ppr = return . text . show
@@ -683,6 +713,18 @@ instance Pretty Ty where
       then return $ PP.braces (x' <> colon <> ty1') <+> ty2'
       else return $ PP.parens ty1' <+> text "->" <+> ty2'
 
+instance Pretty STy where
+  ppr sty = ppr (uneraseTy sty)
+
+uneraseTy (STyConst c) = TyConst c
+uneraseTy (STyArr t1 t2) = TyPi (bind (string2Name "_", Annot (uneraseTy t1)) (uneraseTy t2))
+
+uneraseK SKType = Type
+uneraseK (SKArr sty sk) = KPi (bind (string2Name "_", Annot (uneraseTy sty)) (uneraseK sk))
+
+instance Pretty SKind where
+  ppr sk = ppr (uneraseK sk)
+
 instance Pretty Tm where
   ppr (TmVar x) = ppr x
   ppr (TmApp tm1 tm2) = do
@@ -694,6 +736,23 @@ instance Pretty Tm where
     ty' <- ppr ty
     tm' <- ppr tm
     return $ PP.brackets (x' <> colon <> ty') <+> tm'
+
+instance Pretty Check where
+  ppr (TyCheck tm) =
+    (text "While checking the type of:" <+>) <$> ppr tm
+  ppr (KCheck ty) =
+    (text "While checking the kind of:" <+>) <$> ppr ty
+  ppr (SCheck k) =
+    (text "While checking the sort of:" <+>) <$> ppr k
+  ppr (TmEq m n ty) = do
+    m' <- ppr m
+    n' <- ppr n
+    ty' <- ppr ty
+    return $  text "While checking that terms:"
+          $+$ nest 4 (m' $+$ n')
+          $+$ nest 2 (text "are equal at type")
+          $+$ nest 4 ty'
+  ppr _ = return $ text "CHK"
 
 ------------------------------
 -- Typechecking programs -----
