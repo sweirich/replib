@@ -232,6 +232,7 @@ data Check = TyCheck Tm
            | TmEq Tm Tm STy
            | TyEq Ty Ty SKind
            | KEq Kind Kind
+           | DeclCheck Decl
 
 ------------------------------
 -- Typechecking monad --------
@@ -425,14 +426,17 @@ kEq k1 k2 = err $ "Kinds are not equal: " ++ show k1 ++ ", " ++ show k2
 
 -- Compute the type of a term.
 tyCheck :: Tm -> TcM Ctx Ty
-tyCheck t@(TmVar x)     = liftM fst $ lookupTm x
-tyCheck t@(TmApp m1 m2) = do
+tyCheck tm = whileChecking (TyCheck tm) $ tyCheck' tm
+
+tyCheck' :: Tm -> TcM Ctx Ty
+tyCheck' t@(TmVar x)     = liftM fst $ lookupTm x
+tyCheck' t@(TmApp m1 m2) = do
   bnd <- unTyPi =<< tyCheck m1
   a2  <- tyCheck m2
   lunbind bnd $ \((x, Annot a2'), a1) -> do
     withErasedCtx $ tyEq a2' a2 SKType
     return $ subst x m2 a1
-tyCheck t@(Lam bnd) =
+tyCheck' t@(Lam bnd) =
   lunbind bnd $ \((x, Annot a1), m2) -> do
     isType =<< kCheck a1
     a2   <- withTmBinding x a1 $ tyCheck m2
@@ -440,14 +444,17 @@ tyCheck t@(Lam bnd) =
 
 -- Compute the kind of a type.
 kCheck :: Ty -> TcM Ctx Kind
-kCheck (TyConst a) = lookupTy a
-kCheck (TyApp a m) = do
+kCheck ty = whileChecking (KCheck ty) $ kCheck' ty
+
+kCheck' :: Ty -> TcM Ctx Kind
+kCheck' (TyConst a) = lookupTy a
+kCheck' (TyApp a m) = do
   bnd <- unKPi =<< kCheck a
   b   <- tyCheck m
   lunbind bnd $ \((x, Annot b'), k) -> do
     withErasedCtx $ tyEq b' b SKType
     return $ subst x m k
-kCheck (TyPi bnd) =
+kCheck' (TyPi bnd) =
   lunbind bnd $ \((x, Annot a1), a2) -> do
     isType =<< kCheck a1
     isType =<< (withTmBinding x a1 $ kCheck a2)
@@ -455,8 +462,11 @@ kCheck (TyPi bnd) =
 
 -- Check the validity of a kind.
 sortCheck :: Kind -> TcM Ctx ()
-sortCheck Type      = return ()
-sortCheck (KPi bnd) =
+sortCheck k = whileChecking (SCheck k) $ sortCheck' k
+
+sortCheck' :: Kind -> TcM Ctx ()
+sortCheck' Type      = return ()
+sortCheck' (KPi bnd) =
   lunbind bnd $ \((x, Annot a), k) -> do
     isType =<< kCheck a
     withTmBinding x a $ sortCheck k
@@ -703,7 +713,7 @@ instance Pretty Ty where
   ppr (TyApp ty tm) = do
     ty' <- ppr ty
     tm' <- ppr tm
-    return $ PP.parens ty' <+> tm'
+    return $ ty' <+> PP.parens tm'
   ppr (TyConst c) = ppr c
   ppr (TyPi bnd) = lunbind bnd $ \((x, Annot ty1), ty2) -> do
     x' <- ppr x
@@ -730,7 +740,7 @@ instance Pretty Tm where
   ppr (TmApp tm1 tm2) = do
     tm1' <- ppr tm1
     tm2' <- ppr tm2
-    return $ PP.parens tm1' <+> tm2'
+    return $ tm1' <+> PP.parens tm2'
   ppr (Lam bnd) = lunbind bnd $ \((x, Annot ty), tm) -> do
     x' <- ppr x
     ty' <- ppr ty
@@ -752,7 +762,23 @@ instance Pretty Check where
           $+$ nest 4 (m' $+$ n')
           $+$ nest 2 (text "are equal at type")
           $+$ nest 4 ty'
-  ppr _ = return $ text "CHK"
+  ppr (TyEq t1 t2 k) = do
+    t1' <- ppr t1
+    t2' <- ppr t2
+    k'  <- ppr k
+    return $  text "While checking that types:"
+          $+$ nest 4 (t1' $+$ t2')
+          $+$ nest 2 (text "are equal at kind")
+          $+$ nest 4 k'
+  ppr (KEq k1 k2) = do
+    k1' <- ppr k1
+    k2' <- ppr k2
+    return $ text "While checking equality of kinds:"
+          $+$ nest 4 (k1' $+$ k2')
+  ppr (DeclCheck decl) = do
+    d' <- ppr decl
+    return $ text "While checking the declaration:" $+$ nest 4 d'
+             $+$ nest 4 (text (show decl))
 
 ------------------------------
 -- Typechecking programs -----
@@ -761,22 +787,23 @@ instance Pretty Check where
 checkProg :: Prog -> TcM Ctx ()
 checkProg [] = return ()
 checkProg (DeclInfix _ : ds) = checkProg ds
-checkProg (DeclTy nm k : ds) = do
-  sortCheck k
+checkProg (d@(DeclTy nm k) : ds) = do
+  whileChecking (DeclCheck d) $ sortCheck k
   withTyBinding nm k $ checkProg ds
 checkProg ((DeclTm nm Nothing Nothing):_) = do
   throwError $ "Term " ++ show nm
     ++ " has no type or definition! (This shouldn't happen.)"
-checkProg (DeclTm nm (Just ty) Nothing : ds) = do
-  isType =<< kCheck ty
+checkProg (d@(DeclTm nm (Just ty) Nothing) : ds) = do
+  whileChecking (DeclCheck d) $ isType =<< kCheck ty
   withTmBinding nm ty $ checkProg ds
-checkProg (DeclTm nm Nothing (Just def) : ds) = do
-  ty <- tyCheck def
+checkProg (d@(DeclTm nm Nothing (Just def)) : ds) = do
+  ty <- whileChecking (DeclCheck d) $ tyCheck def
   withTmDefn nm (ty, Just def) $ checkProg ds
-checkProg (DeclTm nm (Just ty) (Just def) : ds) = do
-  isType =<< kCheck ty
-  ty'  <- tyCheck def
-  withErasedCtx $ tyEq ty ty' SKType
+checkProg (d@(DeclTm nm (Just ty) (Just def)) : ds) = do
+  whileChecking (DeclCheck d) $ do
+    isType =<< kCheck ty
+    ty'  <- tyCheck def
+    withErasedCtx $ tyEq ty ty' SKType
   withTmDefn nm (ty, Just def) $ checkProg ds
 
 checkLF :: [FilePath] -> IO ()
@@ -784,7 +811,7 @@ checkLF fileNames = do
   files <- mapM readFile fileNames
   case runParser parseProg [] "" (concat files) of
     Left err   -> print err
-    Right prog ->
+    Right prog -> do
       -- putStrLn . unlines . map render . runFreshM . mapM ppr $ prog
       putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
 
