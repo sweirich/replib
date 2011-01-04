@@ -776,6 +776,14 @@ instance Alpha a => Alpha (Annot a) where
    match' c (Annot x) (Annot y) | mode c == Term = if x `aeq` y
                                     then Just empty
                                     else Nothing
+
+   close c b (Annot x) | mode c == Pat  = Annot (close (term c) b x)
+                       | mode c == Term = Annot x
+
+   open c b (Annot x) | mode c == Pat  = Annot (open (term c) b x)
+                      | mode c == Term = Annot x
+
+
    findpatrec _ _ = (0, False)
    nthpatrec nm i = (i, Nothing)
 
