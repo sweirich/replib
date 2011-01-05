@@ -347,7 +347,7 @@ tmEq' :: Tm -> Tm -> STy -> TcM SCtx ()
 tmEq' m n (STyArr t1 t2) = do
   x <- lfresh (string2Name "_x")
   withTmBinding x t1 $
-    tmEq' (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
+    tmEq (TmApp m (TmVar x)) (TmApp n (TmVar x)) t2
 tmEq' m n a@(STyConst {}) = do
   a' <- tmEqS m n
   ensure (matchErr a a') $ a == a'
@@ -366,7 +366,7 @@ tmEqS (TmApp m1 m2) (TmApp n1 n2) = do
   tmEq m2 n2 t2
   return t1
 
-tmEqS t1 t2 = err $ "Terms are not equal: " ++ show t1 ++ ", " ++ show t2
+tmEqS t1 t2 = err "Term mismatch"
 
 ------------------------------
 -- Type equality -------------
@@ -376,9 +376,8 @@ tmEqS t1 t2 = err $ "Terms are not equal: " ++ show t1 ++ ", " ++ show t2
 tyEq :: Ty -> Ty -> SKind -> TcM SCtx ()
 tyEq ty1 ty2 k = whileChecking (TyEq ty1 ty2 k) $ tyEq' ty1 ty2 k
 
-tyEq' (TyPi bnd1) (TyPi bnd2) SKType =
-  lunbind bnd1 $ \((x, Annot a1), a2) ->
-  lunbind bnd2 $ \((_, Annot b1), b2) -> do
+tyEq' (TyPi bnd1) (TyPi bnd2) SKType =  -- XXX
+  lunbind2 bnd1 bnd2 $ \(Just ((x, Annot a1), a2, (_, Annot b1), b2)) -> do
     tyEq a1 b1 SKType
     withTmBinding x (erase a1) $ tyEq a2 b2 SKType
 
