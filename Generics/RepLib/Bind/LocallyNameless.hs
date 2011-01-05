@@ -56,7 +56,7 @@ module Generics.RepLib.Bind.LocallyNameless
     Name, AnyName(..), Bind, Annot(..), Rebind,
 
     -- ** Utilities
-    integer2Name, string2Name, makeName,
+    integer2Name, string2Name, s2n, makeName,
     name2Integer, name2String, anyName2Integer, anyName2String,
     name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
     translate,
@@ -65,7 +65,7 @@ module Generics.RepLib.Bind.LocallyNameless
     Alpha(..),
     swaps, swapsAnnots, swapsBinders,
     match, matchAnnots, matchBinders,
-    fv, patfv, binders,
+    fv, fvAny, patfv, binders,
     aeq, aeqBinders,
 
     -- * Binding operations
@@ -111,6 +111,7 @@ import qualified Data.Set as S
 import qualified Text.Read as R
 import Prelude hiding (or)
 import Data.Monoid
+import qualified Data.Foldable as F
 import Control.Monad.Reader (Reader,ask,local,runReader,MonadReader)
 import Control.Applicative (Applicative)
 import System.IO.Unsafe (unsafePerformIO)
@@ -243,6 +244,10 @@ integer2Name n = makeName "" n
 string2Name :: Rep a => String -> Name a
 string2Name s = makeName s 0
 
+-- | Convenient synonym for 'string2Name'.
+s2n :: Rep a => String -> Name a
+s2n = string2Name
+
 -- | Create a 'Name' from a @String@ and an @Integer@ index.
 makeName :: Rep a => String -> Integer -> Name a
 makeName s i = Nm rep (s,i)
@@ -256,6 +261,19 @@ getR (Bn r _ _) = r
 translate :: (Rep b) => Name a -> Name b
 translate (Nm _ x) = Nm rep x
 translate (Bn _ x y) = Bn rep x y
+
+-- Pointed
+class Pointed f where
+  singleton :: a -> f a
+
+instance Pointed [] where
+  singleton = (:[])
+
+instance Pointed S.Set where
+  singleton = S.singleton
+
+fromList :: (Pointed f, Monoid (f a)) => [a] -> f a
+fromList = mconcat . map singleton
 
 ------------------------------------------------------------
 -- The Alpha class
@@ -285,7 +303,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   swaps' = swapsR1 rep1
 
   -- | See 'fv'.
-  fv' :: AlphaCtx -> a -> Set AnyName
+  fv' :: (Pointed f, Monoid (f AnyName)) => AlphaCtx -> a -> f AnyName
   fv' = fvR1 rep1
 
   -- | See 'lfreshen'.
@@ -363,7 +381,7 @@ data Mode = Term | Pat deriving (Show, Eq, Read)
 --   reified dictionary for the 'Alpha' class.
 data AlphaD a = AlphaD {
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
-  fvD       :: AlphaCtx -> a -> Set AnyName,
+  fvD       :: (Monoid (f AnyName), Pointed f) => AlphaCtx -> a -> f AnyName,
   freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
   lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
   matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
@@ -407,16 +425,16 @@ swapsR1 (Data1 _ cons)  = \ p x d ->
 swapsR1 _               = \ _ _ d -> d
 
 
-fvR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> Set AnyName
+fvR1 :: (Pointed f, Monoid (f AnyName)) => R1 (AlphaD) a -> AlphaCtx -> a -> f AnyName
 fvR1 (Data1 _ cons) = \ p  d ->
   case (findCon cons d) of
     Val _ rec kids -> fv1 rec p kids
-fvR1 _ = \ _ _ -> S.empty
+fvR1 _ = \ _ _ -> mempty
 
-fv1 :: MTup (AlphaD) l -> AlphaCtx -> l -> Set AnyName
-fv1 MNil _ Nil = S.empty
+fv1 :: (Pointed f, Monoid (f AnyName)) => MTup (AlphaD) l -> AlphaCtx -> l -> f AnyName
+fv1 MNil _ Nil = mempty
 fv1 (r :+: rs) p (p1 :*: t1) =
-   fvD r p p1 `S.union` fv1 rs p t1
+   fvD r p p1 `mappend` fv1 rs p t1
 
 -- Generic definition of freshen and match
 {-
@@ -534,9 +552,8 @@ nthpatL (r :+: rs) (t :*: ts) i =
 -----------------------------------------------------------
 
 instance Rep a => Alpha (Name a) where
-  fv' c n@(Nm _ _)  | mode c == Term = S.singleton (AnyName n)
-  fv' c (Bn _ _ _)  | mode c == Term = S.empty
-  fv' c n           | mode c == Pat  = S.empty
+  fv' c n@(Nm _ _)  | mode c == Term = singleton (AnyName n)
+  fv' _ _                            = mempty
 
   swaps' c p x = case mode c of
                    Term ->
@@ -592,9 +609,8 @@ instance Rep a => Alpha (Name a) where
   nthpatrec nm i = (i - 1, Nothing)
 
 instance Alpha AnyName  where
-  fv' c n@(AnyName (Nm _ _))  | mode c == Term = S.singleton n
-  fv' c (AnyName (Bn _ _ _))  | mode c == Term = S.empty
-  fv' c n                     | mode c == Pat  = S.empty
+  fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
+  fv' _ _                                      = mempty
 
   swaps' c p x = case mode c of
                    Term -> apply p x
@@ -686,7 +702,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         (B (swaps' (pat c) pm x)
            (swaps' (incr c) pm y))
 
-    fv' c (B x y) = fv' (pat c) x `S.union` fv' (incr c) y
+    fv' c (B x y) = fv' (pat c) x `mappend` fv' (incr c) y
 
     freshen' c (B x y) = do
       (x', pm1) <- freshen' (pat c) x
@@ -723,7 +739,7 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
   swaps' p pm (R x y) = R (swaps' p pm x) (swaps' (incr p) pm y)
 
-  fv' p (R x y) =  fv' p x `S.union` fv' (incr p) y
+  fv' p (R x y) =  fv' p x `mappend` fv' (incr p) y
 
   lfreshen' p (R x y) g =
     lfreshen' p x $ \ x' pm1 ->
@@ -761,7 +777,7 @@ instance Alpha a => Alpha (Annot a) where
    swaps' c pm (Annot t) | mode c == Term = Annot t
 
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
-   fv' c _         | mode c == Term = S.empty
+   fv' c _         | mode c == Term = mempty
 
    freshen' c (Annot t) | mode c == Pat = do
        (t', p) <- freshen' (term c) t
@@ -919,9 +935,16 @@ aeqBinders t1 t2 = case matchBinders t1 t2 of
               Just p -> isid p
               _      -> False
 
+-- | Calculate the free variables (of any sort) contained in a term.
+fvAny :: (Alpha a, Pointed f, Monoid (f AnyName)) => a -> f (AnyName)
+fvAny = fv' initial
+
 -- | Calculate the free variables of a particular sort contained in a term.
-fv :: (Rep b, Alpha a) => a -> Set (Name b)
-fv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' initial
+fv :: forall a b f.
+      (Rep b, Alpha a,
+       Pointed f, F.Foldable f, Monoid (f AnyName), Monoid (f (Name b)))
+      => a -> f (Name b)
+fv = fromList . catMaybes . map toSortedName . F.toList . (fv' initial :: a -> f AnyName)
 
 -- | List all the binding variables (of a particular sort) in a pattern.
 binders :: (Rep a, Alpha b) => b -> Set (Name a)
@@ -1103,19 +1126,18 @@ lunbind (B a b) g =
 
 
 -- | Unbind two terms with the same fresh names, provided the
---   binders match.
-lunbind2  :: (LFresh m, Alpha b, Alpha c, Alpha d) =>
-            Bind b c -> Bind b d -> (Maybe (b,c,d) -> m e) -> m e
+--   binders have the same number of binding variables.
+lunbind2  :: (LFresh m, Alpha b1, Alpha b2, Alpha c, Alpha d) =>
+            Bind b1 c -> Bind b2 d -> (Maybe (b1,c,b2,d) -> m e) -> m e
 lunbind2 (B b1 c) (B b2 d) g =
-      case match b1 b2 of
-         Just _ ->
-           lunbind (B b1 c) $ \ (b', c') ->
-             g $ Just (b', c', open initial b' d)  -- BAY: the c' used to be c,
-         Nothing -> g Nothing                      -- am I correct in assuming
-                                                   -- that was a bug?
+  case match (fvAny b1 :: [AnyName]) (fvAny b2) of
+    Just p1 ->
+      lfreshen b1 (\b1' p2 -> g $ Just (b1', open initial b1' c,
+                                        swaps (p2 <> p1) b2, open initial b1' d))
+    Nothing -> g Nothing
 
 -- | Unbind three terms with the same fresh names, provided the
---   binders match.
+--   binders have the same number of binding variables.
 lunbind3  :: (LFresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
             Bind b c -> Bind b d -> Bind b e ->  (Maybe (b,c,d,e) -> m f) -> m f
 lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
