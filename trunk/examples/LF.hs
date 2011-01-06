@@ -310,7 +310,7 @@ instance LFresh m => LFresh (ReaderT e m) where
 -- it is not head-reducible.  Works in erased or unerased contexts.
 whr :: Tm -> TcM (Context (t, Maybe Tm) ty) Tm
 whr (TmVar a) = (do
-  (_, Just defn) <- lookupTm a  -- XXX
+  (_, Just defn) <- lookupTm a
   whr defn)
   `mplus`
   return (TmVar a)
@@ -319,7 +319,11 @@ whr (TmApp (Lam b) m1) =
   lunbind b $ \((x,_),m2) ->
     whr $ subst x m1 m2
 
-whr (TmApp m1 m2) = TmApp `liftM` whr m1 `ap` return m2
+whr (TmApp m1 m2) = do
+  m1' <- whr m1
+  case m1' of
+    Lam _ -> whr (TmApp m1' m2)
+    _     -> return $ TmApp m1' m2
 
 whr t = return t
 
@@ -336,7 +340,7 @@ tmEqWhr :: Tm -> Tm -> STy -> TcM SCtx ()
 tmEqWhr m n t = do
   m' <- whr m
   n' <- whr n
-  tmEq' m' n' t
+  whileChecking (TmEq m' n' t) $ tmEq' m' n' t -- XXX
 
   -- XXX todo: might be nice to have 'lfresh' and 'lfreshen', the
   -- first NOT taking an argument
@@ -362,9 +366,15 @@ tmEqS (TmVar a) (TmVar b) = do
   return tyA
 
 tmEqS (TmApp m1 m2) (TmApp n1 n2) = do
-  STyArr t2 t1 <- tmEqS m1 n1   -- XXX
-  tmEq m2 n2 t2
-  return t1
+  ty <- tmEqS m1 n1
+  case ty of
+    STyArr t2 t1 -> do
+      tmEq m2 n2 t2
+      return t1
+    _            -> do
+      ty' <- ppr ty
+      err $
+        "Left-hand side of an application has type " ++ render ty' ++ "; expecting an arrow type"
 
 tmEqS t1 t2 = err "Term mismatch"
 
@@ -777,7 +787,6 @@ instance Pretty Check where
   ppr (DeclCheck decl) = do
     d' <- ppr decl
     return $ text "While checking the declaration:" $+$ nest 4 d'
-             $+$ nest 4 (text (show decl))
 
 ------------------------------
 -- Typechecking programs -----
