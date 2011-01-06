@@ -1052,23 +1052,29 @@ unbind (B b c) = do
       return (b', open initial b' c)
 
 -- | Unbind two terms with the same fresh names, provided the
--- binders match.
-unbind2  :: (Fresh m, Alpha b, Alpha c, Alpha d) =>
-            Bind b c -> Bind b d -> m (Maybe (b,c,d))
+--   binders have the same number of binding variables.
+unbind2  :: (Fresh m, Alpha b1, Alpha b2, Alpha c, Alpha d) =>
+            Bind b1 c -> Bind b2 d -> m (Maybe (b1,c,b2,d))
 unbind2 (B b1 c) (B b2 d) = do
-      case match b1 b2 of
-         Just _ -> do
-           (b', _) <- freshen b1
-           return $ Just (b', open initial b' c, open initial b' d)
+      case match (fvAny b1 :: [AnyName]) (fvAny b2) of
+         Just p -> do
+           (b1', p') <- freshen b1
+           return $ Just (b1', open initial b1' c,
+                          swaps (p' <> p) b2, open initial b1' d)
          Nothing -> return Nothing
 
-unbind3  :: (Fresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
-            Bind b c -> Bind b d -> Bind b e ->  m (Maybe (b,c,d,e))
+-- | Unbind three terms with the same fresh names, provided the
+--   binders have the same number of binding variables.
+unbind3  :: (Fresh m, Alpha b1, Alpha b2, Alpha b3, Alpha c, Alpha d, Alpha e) =>
+            Bind b1 c -> Bind b2 d -> Bind b3 e ->  m (Maybe (b1,c,b2,d,b3,e))
 unbind3 (B b1 c) (B b2 d) (B b3 e) = do
-      case (match b1 b2, match b1 b3) of
-         (Just _, Just _) -> do
-           (b', _) <- freshen b1
-           return $ Just (b', open initial b' c, open initial b' d, open initial b' e)
+      case ( match (fvAny b1 :: [AnyName]) (fvAny b2)
+           , match (fvAny b1 :: [AnyName]) (fvAny b3) ) of
+         (Just p12, Just p13) -> do
+           (b1', p') <- freshen b1
+           return $ Just (b1', open initial b1' c,
+                          swaps (p' <> p12) b2, open initial b1' d,
+                          swaps (p' <> p13) b3, open initial b1' e)
          _ -> return Nothing
 
 ---------------------------------------------------
@@ -1138,13 +1144,15 @@ lunbind2 (B b1 c) (B b2 d) g =
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders have the same number of binding variables.
-lunbind3  :: (LFresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
-            Bind b c -> Bind b d -> Bind b e ->  (Maybe (b,c,d,e) -> m f) -> m f
-lunbind3 (B b1 c) (B b2 d) (B b3 e) g = do
-      case (match b1 b2, match b1 b3) of
-         (Just _, Just _) ->
-           lunbind (B b1 c) $ \ (b', c') ->
-              g $ Just (b', c', open initial b' d, open initial b' e)
+lunbind3  :: (LFresh m, Alpha b1, Alpha b2, Alpha b3, Alpha c, Alpha d, Alpha e) =>
+            Bind b1 c -> Bind b2 d -> Bind b3 e ->  (Maybe (b1,c,b2,d,b3,e) -> m f) -> m f
+lunbind3 (B b1 c) (B b2 d) (B b3 e) g =
+  case ( match (fvAny b1 :: [AnyName]) (fvAny b2)
+       , match (fvAny b1 :: [AnyName]) (fvAny b3) ) of
+         (Just p12, Just p13) ->
+           lfreshen b1 (\b1' p' -> g $ Just (b1', open initial b1' c,
+                                             swaps (p' <> p12) b2, open initial b1' d,
+                                             swaps (p' <> p13) b3, open initial b1' e))
          _ -> g Nothing
 
 ------------------------------------------------------------
