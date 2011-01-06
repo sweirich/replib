@@ -588,6 +588,7 @@ parseTy  =
       -- te
   <|> parseTyExpr
 
+  -- XXX this does not handle type expressions built using infix type operators!
 parseTyExpr :: LFParser Ty
   -- te ::= ta [tm ...]
 parseTyExpr = foldl TyApp <$> parseTyAtom <*> many parseAtom
