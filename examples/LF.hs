@@ -35,7 +35,7 @@ import Text.Parsec.Language (haskellDef)
 import Text.Parsec.String
 import qualified Text.Parsec.Expr as PE
 
-import Text.PrettyPrint (Doc, (<+>), (<>), colon, text, render, empty, integer, nest, vcat, ($+$))
+import Text.PrettyPrint (Doc, (<+>), (<>), colon, comma, text, render, empty, integer, nest, vcat, ($+$))
 import qualified Text.PrettyPrint as PP
 
 import Control.Monad.Error
@@ -170,23 +170,23 @@ extendTy :: Name Ty -> ty -> Context tm ty -> Context tm ty
 extendTy x k (C tm ty) = C tm (M.insert x k ty)
 
 lookupTm :: Name Tm -> TcM (Context tm ty) tm
-lookupTm x = ask >>= \(C tm _) -> embedMaybe ("Not in scope: term variable " ++ show x)
+lookupTm x = ask >>= \(C tm _) -> embedMaybe (text $ "Not in scope: term variable " ++ show x)
                                   (M.lookup x tm)
 
 lookupTy :: Name Ty -> TcM (Context tm ty) ty
-lookupTy x = ask >>= \(C _ ty) -> embedMaybe ("Not in scope: type constant " ++ show x)
+lookupTy x = ask >>= \(C _ ty) -> embedMaybe (text $ "Not in scope: type constant " ++ show x)
                                   (M.lookup x ty)
 
-embedMaybe :: String -> Maybe a -> TcM ctx a
+embedMaybe :: Doc -> Maybe a -> TcM ctx a
 embedMaybe errMsg m = case m of
   Just a  -> return a
   Nothing -> err errMsg
 
-addTrace :: String -> TcM ctx String
+addTrace :: Doc -> TcM ctx String
 addTrace msg = do
   chks  <- getChkContext
   trace <- vcat <$> mapM ppr chks
-  return . PP.render $ text msg $+$ trace
+  return . PP.render $ msg $+$ trace
 
 embedEither :: (MonadError String m) => Either String a -> m a
 embedEither = either throwError return
@@ -273,21 +273,24 @@ whileChecking chk m = do
   nms <- getTcMAvoids
   embedEither $ contTcM m c (chk:chks) nms
 
-ensure errMsg b = if b then return () else err errMsg
+ensure errMsg b = if b then return () else errMsg >>= err
 
 err msg = addTrace msg >>= throwError
 
-matchErr :: Show a => a -> a -> String
-matchErr x y = "Cannot match " ++ show x ++ " with " ++ show y
+matchErr :: Pretty a => a -> a -> TcM ctx Doc
+matchErr x y = do
+  x' <- ppr x
+  y' <- ppr y
+  return $ text "Cannot match" <+> x' <+> text "with" <+> y'
 
 unTyPi (TyPi bnd) = return bnd
-unTyPi t = err $ "Expected pi type, got " ++ show t ++ " instead"
+unTyPi t = ppr t >>= \t' -> err $ text "Expected pi type, got" <+> t' <+> text "instead"
 
 unKPi (KPi bnd) = return bnd
-unKPi t = err $ "Expected pi kind, got " ++ show t ++ " instead"
+unKPi t = ppr t >>= \t' -> err $ text "Expected pi kind, got" <+> t' <+> text "instead"
 
 isType Type = return ()
-isType t = err $ "Expected Type, got " ++ show t ++ " instead"
+isType t = ppr t >>= \t' -> err $ text "Expected Type, got" <+> t' <+> text "instead"
 
 ------------------------------
 -- Weak head reduction -------
@@ -374,9 +377,9 @@ tmEqS (TmApp m1 m2) (TmApp n1 n2) = do
     _            -> do
       ty' <- ppr ty
       err $
-        "Left-hand side of an application has type " ++ render ty' ++ "; expecting an arrow type"
+        text "Left-hand side of an application has type" <+> ty' <> text "; expecting an arrow type"
 
-tmEqS t1 t2 = err "Term mismatch"
+tmEqS t1 t2 = err $ text "Term mismatch"
 
 ------------------------------
 -- Type equality -------------
@@ -410,7 +413,10 @@ tyEqS (TyApp a m) (TyApp b n) = do
   tmEq m n t
   return k
 
-tyEqS t1 t2 = err $ "Types are not equal: " ++ show t1 ++ ", " ++ show t2
+tyEqS t1 t2 = do
+  t1' <- ppr t1
+  t2' <- ppr t2
+  err $ text "Types are not equal: " <+> t1' <> comma <+> t2'
 
 ------------------------------
 -- Kind equality -------------
@@ -427,7 +433,10 @@ kEq k1@(KPi bnd1) k2@(KPi bnd2) = whileChecking (KEq k1 k2) $
     tyEq a b SKType
     withTmBinding x (erase a) $ kEq k l
 
-kEq k1 k2 = err $ "Kinds are not equal: " ++ show k1 ++ ", " ++ show k2
+kEq k1 k2 = do
+  k1' <- ppr k1
+  k2' <- ppr k2
+  err $ text "Kinds are not equal:" <+> k1' <> comma <+> k2'
 
 ------------------------------
 -- Type checking -------------
@@ -581,7 +590,7 @@ parseTy  =
 
 parseTyExpr :: LFParser Ty
   -- te ::= ta [tm ...]
-parseTyExpr = foldl TyApp <$> parseTyAtom <*> many parseTm
+parseTyExpr = foldl TyApp <$> parseTyAtom <*> many parseAtom
 
 parseTyAtom :: LFParser Ty
 parseTyAtom =
