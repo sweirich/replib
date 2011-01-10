@@ -147,9 +147,15 @@ We can test things out at the `ghci` prompt like so:
     *Main> lam "x" (lam "y" (var "x"))
     Lam (<x> Lam (<y> Var 1@0))
 
-XXX more here about de Bruijn indices
+The `1@0` is a *de Bruijn index*, which refers to the index-0 variable
+of the index-1 (counting outwards from 0) enclosing binding site; that
+is, to `x`.  Recall that the left-hand side of a `Bind` can be an
+arbitrary data structure potentially containing multiple names (a
+*pattern*); hence the need for the index after the `@`.  Of course, in
+this particular example we only ever bind one name at once, so the
+index after the `@` will always be zero.
 
-We can check that substitution works as it should. Substituting for
+We can check that substitution works as we expect. Substituting for
 `x` in a term where `x` does not occur free has no effect:
 
     *Main> subst (string2Name "x") (var "z") (lam "x" (var "x"))
