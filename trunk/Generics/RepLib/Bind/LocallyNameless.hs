@@ -88,10 +88,6 @@ module Generics.RepLib.Bind.LocallyNameless
     -- * Substitution
     Subst(..),
 
-    -- * For abstract types
-    abs_swaps,abs_fv,abs_freshen,abs_match,
-    abs_nthpatrec,abs_findpatrec,abs_close,abs_open,
-
    -- * Advanced
    AlphaCtx, matchR1,
 
@@ -822,30 +818,6 @@ instance (Alpha a, Alpha b,Alpha c, Alpha d, Alpha e) =>
 
 
 instance (Rep a) => Alpha (R a) where
-{- we don't need these any more because of derive_abstract. The default definitions
-   work just fine now. -}
-{-
-  swaps'      = abs_swaps
-  fv'         = abs_fv
-  freshen'    = abs_freshen
-  match'      = abs_match
-  nthpatrec  = abs_nthpatrec
-  findpatrec = abs_findpatrec
-  close      = abs_close
-  open       = abs_open
--}
-
--- Definitions of the class members for abstract types.
--- These will go away soon.
-abs_swaps _ p s = s
-abs_fv _ s = S.empty
-abs_freshen _ b = return (b, empty)
-abs_match _ x1 x2 = if x1 == x2 then Just empty else Nothing
-abs_nthpatrec b i = (i, Nothing)
-abs_findpatrec b n = (0, False)
-abs_close i b x = x
-abs_open i b x = x
-
 
 ----------------------------------------------------------
 -- Binding operations & instances
