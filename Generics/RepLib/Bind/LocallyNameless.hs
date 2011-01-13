@@ -76,11 +76,12 @@ module Generics.RepLib.Bind.LocallyNameless
     unbind, unbind2, unbind3,
 
     -- * The 'LFresh' class
-    HasNext(..), LFresh(..),
+    LFresh(..),
     lfreshen,
     lunbind, lunbind2, lunbind3,
 
-    FreshM, runFreshM, contFreshM, getAvoids,
+    LFreshM, runLFreshM, contLFreshM, getAvoids,
+    -- XXX add more stuff to exports here
 
     -- * Rebinding operations
     rebind, reopen,
@@ -98,6 +99,8 @@ module Generics.RepLib.Bind.LocallyNameless
 
 import Generics.RepLib
 import Generics.RepLib.Bind.PermM
+import Generics.RepLib.Bind.Name
+import Generics.RepLib.Bind.Fresh
 
 import qualified Data.List as List
 import qualified Data.Char as Char
@@ -112,29 +115,12 @@ import Control.Monad.Reader (Reader,ask,local,runReader,MonadReader)
 import Control.Applicative (Applicative)
 import System.IO.Unsafe (unsafePerformIO)
 
-
 ------------------------------------------------------------
 -- Basic types
 ------------------------------------------------------------
 
 $(derive_abstract [''R])
 -- The above only works with GHC 7.
-
-
--- | 'Name's are things that get bound.  This type is intentionally
---   abstract; to create a 'Name' you can use 'string2Name' or
---   'integer2Name'. The type parameter is a tag, or /sort/, which tells
---   us what sorts of things this name may stand for. The sort must
---   be an instance of the 'Rep' type class.
-data Name a
-  = Nm (R a) (String, Integer)   -- free names
-  | Bn (R a) Integer Integer     -- bound names / binding level + pattern index
-   deriving (Eq, Ord)
-
--- | A name with a hidden (existentially quantified) sort.
-data AnyName = forall a. Rep a => AnyName (Name a)
-
-
 
 -- | The type of a binding.  We can 'Bind' an @a@ object in a @b@
 --   object if we can create \"fresh\" @a@ objects, and @a@ objects
@@ -161,102 +147,9 @@ data Rebind a b = R a b
 
 $(derive [''Bind, ''Name, ''Annot, ''Rebind])
 
--- AnyName has an existential in it, so we cannot create a complete
--- representation for it, unfortunately.
-
-$(derive_abstract [''AnyName])
-
-instance Show AnyName where
-  show (AnyName n1) = show n1
-
-instance Eq AnyName where
-   (AnyName n1) == (AnyName n2) =
-      case gcastR (getR n1) (getR n2) n1 of
-           Just n1' -> n1' == n2
-           Nothing  -> False
-
-instance Ord AnyName where
-   compare (AnyName n1) (AnyName n2) =
-       case compareR (getR n1) (getR n2) of
-         EQ  -> case gcastR (getR n1) (getR n2) n1 of
-           Just n1' -> compare n1' n2
-           Nothing  -> error "Panic: equal types are not equal in Ord AnyName instance!"
-         ord -> ord
-
-------------------------------------------------------------
--- Utilities
-------------------------------------------------------------
-
--- some convenient names for testing
-name1, name2, name3, name4, name5, name6, name7, name8, name9, name10, name11
-  :: Rep a => Name a
-name1 = integer2Name 1
-name2 = integer2Name 2
-name3 = integer2Name 3
-name4 = integer2Name 4
-name5 = integer2Name 5
-name6 = integer2Name 6
-name7 = integer2Name 7
-name8 = integer2Name 8
-name9 = integer2Name 9
-name10 = integer2Name 10
-name11 = integer2Name 11
-
---instance Read Name where
---  read s = error "FIXME"
-
-instance Show (Name a) where
-  show (Nm _ ("",n)) = "_" ++ (show n)
-  show (Nm _ (x,0))  = x
-  show (Nm _ (x,n))  = x ++ (show n)
-  show (Bn _ x y)    =  show x ++ "@" ++ show y
-
--- | Get the integer index of a 'Name'.
-name2Integer :: Name a -> Integer
-name2Integer (Nm _ (_,x)) = x
-name2Integer (Bn _ _ _)   = error "Internal Error: cannot call name2Integer for bound names"
-
--- | Get the string part of a 'Name'.
-name2String :: Name a -> String
-name2String (Nm _ (s,_)) = s
-name2String (Bn _ _ _)   = error "Internal Error: cannot call name2Integer for bound names"
-
--- | Get the integer index of an 'AnyName'.
-anyName2Integer :: AnyName -> Integer
-anyName2Integer (AnyName nm) = name2Integer nm
-
--- | Get the string part of an 'AnyName'.
-anyName2String :: AnyName -> String
-anyName2String (AnyName nm) = name2String nm
-
-toSortedName :: Rep a => AnyName -> Maybe (Name a)
-toSortedName (AnyName n) = gcastR (getR n) rep n
-
--- | Create a 'Name' from an 'Integer'.
-integer2Name :: Rep a => Integer -> Name a
-integer2Name n = makeName "" n
-
--- | Create a 'Name' from a 'String'.
-string2Name :: Rep a => String -> Name a
-string2Name s = makeName s 0
-
--- | Convenient synonym for 'string2Name'.
-s2n :: Rep a => String -> Name a
-s2n = string2Name
-
--- | Create a 'Name' from a @String@ and an @Integer@ index.
-makeName :: Rep a => String -> Integer -> Name a
-makeName s i = Nm rep (s,i)
-
--- | Determine the sort of a 'Name'.
-getR :: Name a -> R a
-getR (Nm r _)   = r
-getR (Bn r _ _) = r
-
--- | Change the sort of a name
-translate :: (Rep b) => Name a -> Name b
-translate (Nm _ x) = Nm rep x
-translate (Bn _ x y) = Bn rep x y
+--------------------------------------------------
+-- Pointed functors
+--------------------------------------------------
 
 -- Pointed
 class Pointed f where
@@ -990,30 +883,8 @@ findpat x n = case findpatrec x n of
                    (_, False) -> Nothing
 
 ------------------------------------------------------------
--- Freshening
+-- Opening binders
 ------------------------------------------------------------
-
--- | Type class for contexts which can generate new globally fresh
--- integers.
-class HasNext m where
-  -- | Get a new, globally fresh 'Integer'.
-  nextInteger :: m Integer
-
-  -- | Reset the internal state, i.e. forget about 'Integers' that
-  -- have already been generated.
-  resetNext   :: Integer -> m ()
-
--- | Type class for monads which can generate new globally unique
--- 'Name's based on a given 'Name'.
-class Monad m => Fresh m where
-  fresh :: Name a -> m (Name a)
-
--- | A monad @m@ supports the 'fresh' operation if it
--- can generate a new unique names.
-instance (Monad m, HasNext m) => Fresh m where
-  fresh (Nm r (s,j)) = do { n <- nextInteger; return (Nm r (s,n)) }
-  fresh (Bn _ _ _)   = error "BUG: cannot freshen bound vars"
-
 
 -- | Unbind (also known as \"open\") is the destructor for
 -- bindings. It ensures that the names in the binding are fresh.
@@ -1047,53 +918,6 @@ unbind3 (B b1 c) (B b2 d) (B b3 e) = do
                           swaps (p' <> p12) b2, open initial b1' d,
                           swaps (p' <> p13) b3, open initial b1' e)
          _ -> return Nothing
-
----------------------------------------------------
--- LFresh
-
--- | This is the class of monads that support freshness in an
--- (implicit) local scope.  Generated names are fresh for the current
--- local scope, but not globally fresh.  This class has a basic
--- instance based on the reader monad.
-class Monad m => LFresh m where
-  -- | Pick a new name that is fresh for the current (implicit) scope.
-  lfresh  :: Rep a => Name a -> m (Name a)
-  -- | Avoid the given names when freshening in the subcomputation.
-  avoid   :: [AnyName] -> m a -> m a
-
--- XXX TODO: move these instances somewhere else
--- | Simple reader monad instance for 'LFresh'.
-instance LFresh (Reader Integer) where
-  lfresh (Nm r (s,j)) = do { n <- ask; return (Nm r (s, max j (n+1))) }
-  avoid []          = id
-  avoid names       = local (max k)
-    where k = maximum (map anyName2Integer names)
-
--- | A convenient monad which is an instance of 'LFresh'.
-newtype FreshM a = FreshM { unFreshM :: Reader (Set AnyName) a }
-  deriving (Functor, Applicative, Monad, MonadReader (Set AnyName))
-
--- | A monad instance for 'LFresh' which renames to the lowest
---  number not currently being used
-instance LFresh FreshM where
-  lfresh nm = FreshM $ do
-    let s = name2String nm
-    used <- ask
-    return $ head (filter (\x -> not (S.member (AnyName x) used))
-                          (map (makeName s) [0..]))
-  avoid names = FreshM . local (S.union (S.fromList names)) . unFreshM
-
--- | Run a FreshM computation in an empty context.
-runFreshM :: FreshM a -> a
-runFreshM m = contFreshM m S.empty
-
--- | Run a FreshM computation given a set of names to avoid.
-contFreshM :: FreshM a -> Set AnyName -> a
-contFreshM (FreshM m) = runReader m
-
--- | Get the set of names currently being avoided.
-getAvoids :: FreshM (Set AnyName)
-getAvoids = FreshM ask
 
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c

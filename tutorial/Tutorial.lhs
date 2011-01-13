@@ -3,7 +3,7 @@ Programming with binders using RepLib
 
 *Names* are the bane of every language implementation: they play an
 unavoidable, central role, yet are tedious to deal with and surprisingly
-tricky to get right.
+tricky to get right.  XXX sign errors
 
 RepLib includes a flexible and powerful library for programming with
 names and binders, which makes programming with binders easy and
@@ -180,28 +180,24 @@ captured we would see `Lam (<y> Var 0@0)`.
 **Evaluation**
 
 The first thing we want to do is write an evaluator for our lambda
-calculus.
+calculus.  Of course there are many ways to do this; for the sake of
+simplicity and illustration, we will write an evaluator based on a
+small-step, call-by-value operational semantics.
+
+> done :: Monad m => MaybeT m a
+> done = MaybeT $ return Nothing
+>
+> step :: (Functor m, LFresh m) => Term -> MaybeT m Term
+> step (Var _) = done
+> step (Lam _) = done
+> step (App (Lam b) t2) =
+>   lunbind b $ \(x,t1) ->
+>     return (subst x t2 t1)
+> step (App t1 t2) =
+>       App <$> step t1 <*> pure t2
+>   <|> App <$> pure t1 <*> step t2
 
 <!--
-isValue (App _ _) = False
-isValue _         = True
-
-done :: Monad m => MaybeT m a
-done = MaybeT $ return Nothing
-
-instance (Functor m, LFresh m) => LFresh (MaybeT m) where
-  lfresh    = MaybeT . fmap Just . lfresh
-  avoid nms = MaybeT . avoid nms . runMaybeT
-
-step :: (Functor m, LFresh m) => Term -> MaybeT m Term
-step (Var _) = done
-step (Lam _) = done
-step (App (Lam b) t2) =
-  lunbind b $ \(x,t1) ->
-    return (subst x t2 t1)
-step (App t1 t2) =
-      App <$> step t1 <*> pure t2
-  <|> App <$> pure t1 <*> step t2
 
 tc :: Monad m => (a -> MaybeT m a) -> (a -> m a)
 tc f a = do
