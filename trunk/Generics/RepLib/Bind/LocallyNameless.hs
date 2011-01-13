@@ -800,24 +800,23 @@ instance Alpha a => Alpha (Annot a) where
    nthpatrec nm i = (i, Nothing)
 
 -- Instances for other types use the default definitions.
-instance Alpha Bool where
-instance Alpha Float where
-instance Alpha () where
-instance Alpha a => Alpha [a] where
-instance Alpha Int where
-instance Alpha Integer where
-instance Alpha Double where
-instance Alpha Char where
-instance Alpha a => Alpha (Maybe a) where
-instance (Alpha a,Alpha b) => Alpha (Either a b) where
-instance (Alpha a,Alpha b) => Alpha (a,b) where
-instance (Alpha a,Alpha b,Alpha c) => Alpha (a,b,c) where
+instance Alpha Bool
+instance Alpha Float
+instance Alpha ()
+instance Alpha a => Alpha [a]
+instance Alpha Int
+instance Alpha Integer
+instance Alpha Double
+instance Alpha Char
+instance Alpha a => Alpha (Maybe a)
+instance (Alpha a,Alpha b) => Alpha (Either a b)
+instance (Alpha a,Alpha b) => Alpha (a,b)
+instance (Alpha a,Alpha b,Alpha c) => Alpha (a,b,c)
 instance (Alpha a, Alpha b,Alpha c, Alpha d) => Alpha (a,b,c,d)
 instance (Alpha a, Alpha b,Alpha c, Alpha d, Alpha e) =>
    Alpha (a,b,c,d,e)
 
-
-instance (Rep a) => Alpha (R a) where
+instance (Rep a) => Alpha (R a)
 
 ----------------------------------------------------------
 -- Binding operations & instances
