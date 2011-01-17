@@ -2,6 +2,7 @@
            , FlexibleInstances
            , FlexibleContexts
            , GeneralizedNewtypeDeriving
+           , OverlappingInstances
   #-}
 ----------------------------------------------------------------------
 -- |
