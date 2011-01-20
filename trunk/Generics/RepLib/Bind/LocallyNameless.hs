@@ -75,13 +75,16 @@ module Generics.RepLib.Bind.LocallyNameless
     Fresh(..), freshen,
     unbind, unbind2, unbind3,
 
+    FreshM, runFreshM,
+    FreshMT, runFreshMT,
+
     -- * The 'LFresh' class
     LFresh(..),
     lfreshen,
     lunbind, lunbind2, lunbind3,
 
-    LFreshM, runLFreshM, contLFreshM, getAvoids,
-    -- XXX add more stuff to exports here
+    LFreshM, runLFreshM, getAvoids,
+    LFreshMT, runLFreshMT,
 
     -- * Rebinding operations
     rebind, reopen,
@@ -769,7 +772,7 @@ instance (Show a, Show b) => Show (Bind a b) where
 
 -- | Constructor for binding in patterns.
 rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (close initial a b)
+rebind a b = R a (close (pat initial) a b)
 
 -- | Compare for alpha-equality.
 instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
@@ -782,7 +785,7 @@ instance (Show a, Show b) => Show (Rebind a b) where
 -- | destructor for binding patterns, the names should have already
 -- been freshened.
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-reopen (R a b) = (a, open initial a b)
+reopen (R a b) = (a, open (pat initial) a b)
 
 ----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
