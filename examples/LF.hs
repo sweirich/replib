@@ -16,10 +16,9 @@
   #-}
 
 {- TODO:
-   1. [X] write term pretty-printer
-   2. [ ] update TcM to track context information to make better error messages?
-   3. [ ] track down bugs checking gen100.elf
-   4. [ ] tune for speed?
+   1. [ ] Fix parser to deal with infix type operators
+   2. [ ] test on contents of qbf/
+   3. [ ] tune for speed?
 -}
 
 module Main where
