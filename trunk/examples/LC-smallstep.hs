@@ -10,7 +10,7 @@
   #-}
 import Control.Applicative
 import Control.Arrow
-import Control.Monad.Reader
+import Control.Monad
 
 import Control.Monad.Trans.Maybe
 
@@ -33,22 +33,15 @@ instance Subst Term Term where
   isvar (Var v) = Just (v, id)
   isvar _       = Nothing
 
-isValue (App _ _) = False
-isValue _         = True
+done :: MonadPlus m => m a
+done = mzero
 
-done :: Monad m => MaybeT m a
-done = MaybeT $ return Nothing
-
-instance (Functor m, LFresh m) => LFresh (MaybeT m) where
-  lfresh    = MaybeT . fmap Just . lfresh
-  avoid nms = MaybeT . avoid nms . runMaybeT
-
-step :: (Functor m, LFresh m) => Term -> MaybeT m Term
+step :: Term -> MaybeT FreshM Term
 step (Var _) = done
 step (Lam _) = done
-step (App (Lam b) t2) =
-  lunbind b $ \(x,t1) ->
-    return (subst x t2 t1)
+step (App (Lam b) t2) = do
+  (x,t1) <- unbind b
+  return $ subst x t2 t1
 step (App t1 t2) =
       App <$> step t1 <*> pure t2
   <|> App <$> pure t1 <*> step t2
@@ -61,42 +54,41 @@ tc f a = do
     Nothing -> return a
 
 eval :: Term -> Term
-eval x = runReader (tc step x) (0::Integer)
+eval x = runFreshM (tc step x)
 
 -- Some example terms
 
-nm = string2Name
+lam :: String -> Term -> Term
+lam x t = Lam $ bind (string2Name x) t
 
-idT = Lam (bind (nm "y") (Var (nm "y")))
+var :: String -> Term
+var = Var . string2Name
 
-foo = Lam (bind (nm "z") (Var (nm "y")))
+idT = lam "y" (var "y")
 
-trueT  = Lam (bind (nm "x") (Lam (bind (nm "y") (Var (nm "x")))))
--- falseT = Lam (bind (nm "x") (Lam (bind (nm "x") (Var (nm "x")))))
--- above doesn't work like I would expect!
+foo = lam "z" (var "y")
 
-falseT = Lam (bind (nm "x") (Lam (bind (nm "y") (Var (nm "y")))))
+trueT  = lam "x" (lam "y" (var "x"))
+falseT = lam "x" (lam "x" (var "x"))
 
 -- A small parser for Terms
 lexer = P.makeTokenParser haskellDef
-
-parens = P.parens lexer
-var    = P.identifier lexer
-op     = P.symbol lexer
+parens   = P.parens lexer
+brackets = P.brackets lexer
+ident    = P.identifier lexer
 
 parseTerm = parseAtom `chainl1` (pure App)
 
 parseAtom = parens parseTerm
-         <|> (Var . string2Name <$> var)
-         <|> Lam <$> (bind <$> (op "\\" *> (string2Name <$> var))
-                           <*> (op "." *> parseTerm))
+        <|> var <$> ident
+        <|> lam <$> (brackets ident) <*> parseTerm
 
 runTerm :: String -> Either ParseError Term
 runTerm = (id +++ eval) . parse parseTerm ""
 
 {- example, 2 + 3 = 5:
 
-  *Main> runTerm "(\\m. \\n. \\s. \\z. m s (n s z)) (\\s. \\z. s (s z)) (\\s. \\z. s (s (s z))) s z"
-  Right (App (Var s) (App (Var s) (App (Var s) (App (Var s) (App (Var s) (Var z))))))
+    *Main> runTerm "([m][n][s][z] m s (n s z)) ([s] [z] s (s z)) ([s][z] s (s (s z))) s z"
+    Right (App (Var s) (App (Var s) (App (Var s) (App (Var s) (App (Var s) (Var z))))))
 
 -}
