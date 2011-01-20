@@ -9,9 +9,9 @@
 -- Module      :  Generics.RepLib.Bind.Fresh
 -- License     :  BSD-like (see LICENSE)
 --
--- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
 -- Stability   :  experimental
--- Portability :  XXX
+-- Portability :  unportable (GHC 7 only)
 --
 -- XXX write me
 ----------------------------------------------------------------------
@@ -70,7 +70,7 @@ class Monad m => Fresh m where
 --   still globally unused, and increments the index every time it is
 --   asked for a fresh name.
 newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT Integer m a }
-  deriving (Functor, Applicative, Monad, St.MonadState Integer)
+  deriving (Functor, Applicative, Monad, St.MonadState Integer, MonadPlus, MonadIO)
 
 -- | Run a 'FreshMT' computation starting in an empty context.
 runFreshMT :: Monad m => FreshMT m a -> m a
@@ -99,6 +99,8 @@ runFreshM = runIdentity . runFreshMT
 -- | Run a FreshM computation given a starting index.
 contFreshM :: FreshM a -> Integer -> a
 contFreshM m = runIdentity . contFreshMT m
+
+-- Instances for applying monad transformers to Fresh monads
 
 instance Fresh m => Fresh (ContT r m) where
   fresh = lift . fresh
@@ -129,6 +131,13 @@ instance (Monoid w, Fresh m) => Fresh (Lazy.WriterT w m) where
 
 instance (Monoid w, Fresh m) => Fresh (Strict.WriterT w m) where
   fresh = lift . fresh
+
+-- Instances for applying FreshMT to other monads
+
+instance MonadTrans FreshMT where
+  lift = undefined
+
+-- XXX finish me
 
 ---------------------------------------------------
 -- LFresh
