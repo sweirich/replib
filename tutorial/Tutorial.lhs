@@ -345,3 +345,32 @@ Let's try it:
     [x] [y] [y1] y1
   
 Much better!
+
+A simple dependent calculus
+---------------------------
+
+To illustrate some of the more advanced features of RepLib's binding
+library, let's consider a simple dependent calculus, defined as
+follows:
+
+[XXX put ott output here or something?  How to present the calculus?]
+
+XXX some generic discussion here of what is interesting/difficult
+about this calculus
+
+> data Exp = EVar (Name Exp)
+>          | EStar
+>          | ELam (Bind Tele Exp)
+>          | EApp Exp [Exp]
+>          | EPi (Bind Tele Exp)
+>   deriving Show
+
+Expressions are variables, star, lambdas, applications, or pi types.
+Note that instead of binding a single variable, lambdas and pis bind
+an entire *telescope* `Tele`, which we define as follows:
+
+> data Tele = Empty
+>           | Cons (Rebind (Name Exp, Annot Exp) Tele)
+>   deriving Show
+
+A telescope is either empty, or XXX
