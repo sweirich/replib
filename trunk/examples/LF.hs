@@ -26,6 +26,7 @@ module Main where
 import Prelude hiding (lookup)
 
 import Generics.RepLib.Bind.LocallyNameless
+import Generics.RepLib.Bind.Fresh (contLFreshM)
 import Generics.RepLib
 
 import Text.Parsec hiding ((<|>))
@@ -237,7 +238,7 @@ data Check = TyCheck Tm
 -- Typechecking monad --------
 ------------------------------
 
-newtype TcM ctx a = TcM { unTcM :: ErrorT String (ReaderT ctx (ReaderT [Check] FreshM)) a }
+newtype TcM ctx a = TcM { unTcM :: ErrorT String (ReaderT ctx (ReaderT [Check] LFreshM)) a }
   deriving (Functor, Applicative, Monad, MonadReader ctx, MonadPlus, MonadError String, LFresh)
 
 getTcMAvoids :: TcM ctx (S.Set AnyName)
@@ -249,7 +250,7 @@ getChkContext = TcM . lift . lift $ ask
 -- | Continue a TcM computation, given a binding context, a checking
 --   context, and a set of names to avoid.
 contTcM :: TcM ctx a -> ctx -> [Check] -> S.Set AnyName -> Either String a
-contTcM (TcM m) c chks nms = flip contFreshM nms . flip runReaderT chks . flip runReaderT c . runErrorT $ m
+contTcM (TcM m) c chks nms = flip contLFreshM nms . flip runReaderT chks . flip runReaderT c . runErrorT $ m
 
 -- | Run a TcM computation in an empty context.
 runTcM :: TcM (Context tm ty) a -> Either String a
@@ -294,19 +295,6 @@ isType t = ppr t >>= \t' -> err $ text "Expected Type, got" <+> t' <+> text "ins
 ------------------------------
 -- Weak head reduction -------
 ------------------------------
-
--- TODO: move these to replib
--- instance (Functor m, LFresh m) => LFresh (MaybeT m) where
---   lfresh    = MaybeT . fmap Just . lfresh
---   avoid nms = MaybeT . avoid nms . runMaybeT
-
-instance (Functor m, LFresh m, Error e) => LFresh (ErrorT e m) where
-  lfresh    = ErrorT . fmap Right . lfresh
-  avoid nms = ErrorT . avoid nms . runErrorT
-
-instance LFresh m => LFresh (ReaderT e m) where
-  lfresh    = ReaderT . const . lfresh
-  avoid nms = ReaderT . fmap (avoid nms) . runReaderT
 
 -- Reduce a term to weak-head normal form, or return it unchanged if
 -- it is not head-reducible.  Works in erased or unerased contexts.
@@ -829,7 +817,7 @@ checkLF fileNames = do
   case runParser parseProg [] "" (concat files) of
     Left err   -> print err
     Right prog -> do
-      -- putStrLn . unlines . map render . runFreshM . mapM ppr $ prog
+      -- putStrLn . unlines . map render . runLFreshM . mapM ppr $ prog
       putStrLn . either ("Error: "++) (const "OK!") . runTcM . checkProg $ prog
 
 main = do
