@@ -96,7 +96,7 @@ lookUp v (Cons rb) | v == x    = return a
 {- Polymorphic identity function:
 
 *Main> elam [("A", EStar), ("x", evar "A")] (evar "x")
-ELam (<(Cons (<<(A,Annot EStar)>> Cons (<<(x,Annot (EVar A))>> Empty)))> EVar 0@1)
+ELam (<(Cons (<<(A,Annot EStar)>> Cons (<<(x,Annot (EVar 0@0))>> Empty)))> EVar 0@1)
 -}
 
 type M = MaybeT LFreshM
@@ -142,15 +142,3 @@ multiSubst _ _ _ = error "Unequal lengths in multiSubst"   -- mismatched lengths
 checkEq :: Exp -> Exp -> M ()
 checkEq e1 e2 = if aeq e1 e2 then return () else error $ "Not equal: " ++ show e1 ++ " " ++ show e2
   -- actually, this is not correct!
-
-{- BUG:
-
-*Main> let Just (EPi bnd) = runLFreshM . runMaybeT $ infer Empty (elam [("A", EStar), ("x", evar "A")] (evar "x"))
-*Main> bnd
-<Cons (<<(A,Annot EStar)>> Cons (<<(x,Annot (EVar 0@0))>> Empty))> EVar 0@0
-*Main> runLFreshM $ lunbind bnd $ \(delta, m) -> error (show delta ++ " " ++ show m)
-*** Exception: Cons (<<(A,Annot EStar)>> Cons (<<(x,Annot (EVar 0@0))>> Empty)) EVar A
-
-The 0@0 in the last line ought to be A.
-
--}
