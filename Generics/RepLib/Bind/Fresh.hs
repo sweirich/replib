@@ -3,6 +3,8 @@
            , FlexibleContexts
            , GeneralizedNewtypeDeriving
            , OverlappingInstances
+           , MultiParamTypeClasses
+           , UndecidableInstances
   #-}
 ----------------------------------------------------------------------
 -- |
@@ -13,7 +15,9 @@
 -- Stability   :  experimental
 -- Portability :  unportable (GHC 7 only)
 --
--- XXX write me
+-- The 'Fresh' and 'LFresh' classes, which govern monads with fresh
+-- name generation capabilities, and the FreshM(T) and LFreshM(T)
+-- monad (transformers) which provide useful default implementations.
 ----------------------------------------------------------------------
 
 module Generics.RepLib.Bind.Fresh
@@ -56,6 +60,12 @@ import Control.Monad.Trans.State.Lazy as Lazy
 import Control.Monad.Trans.State.Strict as Strict
 import Control.Monad.Trans.Writer.Lazy as Lazy
 import Control.Monad.Trans.Writer.Strict as Strict
+
+import qualified Control.Monad.Cont.Class as CC
+import qualified Control.Monad.Error.Class as EC
+import qualified Control.Monad.State.Class as StC
+import qualified Control.Monad.Reader.Class as RC
+import qualified Control.Monad.IO.Class as IC
 
 ------------------------------------------------------------
 -- Fresh
@@ -135,9 +145,22 @@ instance (Monoid w, Fresh m) => Fresh (Strict.WriterT w m) where
 -- Instances for applying FreshMT to other monads
 
 instance MonadTrans FreshMT where
-  lift = undefined
+  lift = FreshMT . lift
 
--- XXX finish me
+instance CC.MonadCont m => CC.MonadCont (FreshMT m) where
+  callCC c = FreshMT $ CC.callCC (unFreshMT . (\k -> c (FreshMT . k)))
+
+instance EC.MonadError e m => EC.MonadError e (FreshMT m) where
+  throwError = lift . EC.throwError
+  catchError m h = FreshMT $ EC.catchError (unFreshMT m) (unFreshMT . h)
+
+instance StC.MonadState s m => StC.MonadState s (FreshMT m) where
+  get = lift StC.get
+  put = lift . StC.put
+
+instance RC.MonadReader r m => RC.MonadReader r (FreshMT m) where
+  ask   = lift RC.ask
+  local f = FreshMT . RC.local f . unFreshMT
 
 ---------------------------------------------------
 -- LFresh
@@ -163,7 +186,7 @@ instance LFresh (Reader Integer) where
 -- avoid, and when asked for a fresh one will choose the first unused
 -- numerical name.
 newtype LFreshMT m a = LFreshMT { unLFreshMT :: ReaderT (Set AnyName) m a }
-  deriving (Functor, Applicative, Monad, MonadReader (Set AnyName))
+  deriving (Functor, Applicative, Monad, MonadReader (Set AnyName), MonadIO, MonadPlus)
 
 -- | Run an 'LFreshMT' computation in an empty context.
 runLFreshMT :: LFreshMT m a -> m a
@@ -237,3 +260,23 @@ instance (Monoid w, LFresh m) => LFresh (Lazy.WriterT w m) where
 instance (Monoid w, LFresh m) => LFresh (Strict.WriterT w m) where
   lfresh = lift . lfresh
   avoid  = Strict.mapWriterT . avoid
+
+-- Instances for applying LFreshMT to other monads
+
+instance MonadTrans LFreshMT where
+  lift = LFreshMT . lift
+
+instance CC.MonadCont m => CC.MonadCont (LFreshMT m) where
+  callCC c = LFreshMT $ CC.callCC (unLFreshMT . (\k -> c (LFreshMT . k)))
+
+instance EC.MonadError e m => EC.MonadError e (LFreshMT m) where
+  throwError = lift . EC.throwError
+  catchError m h = LFreshMT $ EC.catchError (unLFreshMT m) (unLFreshMT . h)
+
+instance StC.MonadState s m => StC.MonadState s (LFreshMT m) where
+  get = lift StC.get
+  put = lift . StC.put
+
+instance RC.MonadReader r m => RC.MonadReader r (LFreshMT m) where
+  ask   = lift RC.ask
+  local f = LFreshMT . mapReaderT (RC.local f) . unLFreshMT
