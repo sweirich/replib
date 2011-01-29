@@ -78,6 +78,12 @@ elam t b = ELam (bind (mkTele t) b)
 epi :: [(String, Exp)] -> Exp -> Exp
 epi t b = EPi (bind (mkTele t) b)
 
+earr :: Exp -> Exp -> Exp
+earr t1 t2 = epi [("_", t1)] t2
+
+eapp :: Exp -> Exp -> Exp
+eapp a b = EApp a [b]
+
 mkTele :: [(String, Exp)] -> Tele
 mkTele []          = Empty
 mkTele ((x,e) : t) = Cons (rebind (string2Name x, Annot e) (mkTele t))
@@ -85,18 +91,18 @@ mkTele ((x,e) : t) = Cons (rebind (string2Name x, Annot e) (mkTele t))
 appTele :: Tele -> Tele -> Tele
 appTele Empty     t2 = t2
 appTele (Cons rb) t2 = Cons (rebind p (appTele t1' t2))
-  where (p, t1') = reopen rb
+  where (p, t1') = unrebind rb
 
 lookUp :: Name Exp -> Tele -> M Exp
 lookUp n Empty     = throwError $ "Not in scope: " ++ show n
 lookUp v (Cons rb) | v == x    = return a
                    | otherwise = lookUp v t'
-  where ((x, Annot a), t') = reopen rb
+  where ((x, Annot a), t') = unrebind rb
 
 {- Polymorphic identity function:
 
 *Main> elam [("A", EStar), ("x", evar "A")] (evar "x")
-ELam (<(Cons (<<(A,Annot EStar)>> Cons (<<(x,Annot (EVar 0@0))>> Empty)))> EVar 0@1)
+ELam (<(Cons (<<(A,{EStar})>> Cons (<<(x,{EVar 0@0})>> Empty)))> EVar 0@1)
 -}
 
 type M = ErrorT String LFreshM
@@ -131,7 +137,7 @@ check g m a = do
 checkList :: Tele -> [Exp] -> Tele -> M ()
 checkList _ [] Empty = ok
 checkList g (e:es) (Cons rb) = do
-  let ((x, Annot a), t') = reopen rb
+  let ((x, Annot a), t') = unrebind rb
   check g e a
   checkList (subst x e g) (subst x e es) (subst x e t')
 checkList _ _ _ = throwError $ "Unequal number of parameters and arguments"
@@ -139,7 +145,7 @@ checkList _ _ _ = throwError $ "Unequal number of parameters and arguments"
 multiSubst :: Tele -> [Exp] -> Exp -> M Exp
 multiSubst Empty     [] e = return e
 multiSubst (Cons rb) (e1:es) e = multiSubst t' es e'
-  where ((x,_), t') = reopen rb
+  where ((x,_), t') = unrebind rb
         e' = subst x e1 e
 multiSubst _ _ _ = throwError $ "Unequal lengths in multiSubst" -- shouldn't happen
 
