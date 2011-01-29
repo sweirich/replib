@@ -88,7 +88,7 @@ module Generics.RepLib.Bind.LocallyNameless
     LFreshMT, runLFreshMT,
 
     -- * Rebinding operations
-    rebind, reopen,
+    rebind, unrebind,
 
     -- * Substitution
     Subst(..),
@@ -589,15 +589,15 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     open  c a (B x y)    = B (open (pat c) a x)  (open  (incr c) a y)
     close c a (B x y)    = B (close (pat c) a x) (close (incr c) a y)
 
-    --  Comparing two binding terms. There are two cases: 
+    --  Comparing two binding terms. There are two cases:
     --  * If the patterns have the same number of variables, we open
     --  the terms with the same fresh names and recursively compare.
     --  * If the patterns have different number of variables, we
-    --  can order by the number. 
+    --  can order by the number.
     acompare' bnd1 bnd2 = do
       l <- unbind2 bnd1 bnd2
-      case l of 
-        Just (a1,b1,a2,b2) -> 
+      case l of
+        Just (a1,b1,a2,b2) ->
           liftM2 lexord (acompare' a1 a2) (acompare' b1 b2)
         Nothing ->
           -- CHECK: is fvAny the right thing to use here?
@@ -745,10 +745,12 @@ instance (Show a, Show b) => Show (Rebind a b) where
   showsPrec p (R a b) = showParen (p>0)
       (showString "<<" . showsPrec p a . showString ">> " . showsPrec 0 b)
 
--- | destructor for binding patterns, the names should have already
--- been freshened.
-reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-reopen (R a b) = (a, open (pat initial) a b)
+-- | Destructor for `Rebind`.  It does not need a monadic context for
+--   generating fresh names, since `Rebind` can only occur in the
+--   pattern of a `Bind`; hence a previous call to `open` must have
+--   already freshened the names at this point.
+unrebind :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
+unrebind (R a b) = (a, open (pat initial) a b)
 
 ----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
