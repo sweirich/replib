@@ -145,7 +145,10 @@ data SBind a b = SB a b
 --   annotations, and those annotations can reference variables
 --   without binding them.  Annotations do nothing special when they
 --   appear elsewhere in terms.
-newtype Annot a = Annot a deriving (Show, Read, Eq)
+newtype Annot a = Annot a deriving Eq
+
+instance Show a => Show (Annot a) where
+  showsPrec p (Annot a) = showString "{" . showsPrec 0 a . showString "}"
 
 -- | 'Rebind' supports \"telescopes\" --- that is, patterns where
 --   bound variables appear in multiple subterms.
