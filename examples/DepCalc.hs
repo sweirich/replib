@@ -45,7 +45,7 @@ import Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib
 
 import Control.Monad
-import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Error
 
 data Exp = EVar (Name Exp)
          | EStar
@@ -87,8 +87,8 @@ appTele Empty     t2 = t2
 appTele (Cons rb) t2 = Cons (rebind p (appTele t1' t2))
   where (p, t1') = reopen rb
 
-lookUp :: (MonadPlus m) => Name Exp -> Tele -> m Exp
-lookUp _ Empty     = error "Not found"
+lookUp :: Name Exp -> Tele -> M Exp
+lookUp n Empty     = throwError $ "Not in scope: " ++ show n
 lookUp v (Cons rb) | v == x    = return a
                    | otherwise = lookUp v t'
   where ((x, Annot a), t') = reopen rb
@@ -99,8 +99,12 @@ lookUp v (Cons rb) | v == x    = return a
 ELam (<(Cons (<<(A,Annot EStar)>> Cons (<<(x,Annot (EVar 0@0))>> Empty)))> EVar 0@1)
 -}
 
-type M = MaybeT LFreshM
+type M = ErrorT String LFreshM
 ok = return ()
+
+unPi :: Exp -> M (Bind Tele Exp)
+unPi (EPi bnd) = return bnd
+unPi e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
 
 infer :: Tele -> Exp -> M Exp
 infer g (EVar x)  = lookUp x g
@@ -110,7 +114,7 @@ infer g (ELam bnd) = do
     b <- infer (g `appTele` delta) m
     return . EPi $ bind delta b
 infer g (EApp m ns) = do
-  EPi bnd <- infer g m
+  bnd <- unPi =<< infer g m
   lunbind bnd $ \(delta, b) -> do
     checkList g ns delta
     multiSubst delta ns b
@@ -130,15 +134,15 @@ checkList g (e:es) (Cons rb) = do
   let ((x, Annot a), t') = reopen rb
   check g e a
   checkList (subst x e g) (subst x e es) (subst x e t')
-checkList _ _ _ = error "Unequal lengths in checkList" -- mismatched lengths
+checkList _ _ _ = throwError $ "Unequal number of parameters and arguments"
 
 multiSubst :: Tele -> [Exp] -> Exp -> M Exp
 multiSubst Empty     [] e = return e
 multiSubst (Cons rb) (e1:es) e = multiSubst t' es e'
   where ((x,_), t') = reopen rb
         e' = subst x e1 e
-multiSubst _ _ _ = error "Unequal lengths in multiSubst"   -- mismatched lengths
+multiSubst _ _ _ = throwError $ "Unequal lengths in multiSubst" -- shouldn't happen
 
 checkEq :: Exp -> Exp -> M ()
-checkEq e1 e2 = if aeq e1 e2 then return () else error $ "Not equal: " ++ show e1 ++ " " ++ show e2
+checkEq e1 e2 = if aeq e1 e2 then return () else throwError $ "Couldn't match: " ++ show e1 ++ " " ++ show e2
   -- actually, this is not correct!
