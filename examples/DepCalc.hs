@@ -18,6 +18,10 @@
      -----------
      G |- x : A
 
+     c:A \in Sigma
+     -------------
+     G |- c : A
+
      G, D |- B : *
      ---------------
      G |- Pi D.B : *
@@ -30,12 +34,13 @@
      ----------------------------------
      G |- M [N] : B[D |-> [N]]
 
+     ----------
      G |- * : *
 
 
 
-     G |- N : B    A === B    (G |- [N] : D)[x |-> N]
-     ----------------------------------
+     G |- N : B    G |- A === B : *    (G |- [N] : D)[x |-> N]
+     ---------------------------------------------------------
      G |- N, [N] : x:A,D
 
 
@@ -149,6 +154,8 @@ multiSubst (Cons rb) (e1:es) e = multiSubst t' es e'
         e' = subst x e1 e
 multiSubst _ _ _ = throwError $ "Unequal lengths in multiSubst" -- shouldn't happen
 
+-- A conservative, inexpressive notion of equality, just for the sake
+-- of the example.
 checkEq :: Exp -> Exp -> M ()
 checkEq e1 e2 = if aeq e1 e2 then return () else throwError $ "Couldn't match: " ++ show e1 ++ " " ++ show e2
-  -- actually, this is not correct!
+
