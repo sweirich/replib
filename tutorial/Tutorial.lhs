@@ -534,3 +534,59 @@ type checker.
 (We also note in passing that `appTele` and `lookUp` would be perfect
 opportunities to use GHC's `ViewPatterns`, but for simplicity's sake
 we leave this fun to the reader.)
+
+We can now write a type checker for our toy language.  From the point
+of view of the binding library, there's nothing too remarkable about
+it: we use `lunbind` to take apart binders when inferring the types of
+lambdas, applications, and pis, and use substitution both when
+checking the types of argument lists (`checkList`) and when
+substituting the arguments to an application into the type of the
+result (`multiSubst`).
+
+> unPi :: Exp -> M (Bind Tele Exp)
+> unPi (EPi bnd) = return bnd
+> unPi e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
+> 
+> infer :: Tele -> Exp -> M Exp
+> infer g (EVar x)  = lookUp x g
+> infer _ EStar     = return EStar
+> infer g (ELam bnd) = do
+>   lunbind bnd $ \(delta, m) -> do
+>     b <- infer (g `appTele` delta) m
+>     return . EPi $ bind delta b
+> infer g (EApp m ns) = do
+>   bnd <- unPi =<< infer g m
+>   lunbind bnd $ \(delta, b) -> do
+>     checkList g ns delta
+>     multiSubst delta ns b
+> infer g (EPi bnd) = do
+>   lunbind bnd $ \(delta, b) -> do
+>     check (g `appTele` delta) b EStar
+>     return EStar
+> 
+> check :: Tele -> Exp -> Exp -> M ()
+> check g m a = do
+>   b <- infer g m
+>   checkEq b a
+> 
+> checkList :: Tele -> [Exp] -> Tele -> M ()
+> checkList _ [] Empty = ok
+> checkList g (e:es) (Cons rb) = do
+>   let ((x, Annot a), t') = unrebind rb
+>   check g e a
+>   checkList (subst x e g) (subst x e es) (subst x e t')
+> checkList _ _ _ = throwError $ "Unequal number of parameters and arguments"
+> 
+> multiSubst :: Tele -> [Exp] -> Exp -> M Exp
+> multiSubst Empty     [] e = return e
+> multiSubst (Cons rb) (e1:es) e = multiSubst t' es e'
+>   where ((x,_), t') = unrebind rb
+>         e' = subst x e1 e
+> multiSubst _ _ _ = throwError $ "Unequal lengths in multiSubst" -- shouldn't happen
+> 
+> -- A conservative, inexpressive notion of equality, just for the sake
+> -- of the example.
+> checkEq :: Exp -> Exp -> M ()
+> checkEq e1 e2 = if aeq e1 e2 
+>                   then return () 
+>                   else throwError $ "Couldn't match: " ++ show e1 ++ " " ++ show e2
