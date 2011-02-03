@@ -3,7 +3,7 @@ Programming with binders using RepLib
 
 *Names* are the bane of every language implementation: they play an
 unavoidable, central role, yet are tedious to deal with and surprisingly
-tricky to get right.  XXX sign errors
+tricky to get right. 
 
 RepLib includes a flexible and powerful library for programming with
 names and binders, which makes programming with binders easy and
@@ -590,3 +590,6 @@ result (`multiSubst`).
 > checkEq e1 e2 = if aeq e1 e2 
 >                   then return () 
 >                   else throwError $ "Couldn't match: " ++ show e1 ++ " " ++ show e2
+
+XXX insert type *checking* example (checking pi-type of a lambda) as
+illustration of unbind2
