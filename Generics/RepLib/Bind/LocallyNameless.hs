@@ -70,7 +70,7 @@ module Generics.RepLib.Bind.LocallyNameless
     acompare,
 
     -- * Binding operations
-    bind, unsafeUnBind,
+    bind, unsafeUnbind,
 
     -- * The 'Fresh' class
     Fresh(..), freshen,
@@ -605,8 +605,8 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         Nothing ->
           -- CHECK: is fvAny the right thing to use here?
           return $ (compare `on` S.size) (fvAny a1) (fvAny a2)
-            where a1 = fst (unsafeUnBind bnd1)
-                  a2 = fst (unsafeUnBind bnd2)
+            where a1 = fst (unsafeUnbind bnd1)
+                  a2 = fst (unsafeUnbind bnd2)
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
@@ -705,8 +705,8 @@ bind b c = B b (close initial b c)
 
 -- | A destructor for binders that does /not/ guarantee fresh
 --   names for the binders.
-unsafeUnBind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
-unsafeUnBind (B a b) = (a, open initial a b)
+unsafeUnbind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
+unsafeUnbind (B a b) = (a, open initial a b)
 
 -- | The 'Eq' instance for 'Bind' compares bindings for
 -- alpha-equality.
