@@ -31,7 +31,7 @@ module Generics.RepLib.Bind.Nominal
     -- ** Utilities
     integer2Name, string2Name, name2Integer, name2String, makeName,
     name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
-    translate, 
+    translate,
 
     -- * The 'Alpha' class
     Alpha(..),
@@ -41,7 +41,7 @@ module Generics.RepLib.Bind.Nominal
     aeq,
 
     -- * Binding operations
-    bind, unsafeUnBind,
+    bind, unsafeUnbind,
 
     -- * The 'Fresh' class
     Fresh(..), freshen,
@@ -209,8 +209,8 @@ bind a b = B a b
 
 -- | A destructor for binders that does not guarantee fresh
 -- names for the binders.
-unsafeUnBind :: Bind a b -> (a,b)
-unsafeUnBind (B a b) = (a,b)
+unsafeUnbind :: Bind a b -> (a,b)
+unsafeUnbind (B a b) = (a,b)
 
 instance (Show a, Show b) => Show (Bind a b) where
   showsPrec p (B a b) = showParen (p>0)
@@ -243,13 +243,13 @@ instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
    where sa' =  if binders' initial a == a' then showString ""
                   else showString "/" . showsPrec p a'
 
--- | destructor for binding patterns, the external names 
+-- | destructor for binding patterns, the external names
 -- should have already
 -- been freshen'ed. We swap the internal names so that they use the
 -- external names
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 reopen (R a1 (B names b)) = (a1, swaps p b) where
-   p = fromJust $ Monad.foldM join empty 
+   p = fromJust $ Monad.foldM join empty
           (zipWith single (binders' initial a1) names)
 
 ----------------------------------------------------------
@@ -354,7 +354,7 @@ class (Rep1 (AlphaD) a) => Alpha a where
   aeq' :: AlphaCtx -> a -> a -> Bool
   aeq' = aeqR1 rep1
 
-  -- | swap everything, including bound and free variables, 
+  -- | swap everything, including bound and free variables,
   -- parts in annots, etc.
   swapall' :: AlphaCtx -> Perm AnyName -> a -> a
   swapall' = swapallR1 rep1
@@ -559,7 +559,7 @@ instance (Rep a) => Alpha (Name a) where
 
   lfreshen' c nm f = case mode c of
      Term -> do x <- lfresh nm
-                avoid [AnyName x] $ 
+                avoid [AnyName x] $
                   f x (single (AnyName nm) (AnyName x))
      Pat  -> f nm empty
 
@@ -597,7 +597,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     -- to swap in a binder, swap the free variables in the
     -- pattern, then remove the binders from the permutation
     -- and swap in the body
-    -- ? why don't we just swap everywhere? we need to be 
+    -- ? why don't we just swap everywhere? we need to be
     -- able to freshen patterns with annotations
     swaps' p pm (B x y) =
         B (swaps' (pat p) pm x) (swaps' p pm' y) where
@@ -626,16 +626,16 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         f (B x' y') (pm1 <> pm2)))
 
     -- this version of aeq seems to work
-    aeq' p (B x1 y1) (B x2 y2) 
+    aeq' p (B x1 y1) (B x2 y2)
        -- if the binders match, compare the patterns & bodies
        | bx1 == bx2 = aeq' p x1 x2 && aeq' p y1 y2
-       -- if any binders of the first appear freely in the 
+       -- if any binders of the first appear freely in the
        -- second body, not aeq
-       | (S.fromList bx1) `S.intersection` 
+       | (S.fromList bx1) `S.intersection`
          (fv' Term y2 S.\\ fv' Term y1) /= S.empty = False
        -- otherwise swap the binding variables in the pattern
        -- and *all* of the variables in the body
-       | True = aeq' p x1 (swaps' Term pm x2) && 
+       | True = aeq' p x1 (swaps' Term pm x2) &&
                 aeq' p y1 (swapall' Term pm y2)
      where bx1 = binders' Term x1
            bx2 = binders' Term x2
@@ -654,12 +654,12 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         -- match the binders, ignoring the annots
         -- match the annots, ignoring the binders
         -- list the binding variables
-    match' p (B x1 y1) (B x2 y2) 
+    match' p (B x1 y1) (B x2 y2)
       |  bx1 == bx2 = do
             pm1 <- match' Pat x1 x2
             pm2 <- match' p y1 y2
             pm1 `join` pm2
-      | (S.fromList bx1) `S.intersection` 
+      | (S.fromList bx1) `S.intersection`
         (fv' Term y2 S.\\ fv' Term y1)
             /= S.empty = Nothing
       | True = do
@@ -672,7 +672,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
             pm2 <- match' p   y1 y2'
             -- note pm2 should not permute binders
             -- (see a16) Dropping would give us "set binding"
-            if S.fromList bx1 `S.intersection` 
+            if S.fromList bx1 `S.intersection`
                S.fromList (support pm2) /= S.empty
               then Nothing
               else pm1 `join` pm2
@@ -1020,7 +1020,7 @@ tests_aeq = do
                   bind (rebind (Annot nameB) ()) ()
    assert "a15" $ (rebind (nameA, Annot nameA) ()) `naeq`
                   (rebind (name4, Annot nameC) ())
-   assert "a16" $ bind (nameA, nameB) nameA `naeq` 
+   assert "a16" $ bind (nameA, nameB) nameA `naeq`
                   bind (nameB, nameA) nameA
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
    assert "a18" $ (nameA, nameA) `naeq` (nameA, nameB)
