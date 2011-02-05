@@ -85,7 +85,7 @@ Here, a variable is simply a name for some `Term`, so we use the type
 `Name Term`.
 
 Lambdas are where names are *bound*, so we use the special `Bind` type
-also provided by RepLib.  Somthing of type `Bind p b` represents a
+also provided by RepLib.  Something of type `Bind p b` represents a
 pair consisting of a *pattern* `p` and a *body* `b`.  The pattern may
 bind names which occur in `b`.  Here is where the power of generic
 programming comes into play: we may use (almost) any types at all as
