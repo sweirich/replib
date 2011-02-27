@@ -58,8 +58,8 @@ isid (Perm p) =
 -- name to two different variables.
 join :: Ord a => Perm a -> Perm a -> Maybe (Perm a)
 join (Perm p1) (Perm p2) =
-     let overlap = Map.intersectionWith (\x y -> (x,y)) p1 p2 in
-     if Map.fold (\ (n1, n2) b -> b && n1 == n2) True overlap then
+     let overlap = Map.intersectionWith (==) p1 p2 in
+     if Map.fold (&&) True overlap then
        Just (Perm (Map.union p1 p2))
        else Nothing
 
