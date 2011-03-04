@@ -147,7 +147,9 @@ checkList g (e:es) (Cons rb) = do
   checkList (subst x e g) (subst x e es) (subst x e t')
 checkList _ _ _ = throwError $ "Unequal number of parameters and arguments"
 
+-- replace this ?  
 multiSubst :: Tele -> [Exp] -> Exp -> M Exp
+-- multiSubst t es a = return (foldr (\x -> subst x es a) (binders t))
 multiSubst Empty     [] e = return e
 multiSubst (Cons rb) (e1:es) e = multiSubst t' es e'
   where ((x,_), t') = unrebind rb

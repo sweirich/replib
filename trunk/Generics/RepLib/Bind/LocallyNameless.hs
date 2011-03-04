@@ -135,8 +135,9 @@ import System.IO.Unsafe (unsafePerformIO)
 -- 
 -- Terms support a number of operations, including alpha-equivalence,
 -- free variables, swapping, etc.  Because Patterns occur in terms, so
--- they too support the same operations.
--- So both Terms and Patterns are instances of the "Alpha" type class
+-- they too support the same operations, but only for the annotations 
+-- inside them.
+-- Therefore, both Terms and Patterns are instances of the "Alpha" type class
 -- which lists these operations.  However, some types (such as [Name])
 -- are both Terms and Patterns, and the behavior of the operations 
 -- is different when we use [Name] as a term and [Name] as a pattern.
@@ -145,7 +146,8 @@ import System.IO.Unsafe (unsafePerformIO)
 --
 -- [SCW: could we use multiparameter type classes? Alpha m t]
 -- 
--- Patterns also support a few extra operations that Terms do not. 
+-- Patterns also support a few extra operations that Terms do not 
+-- for dealing with the binding variables. 
 --     These are used to find the index of names inside patterns.
 ------------------------------------------------------------
 
@@ -251,7 +253,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   open = openR1 rep1
 
   -- | See 'acompare'.
-  acompare' :: AlphaCtx -> a -> a -> FreshM Ordering
+  acompare' :: AlphaCtx -> a -> a -> Ordering
   acompare' = acompareR1 rep1
 
 
@@ -307,7 +309,7 @@ data AlphaD a = AlphaD {
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> AnyName -> (Integer, Bool),
   nthpatD   :: a -> Integer -> (Integer, Maybe AnyName),
-  acompareD :: AlphaCtx -> a -> a -> FreshM Ordering
+  acompareD :: AlphaCtx -> a -> a -> Ordering
   }
 
 instance Alpha a => Sat (AlphaD a) where
@@ -452,6 +454,33 @@ nthpatL (r :+: rs) (t :*: ts) i =
     s@(_, Just n) -> s
     (j, Nothing) -> nthpatL rs ts j
 
+-- Exactly like the generic Ord instance defined in Generics.RepLib.PreludeLib,
+-- except that the comparison operation takes an AlphaCtx
+
+acompareR1 :: R1 AlphaD a -> AlphaCtx -> a -> a -> Ordering
+acompareR1 Int1  c = \x y -> compare x y
+acompareR1 Char1 c = \x y -> compare x y
+acompareR1 (Data1 str cons) c = \x y ->
+             let loop (Con emb rec : rest) =
+                     case (from emb x, from emb y) of
+                        (Just t1, Just t2) -> compareTupM rec c t1 t2
+                        (Just t1, Nothing) -> LT
+                        (Nothing, Just t2) -> GT
+                        (Nothing, Nothing) -> loop rest
+             in loop cons
+acompareR1 r1 c = error ("compareR1 not supported for " ++ show r1)
+
+lexord         :: Ordering -> Ordering -> Ordering
+lexord LT ord  =  LT
+lexord EQ ord  =  ord
+lexord GT ord  =  GT
+
+compareTupM :: MTup AlphaD l -> AlphaCtx -> l -> l -> Ordering
+compareTupM MNil c Nil Nil = EQ
+compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
+   lexord (acompareD x c y z) (compareTupM xs c ys zs)
+
+
 ------------------------------------------------------------
 -- Specific Alpha instances for the four important type 
 -- constructors:
@@ -510,8 +539,8 @@ instance Rep a => Alpha (Name a) where
   nthpatrec nm 0 = (0, Just (AnyName nm))
   nthpatrec nm i = (i - 1, Nothing)
 
-  acompare' c (Nm r1 n1) (Nm r2 n2) | mode c == Term = return $ lexord (compare r1 r2) (compare n1 n2)
-  acompare' c _ _ | mode c == Pat = return EQ
+  acompare' c (Nm r1 n1) (Nm r2 n2) | mode c == Term = lexord (compare r1 r2) (compare n1 n2)
+  acompare' c _ _ | mode c == Pat = EQ
 
 instance Alpha AnyName  where
   fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
@@ -864,7 +893,7 @@ findpat x n = case findpatrec x n of
 
 -- | An alpha-respecting total order on terms involving binders.
 acompare :: Alpha a => a -> a -> Ordering
-acompare x y = runFreshM $ acompare' initial x y
+acompare x y = acompare' initial x y
 
 ------------------------------------------------------------
 -- Opening binders
@@ -1031,31 +1060,6 @@ instance (Subst c a) => Subst c (Annot a)
 -- Alpha-respecting comparison
 -----------------------------------------------------------
 
--- Exactly like the generic Ord instance defined in Generics.RepLib.PreludeLib,
--- except that the comparison operation lives in a monad.
-
-acompareR1 :: R1 AlphaD a -> AlphaCtx -> a -> a -> FreshM Ordering
-acompareR1 Int1  c = \x y -> return $ compare x y
-acompareR1 Char1 c = \x y -> return $ compare x y
-acompareR1 (Data1 str cons) c = \x y ->
-             let loop (Con emb rec : rest) =
-                     case (from emb x, from emb y) of
-                        (Just t1, Just t2) -> compareTupM rec c t1 t2
-                        (Just t1, Nothing) -> return LT
-                        (Nothing, Just t2) -> return GT
-                        (Nothing, Nothing) -> loop rest
-             in loop cons
-acompareR1 r1 c = error ("compareR1 not supported for " ++ show r1)
-
-lexord         :: Ordering -> Ordering -> Ordering
-lexord LT ord  =  LT
-lexord EQ ord  =  ord
-lexord GT ord  =  GT
-
-compareTupM :: MTup AlphaD l -> AlphaCtx -> l -> l -> FreshM Ordering
-compareTupM MNil c Nil Nil = return EQ
-compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
-    liftM2 lexord (acompareD x c y z) (compareTupM xs c ys zs)
 
 -------------------- TESTING CODE --------------------------------
 data Exp = V (Name Exp)
