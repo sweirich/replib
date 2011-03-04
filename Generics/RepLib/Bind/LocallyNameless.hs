@@ -16,12 +16,6 @@
 
 {- Tricky things about the design.
 
-Equality for binders is defined in terms of aeq, *not* equality for
-the subcomponents. If you want to use a specialized form of equality
-for a particular type, (to ignore source locations for example) you
-need to edit match to take that into accont. Merely creating a special
-instance of Eq won't work!
-
 Single/multiple substitutions are *not* defined in terms of
 each other.
 
@@ -122,6 +116,40 @@ import Control.Applicative (Applicative)
 import System.IO.Unsafe (unsafePerformIO)
 
 ------------------------------------------------------------
+-- Overview
+--
+-- We have two classes of types: 
+--    Terms (which contain binders) and 
+--    Patterns (which contain variables)
+-- 
+-- Terms include 
+--    Names 
+--    Bind a b when a is a Pattern and b is a Term
+--    Standard type constructors (Unit, (,), Maybe, [], etc)
+-- 
+-- Patterns include
+--    Names
+--    Annot a when a is a Term
+--    Rebind a b when a and b are both Patterns
+--    Standard type constructors (Unit, (,), Maybe, [], etc)
+-- 
+-- Terms support a number of operations, including alpha-equivalence,
+-- free variables, swapping, etc.  Because Patterns occur in terms, so
+-- they too support the same operations.
+-- So both Terms and Patterns are instances of the "Alpha" type class
+-- which lists these operations.  However, some types (such as [Name])
+-- are both Terms and Patterns, and the behavior of the operations 
+-- is different when we use [Name] as a term and [Name] as a pattern.
+-- Therefore, we index each of the operations with a mode that tells us 
+-- what version we should be defining.
+--
+-- [SCW: could we use multiparameter type classes? Alpha m t]
+-- 
+-- Patterns also support a few extra operations that Terms do not. 
+--     These are used to find the index of names inside patterns.
+------------------------------------------------------------
+
+------------------------------------------------------------
 -- Basic types
 ------------------------------------------------------------
 
@@ -137,18 +165,12 @@ $(derive_abstract [''R])
 --   using 'bind' and take them apart with 'unbind' and friends.
 data Bind a b = B a b
 
--- Set bindings.  TODO: implement.
-data SBind a b = SB a b
-
 -- | An annotation is a \"hole\" in a pattern where variables can be
 --   used, but not bound. For example, patterns may include type
 --   annotations, and those annotations can reference variables
 --   without binding them.  Annotations do nothing special when they
 --   appear elsewhere in terms.
 newtype Annot a = Annot a deriving Eq
-
-instance Show a => Show (Annot a) where
-  showsPrec p (Annot a) = showString "{" . showsPrec 0 a . showString "}"
 
 -- | 'Rebind' supports \"telescopes\" --- that is, patterns where
 --   bound variables appear in multiple subterms.
@@ -212,6 +234,11 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   freshen' :: Fresh m => AlphaCtx -> a -> m (a, Perm AnyName)
   freshen' = freshenR1 rep1
 
+  -- | See 'aeq'.
+  aeq' :: AlphaCtx -> a -> a -> Bool
+  aeq' = aeqR1 rep1
+
+  -- | See 'match'.
   match'   :: AlphaCtx -> a -> a -> Maybe (Perm AnyName)
   match'   = matchR1 rep1
 
@@ -224,7 +251,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   open = openR1 rep1
 
   -- | See 'acompare'.
-  acompare' :: a -> a -> FreshM Ordering
+  acompare' :: AlphaCtx -> a -> a -> FreshM Ordering
   acompare' = acompareR1 rep1
 
 
@@ -241,12 +268,6 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   --   encountered instead.
   findpatrec :: a -> AnyName -> (Integer, Bool)
   findpatrec = findpatR1 rep1
-
--- | Match returns a "permutation ordering". Either the terms are known
--- to be LT or GT, or there is some permutation that can make them equal
--- to eachother
--- data POrdering = PLT | PEq (Perm AnyName) | PGT
-
 
 -- | Many of the operations in the 'Alpha' class take an 'AlphaCtx':
 -- stored information about the iteration as it progresses. This type
@@ -269,8 +290,7 @@ term c  = c { mode = Term }
 -- | A mode is basically a flag that tells us whether we should be
 --   looking at the names in the term, or if we are in a pattern and
 --   should /only/ be looking at the names in the annotations. The
---   standard mode is to use 'Term'; the function 'fv', 'swaps',
---   'lfreshen', 'freshen' and 'match' do this by default.
+--   standard mode is to use 'Term'; many functions do this by default.
 data Mode = Term | Pat deriving (Show, Eq, Read)
 
 -- | Class constraint hackery to allow us to override the default
@@ -281,16 +301,17 @@ data AlphaD a = AlphaD {
   fvD       :: (Monoid (f AnyName), Pointed f) => AlphaCtx -> a -> f AnyName,
   freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
   lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
+  aeqD      :: AlphaCtx -> a -> a -> Bool,
   matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
   closeD    :: Alpha b => AlphaCtx -> b -> a -> a,
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> AnyName -> (Integer, Bool),
   nthpatD   :: a -> Integer -> (Integer, Maybe AnyName),
-  acompareD :: a -> a -> FreshM Ordering
+  acompareD :: AlphaCtx -> a -> a -> FreshM Ordering
   }
 
 instance Alpha a => Sat (AlphaD a) where
-  dict = AlphaD swaps' fv' freshen' lfreshen' match'
+  dict = AlphaD swaps' fv' freshen' lfreshen' aeq' match'
            close open findpatrec nthpatrec acompare'
 
 ----------------------------------------------------------------------
@@ -354,8 +375,23 @@ match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l2 <- match1 rs c t1 t2
   (l1 `join` l2)
 
+aeqR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Bool
+aeqR1 (Data1 _ cons) = loop cons where
+   loop (Con emb reps : rest) p x y =
+     case (from emb x, from emb y) of
+      (Just p1, Just p2) -> aeq1 reps p p1 p2
+      (Nothing, Nothing) -> loop rest p x y
+      (_,_)              -> False
+   loop [] _ _ _ = error "Impossible"
+aeqR1 Int1     = \ _ x y ->  x == y 
+aeqR1 Integer1 = \ _ x y -> x == y 
+aeqR1 Char1    = \ _ x y -> x == y
+aeqR1 _        = \ _ _ _ -> False
 
-
+aeq1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Bool
+aeq1 MNil _ Nil Nil = True
+aeq1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
+  aeqD r c p1 p2 && aeq1 rs c t1 t2
 
 freshenR1 :: Fresh m => R1 (AlphaD) a -> AlphaCtx -> a -> m (a,Perm AnyName)
 freshenR1 (Data1 _ cons) = \ p d ->
@@ -417,50 +453,53 @@ nthpatL (r :+: rs) (t :*: ts) i =
     (j, Nothing) -> nthpatL rs ts j
 
 ------------------------------------------------------------
--- Specific Alpha instances
+-- Specific Alpha instances for the four important type 
+-- constructors:
+--      Names, Bind, Annot, and Rebind
 -----------------------------------------------------------
 
+-- in the name instance, if the mode is Term then the operation
+-- observes the name. In Pat mode the name is pretty much ignored.
 instance Rep a => Alpha (Name a) where
   fv' c n@(Nm _ _)  | mode c == Term = singleton (AnyName n)
   fv' _ _                            = mempty
 
-  swaps' c p x = case mode c of
-                   Term ->
+  swaps' c p x | mode c == Term =
                      case apply p (AnyName x) of
                        AnyName y ->
                          case gcastR (getR y) (getR x) y of
                            Just y' -> y'
                            Nothing -> error "Internal error in swaps': sort mismatch"
-                   Pat  -> x
+  swaps' c p x | mode c == Pat  = x
+
+  aeq' _ x y   | x == y         = True
+  aeq' c n1 n2 | mode c == Term = False
+  aeq' c _ _   | mode c == Pat  = True
 
   match' _ x  y   | x == y         = Just empty
   match' c n1 n2  | mode c == Term = Just $ single (AnyName n1) (AnyName n2)
   match' c _ _    | mode c == Pat  = Just empty
 
-  freshen' c nm = case mode c of
-     Term -> do x <- fresh nm
-                return (x, single (AnyName nm) (AnyName x))
-     Pat  -> return (nm, empty)
+  freshen' c nm | mode c == Term = do x <- fresh nm
+                                      return (x, single (AnyName nm) (AnyName x))
+  freshen' c nm | mode c == Pat  = return (nm, empty)
 
-  --lfreshen' :: LFresh m => Pat a -> (a -> Perm Name -> m b) -> m b
   lfreshen' c nm f = case mode c of
      Term -> do x <- lfresh nm
                 avoid [AnyName x] $ f x (single (AnyName nm) (AnyName x))
      Pat  -> f nm empty
 
-  open c a (Bn r j x) | level c == j =
+  open c a (Bn r j x) | mode c == Term && level c == j =
     case nthpat a x of
       AnyName nm -> case gcastR (getR nm) r nm of
         Just nm' -> nm'
         Nothing  -> error "Internal error in open: sort mismatch"
   open _ _ n = n
 
-  close c a nm@(Nm r n)
-    | mode c == Term =
+  close c a nm@(Nm r n) | mode c == Term =
       case findpat a (AnyName nm) of
         Just x  -> Bn r (level c) x
         Nothing -> nm
-
   close _ _ n = n
 
   findpatrec nm1 (AnyName nm2) =
@@ -471,7 +510,8 @@ instance Rep a => Alpha (Name a) where
   nthpatrec nm 0 = (0, Just (AnyName nm))
   nthpatrec nm i = (i - 1, Nothing)
 
-  acompare' (Nm r1 n1) (Nm r2 n2) = return $ lexord (compare r1 r2) (compare n1 n2)
+  acompare' c (Nm r1 n1) (Nm r2 n2) | mode c == Term = return $ lexord (compare r1 r2) (compare n1 n2)
+  acompare' c _ _ | mode c == Pat = return EQ
 
 instance Alpha AnyName  where
   fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
@@ -481,6 +521,10 @@ instance Alpha AnyName  where
                    Term -> apply p x
                    Pat  -> x
 
+  aeq' _ x y | x == y         = True
+  aeq' c _ _ | mode c == Term = False
+  aeq' c _ _ | mode c == Pat  = True
+
   match' _ x y | x == y          = Just empty
   match' c (AnyName n1) (AnyName n2)
     | mode c == Term =
@@ -489,17 +533,17 @@ instance Alpha AnyName  where
         Nothing  -> Nothing
   match' c _ _           | mode c == Pat   = Just empty
 
-{-
-  compare' _ x y | x == y          = PEQ empty
-  compare' c (AnyName n1) (AnyName n2)
+
+  acompare' _ x y | x == y          = EQ
+  acompare' c (AnyName n1) (AnyName n2)
     | mode c == Term =
       case compareR (getR n1) (getR n2) of
        EQ ->  case gcastR (getR n1) (getR n2) n1 of
-          Just n1' -> PEQ $ single (AnyName n1) (AnyName n2)
+          Just n1' -> acompare' c n1' n2
           Nothing  -> error "impossible"
        otherwise -> otherwise
-  compare' c _ _           | mode c == Pat   = PEQ empty
--}
+  acompare' c _ _           | mode c == Pat   = EQ
+
 
 
   freshen' c (AnyName nm) = case mode c of
@@ -529,39 +573,6 @@ instance Alpha AnyName  where
   nthpatrec nm 0 = (0, Just nm)
   nthpatrec nm i = (i - 1, Nothing)
 
-{-
-instance (Alpha a, Alpha b) => Alpha (SBind a b) where
-    open i a (SB x y)    = SB (open i a x)  (open (incr i) a y)
-    close i a (SB x y)   = SB (close i a x) (close (incr i) a y)
-
-    swaps' p pm (SB x y) =
-        (SB (swaps' (pat p) pm x) (swaps' (incr p) pm y))
-
-    fv' p (SB x y) = fv' (pat p) x ++ fv' p y
-
-    freshen' p (SB x y) = do
-      (x', pm1) <- freshen' (pat p) x
-      (y', pm2) <- freshen' (incr p) (swaps' (incr p) pm1 y)
-      return (SB x' y', pm1 <> pm2)
-
-    lfreshen' p (SB x y) f =
-      avoid (fv' p x) $
-        lfreshen' (pat p) x (\ x' pm1 ->
-        lfreshen' (incr p)   (swaps' (incr p) pm1 y) (\ y' pm2 ->
-        f (SB x' y') (pm1 <> pm2)))
-
-    -- determine a permutation of free variables
-    -- such that p (SB x1 y1) `aeq` SB x2 y2
-    -- this is fairly inefficient with the locally
-    -- nameless representation (unless we can match bound names too)
-    -- but to do that, we need to pass the binding level as
-    -- an argument to match'
-    match' p (SB x1 y1) (SB x2 y2) = do
-      px <- match' (pat p) x1 x2
-      py <- match' (incr p) (swaps' (incr p) px y1) (swaps' (incr p) px y2)
-      return (px <> py)
--}
-
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     swaps' c pm (B x y) =
         (B (swaps' (pat c) pm x)
@@ -580,6 +591,9 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         lfreshen' (incr c) (swaps' (incr c) pm1 y) (\ y' pm2 ->
         f (B x' y') (pm1 <> pm2)))
 
+    aeq' c (B x1 y1) (B x2 y2) = do
+      aeq' (pat c) x1 x2  && aeq' (incr c) y1 y2
+
     match' c (B x1 y1) (B x2 y2) = do
       px <- match' (pat c) x1 x2
       --- check this!
@@ -592,21 +606,9 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     open  c a (B x y)    = B (open (pat c) a x)  (open  (incr c) a y)
     close c a (B x y)    = B (close (pat c) a x) (close (incr c) a y)
 
-    --  Comparing two binding terms. There are two cases:
-    --  * If the patterns have the same number of variables, we open
-    --  the terms with the same fresh names and recursively compare.
-    --  * If the patterns have different number of variables, we
-    --  can order by the number.
-    acompare' bnd1 bnd2 = do
-      l <- unbind2 bnd1 bnd2
-      case l of
-        Just (a1,b1,a2,b2) ->
-          liftM2 lexord (acompare' a1 a2) (acompare' b1 b2)
-        Nothing ->
-          -- CHECK: is fvAny the right thing to use here?
-          return $ (compare `on` S.size) (fvAny a1) (fvAny a2)
-            where a1 = fst (unsafeUnbind bnd1)
-                  a2 = fst (unsafeUnbind bnd2)
+    --  Comparing two binding terms.
+    acompare' c (B a1 a2) (B b1 b2) = 
+      lexord (acompare' (pat c) a1 b1) (acompare' (incr c) a2 b2)
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
@@ -624,10 +626,17 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
       (y', pm2) <- freshen' (incr p) (swaps' (incr p) pm1 y)
       return (R x' y', pm1 <> pm2)
 
+  aeq' p (R x1 y1) (R x2 y2 ) = do 
+      aeq' p x1 x2 && aeq' p y1 y2
+
   match' p (R x1 y1) (R x2 y2) = do
      px <- match' p x1 x2
      py <- match' (incr p)  y1 y2
      (px `join` py)
+
+  acompare' c (R a1 a2) (R b1 b2) = 
+      lexord (acompare' c a1 b1) (acompare' (incr c) a2 b2)
+
 
   open c a (R x y)  = R (open c a x) (open (incr c) a y)
   close c a (R x y) = R (close c a x) (close (incr c) a y)
@@ -647,10 +656,10 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
 instance Alpha a => Alpha (Annot a) where
    swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
-   swaps' c pm (Annot t) | mode c == Term = Annot t
+   swaps' c pm (Annot t) | mode c == Term = error "swaps in Annot" 
 
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
-   fv' c _         | mode c == Term = mempty
+   fv' c _         | mode c == Term = error "fv' in Annot"
 
    freshen' c (Annot t) | mode c == Pat = do
        (t', p) <- freshen' (term c) t
@@ -661,16 +670,20 @@ instance Alpha a => Alpha (Annot a) where
      | mode c == Term = f a empty
      | mode c == Pat  = error "lfreshen' called on Annot in Pat mode!?"
 
+   aeq' c (Annot x) (Annot y) | mode c == Pat = aeq' (term c) x y
+   aeq' c _ _                 | mode c == Term = error "aeq' called on Annot in Term Mode!"
+
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
-   match' c (Annot x) (Annot y) | mode c == Term = if x `aeq` y
-                                    then Just empty
-                                    else Nothing
+   match' c (Annot x) (Annot y) | mode c == Term = error "match' on Annot"
+                                    -- if x `aeq` y
+                                    -- then Just empty
+                                    -- else Nothing
 
    close c b (Annot x) | mode c == Pat  = Annot (close (term c) b x)
-                       | mode c == Term = Annot x
+                       | mode c == Term = error "close on Annot"
 
    open c b (Annot x) | mode c == Pat  = Annot (open (term c) b x)
-                      | mode c == Term = Annot x
+                      | mode c == Term = error "open on Annot"
 
 
    findpatrec _ _ = (0, False)
@@ -707,15 +720,6 @@ bind b c = B b (close initial b c)
 --   names for the binders.
 unsafeUnbind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
 unsafeUnbind (B a b) = (a, open initial a b)
-
--- | The 'Eq' instance for 'Bind' compares bindings for
--- alpha-equality.
-
---- SCW: REMOVE THIS INSTANCE
-{-
-instance (Alpha a, Alpha b, Eq b) => Eq (Bind a b) where
-   b1 == b2 = b1 `aeq` b2
--}
 
 instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
          readPrec = R.parens $ (R.prec app_prec $ do
@@ -756,13 +760,18 @@ unrebind :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 unrebind (R a b) = (a, open (pat initial) a b)
 
 ----------------------------------------------------------
+-- Annot
+----------------------------------------------------------
+
+instance Show a => Show (Annot a) where
+  showsPrec p (Annot a) = showString "{" . showsPrec 0 a . showString "}"
+
+----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
 ----------------------------------------------------------
--- | Determine alpha-equivalence.
+-- | Determine alpha-equivalence of terms
 aeq :: Alpha a => a -> a -> Bool
-aeq t1 t2 = case match t1 t2 of
-              Just p -> isid p
-              _      -> False
+aeq t1 t2 = aeq' initial t1 t2
 
 -- | Determine (alpha-)equivalence of patterns
 aeqBinders :: Alpha a => a -> a -> Bool
@@ -855,7 +864,7 @@ findpat x n = case findpatrec x n of
 
 -- | An alpha-respecting total order on terms involving binders.
 acompare :: Alpha a => a -> a -> Ordering
-acompare x y = runFreshM $ acompare' x y
+acompare x y = runFreshM $ acompare' initial x y
 
 ------------------------------------------------------------
 -- Opening binders
@@ -1025,28 +1034,28 @@ instance (Subst c a) => Subst c (Annot a)
 -- Exactly like the generic Ord instance defined in Generics.RepLib.PreludeLib,
 -- except that the comparison operation lives in a monad.
 
-acompareR1 :: R1 AlphaD a -> a -> a -> FreshM Ordering
-acompareR1 Int1  = \x y -> return $ compare x y
-acompareR1 Char1 = \x y -> return $ compare x y
-acompareR1 (Data1 str cons) = \x y ->
+acompareR1 :: R1 AlphaD a -> AlphaCtx -> a -> a -> FreshM Ordering
+acompareR1 Int1  c = \x y -> return $ compare x y
+acompareR1 Char1 c = \x y -> return $ compare x y
+acompareR1 (Data1 str cons) c = \x y ->
              let loop (Con emb rec : rest) =
                      case (from emb x, from emb y) of
-                        (Just t1, Just t2) -> compareTupM rec t1 t2
+                        (Just t1, Just t2) -> compareTupM rec c t1 t2
                         (Just t1, Nothing) -> return LT
                         (Nothing, Just t2) -> return GT
                         (Nothing, Nothing) -> loop rest
              in loop cons
-acompareR1 r1 = error ("compareR1 not supported for " ++ show r1)
+acompareR1 r1 c = error ("compareR1 not supported for " ++ show r1)
 
 lexord         :: Ordering -> Ordering -> Ordering
 lexord LT ord  =  LT
 lexord EQ ord  =  ord
 lexord GT ord  =  GT
 
-compareTupM :: MTup AlphaD l -> l -> l -> FreshM Ordering
-compareTupM MNil Nil Nil = return EQ
-compareTupM (x :+: xs) (y :*: ys) (z :*: zs) =
-    liftM2 lexord (acompareD x y z) (compareTupM xs ys zs)
+compareTupM :: MTup AlphaD l -> AlphaCtx -> l -> l -> FreshM Ordering
+compareTupM MNil c Nil Nil = return EQ
+compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
+    liftM2 lexord (acompareD x c y z) (compareTupM xs c ys zs)
 
 -------------------- TESTING CODE --------------------------------
 data Exp = V (Name Exp)
