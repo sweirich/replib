@@ -85,7 +85,7 @@ typing rules:
          ci : Pi D. Pi Di. T [x] \in Sigma  where dom(D) = [x] 
          (G, Di, y : M = C [w] |- chk N : A) [ D |-> [N] ]    
     ------------------------------------------------------
-     G |- inf case M with y of [ c [w] => N ] : A 
+     G |- inf case M in A with y of [ c [w] => N ] : A 
 
 -}
 
@@ -184,11 +184,6 @@ sid2 = epi [("B", EStar), ("y", evar "B")] (evar "B")
 ----------------------------------------------------------
 -- Type checker
 
-lookUp :: Name a -> [(Name a, b)] -> M b
-lookUp n []     = throwError $ "Not in scope: " ++ show n
-lookUp v ((x,a):t') | v == x    = return a
-                    | otherwise = lookUp v t'
-
 type M = ErrorT String FreshM
 ok = return ()
 
@@ -197,9 +192,16 @@ runM m = case (runFreshM (runErrorT m)) of
    Left s  -> error s
    Right a -> a 
 
-unPi :: Exp -> M (Bind Tele Exp)
-unPi (EPi bnd) = return bnd
-unPi e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
+lookUp :: Name a -> [(Name a, b)] -> M b
+lookUp n []     = throwError $ "Not in scope: " ++ show n
+lookUp v ((x,a):t') | v == x    = return a
+                    | otherwise = lookUp v t'
+
+
+
+unPi :: Ctx -> Exp -> M (Bind Tele Exp)
+unPi g (EPi bnd) = return bnd
+unPi g e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
 
 unVar :: Exp -> M (Name Exp)
 unVar (EVar x) = return x
@@ -223,7 +225,7 @@ infer g (ELam bnd) = do
     b <- infer g' m
     return . EPi $ bind delta b
 infer g (EApp m ns) = do
-    bnd <- unPi =<< infer g m
+    bnd <- (unPi g) =<< infer g m
     (delta, b) <- unbind bnd
     checks g ns delta  --- ensures that the length ns == length (binders delta)
     return $ substs (binders delta) ns b
@@ -233,18 +235,24 @@ infer g (EPi bnd) = do
     check g' b EStar
     return EStar
 infer g (ETyCon n) = do
-    bnd <- unPi =<< lookUp n sigmaTy
+    bnd <- (unPi g) =<< lookUp n sigmaTy
     (delta, t) <- unbind bnd
     checkEq g t EStar
     return $ EPi bnd
 infer g (EDataCon c) = do 
-  bnd <- unPi =<< lookUp c sigmaData
+  bnd <- (unPi g) =<< lookUp c sigmaData
   (delta, t) <- unbind bnd
-  bnd' <- unPi t
+  bnd' <- unPi g t
   (delta', EApp (ETyCon _) vars) <- unbind bnd'
   vs <- mapM unVar vars
   if vs == binders delta then return $ EPi bnd
      else throwError $ "incorrect result type for " ++ show (EDataCon c)
+infer g (ECase m a bnd) = do 
+   (y, brs) <- unbind bnd
+   t <- infer g m
+   (n, ps)  <- unTApp g t
+   _ <- mapM (checkBr y) brs
+
 
 check :: Ctx -> Exp -> Exp -> M ()
 check g m a = do
