@@ -7,65 +7,127 @@
            , UndecidableInstances
   #-}
 
-{- A simple dependent calculus.
+{- A "simple" core dependent calculus.
 
-     M := x | * | \D. M | M [N] | Pi D. B | c
-     D := . | D, x:A
+term     M ::= x | * | \D. M | M [N] | Pi D. B 
+             | T | c 
+             | case M with y of [ c [x] => N ]
 
-     typing rules:
+tele     D ::= . | x:A, D
+
+ctx      G ::= . | G, x:A          
+
+judgement forms:
+    G |- D wf         telescope wellformedness
+    G |- [ M ] : D    check a list of terms against a telescope
+    G |- chk M : A    check that term M has type A
+    G |- inf M : A    infer the type of M (which is A)
+    G |- A == B       check that A & B are equal
+
+typing rules:
+
+     telescope well formedness   (checkTele)
+
+     G |-chk A : *    G,x:A |- D wf
+     ----------------------------- cons
+     G |- x:A, D wf
+
+     ------------- nil
+     G |- [] wf
+
+     list of terms vs a telescope   (checks)
+
+     G |-chk N : A    (G |- [N] : D)[x |-> N]
+     -------------------------------------- cons
+     G |- N, [N] : x:A,D
+
+     -------------- nil
+     G |- [] : .
+
+     terms (check && infer)
 
      x:A \in G
      -----------
-     G |- x : A
+     G |- inf x : A
 
-     c:A \in Sigma
-     -------------
-     G |- c : A
+     G |- D wf        G, D |- chk B : *              
+     --------------------------------
+     G |- inf Pi D.B : *
 
-     G, D |- B : *
-     ---------------
-     G |- Pi D.B : *
-
-     G, D |- M : B
-     ----------------------
-     G |- \D.M : Pi D. B
-
-     G |- M : Pi D.B      G |- [N] : D
-     ----------------------------------
-     G |- M [N] : B[D |-> [N]]
+     G |- D wf        G, D |- inf M : B
+     -------------------------------
+     G |- inf \D.M : Pi D. B
+ 
+     G |- inf M : Pi D.B      G |- [N] : D
+     ---------------------------------------      
+     G |- inf M [N] : B [ D |-> [N] ]          ** note: simultaneous substitution **
 
      ----------
-     G |- * : *
+     G |- inf * : *
 
+     G |- inf  M : A    G |- A == B      
+     ----------------------------
+     G |- chk  M : B
 
+     A = Pi D . *
+     T : A \in Sigma 
+     ---------------------  
+     G |- inf T : A
 
-     G |- N : B    G |- A === B : *    (G |- [N] : D)[x |-> N]
-     ---------------------------------------------------------
-     G |- N, [N] : x:A,D
+     dom(D) = [x]
+     A = Pi D. Pi D'. T [x]
+     c: A \in Sigma
+     -------------
+     G |- inf c : A 
 
+     G |- inf M : T [ P ] 
+     for each i,  
+         ci : Pi D. Pi Di. T [x] \in Sigma  where dom(D) = [x] 
+         (G, Di, y : M = C [w] |- chk N : A) [ D |-> [N] ]    
+    ------------------------------------------------------
+     G |- inf case M with y of [ c [w] => N ] : A 
 
 -}
 
 import Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib
 
+import Data.Monoid
 import Control.Monad
 import Control.Monad.Trans.Error
+
+data TyCon    -- tags for the names of type constructors
+data DataCon  -- and data constructors so that we don't get them
+              -- confused with variables
+
+-- initial context of data and type constructors
+sigmaData :: [(Name DataCon, Exp)]
+sigmaData = undefined
+
+sigmaTy  :: [(Name TyCon, Exp)]
+sigmaTy = undefined
+
 
 data Exp = EVar (Name Exp)
          | EStar
          | ELam (Bind Tele Exp)
          | EApp Exp [Exp]
          | EPi (Bind Tele Exp)
+         | ETyCon (Name TyCon)
+         | EDataCon (Name DataCon)
+         | ECase Exp (Bind (Name Exp)
+                           [Bind [Name Exp] Exp])
   deriving Show
 
 data Tele = Empty
           | Cons (Rebind (Name Exp, Annot Exp) Tele)
   deriving Show
 
-$(derive [''Exp, ''Tele])
+type Ctx  = [ (Name Exp, Exp) ]
 
-instance Alpha Exp
+$(derive [''TyCon, ''DataCon, ''Exp, ''Tele])
+
+instance Alpha Exp    
 instance Alpha Tele
 
 instance Subst Exp Exp where
@@ -73,6 +135,10 @@ instance Subst Exp Exp where
   isvar _        = Nothing
 
 instance Subst Exp Tele
+
+------------------------------------------------
+
+-- for examples
 
 evar :: String -> Exp
 evar = EVar . string2Name
@@ -93,71 +159,109 @@ mkTele :: [(String, Exp)] -> Tele
 mkTele []          = Empty
 mkTele ((x,e) : t) = Cons (rebind (string2Name x, Annot e) (mkTele t))
 
-appTele :: Tele -> Tele -> Tele
-appTele Empty     t2 = t2
-appTele (Cons rb) t2 = Cons (rebind p (appTele t1' t2))
-  where (p, t1') = unrebind rb
+{- Polymorphic identity function -}
 
-lookUp :: Name Exp -> Tele -> M Exp
-lookUp n Empty     = throwError $ "Not in scope: " ++ show n
-lookUp v (Cons rb) | v == x    = return a
-                   | otherwise = lookUp v t'
-  where ((x, Annot a), t') = unrebind rb
+pid :: Exp 
+pid = elam [("A", EStar), ("x", evar "A")] (evar "x")
 
-{- Polymorphic identity function:
-
-*Main> elam [("A", EStar), ("x", evar "A")] (evar "x")
+{-
 ELam (<(Cons (<<(A,{EStar})>> Cons (<<(x,{EVar 0@0})>> Empty)))> EVar 0@1)
 -}
 
-type M = ErrorT String LFreshM
+{- Polymorphic identity type: -}
+sid :: Exp 
+sid = epi [("A", EStar), ("x", evar "A")] (evar "A")
+
+{-
+EPi (<(Cons (<<(A,{EStar})>> Cons (<<(x,{EVar 0@0})>> Empty)))> EVar 0@0)
+-}
+
+{- Polymorphic identity type: -}
+sid2 :: Exp 
+sid2 = epi [("B", EStar), ("y", evar "B")] (evar "B")
+
+
+----------------------------------------------------------
+-- Type checker
+
+lookUp :: Name a -> [(Name a, b)] -> M b
+lookUp n []     = throwError $ "Not in scope: " ++ show n
+lookUp v ((x,a):t') | v == x    = return a
+                    | otherwise = lookUp v t'
+
+type M = ErrorT String FreshM
 ok = return ()
+
+runM :: M a -> a 
+runM m = case (runFreshM (runErrorT m)) of 
+   Left s  -> error s
+   Right a -> a 
 
 unPi :: Exp -> M (Bind Tele Exp)
 unPi (EPi bnd) = return bnd
 unPi e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
 
-infer :: Tele -> Exp -> M Exp
+unVar :: Exp -> M (Name Exp)
+unVar (EVar x) = return x
+unVar e        = throwError $ "Expected variable, got " ++ show e ++ " instead"
+
+-- Check a telescope and push it onto the context
+checkTele :: Ctx -> Tele -> M Ctx
+checkTele g Empty = return g
+checkTele g (Cons rb) = do 
+  let ((x,Annot t), tele) = unrebind rb 
+  a <- infer g t
+  check g a EStar
+  checkTele ((x,t) : g) tele
+
+infer :: Ctx -> Exp -> M Exp
 infer g (EVar x)  = lookUp x g
 infer _ EStar     = return EStar
 infer g (ELam bnd) = do
-  lunbind bnd $ \(delta, m) -> do
-    b <- infer (g `appTele` delta) m
+    (delta, m) <- unbind bnd
+    g' <- checkTele g delta
+    b <- infer g' m
     return . EPi $ bind delta b
 infer g (EApp m ns) = do
-  bnd <- unPi =<< infer g m
-  lunbind bnd $ \(delta, b) -> do
-    checkList g ns delta
-    multiSubst delta ns b
+    bnd <- unPi =<< infer g m
+    (delta, b) <- unbind bnd
+    checks g ns delta  --- ensures that the length ns == length (binders delta)
+    return $ substs (binders delta) ns b
 infer g (EPi bnd) = do
-  lunbind bnd $ \(delta, b) -> do
-    check (g `appTele` delta) b EStar
+    (delta, b) <- unbind bnd
+    g' <- checkTele g delta
+    check g' b EStar
     return EStar
+infer g (ETyCon n) = do
+    bnd <- unPi =<< lookUp n sigmaTy
+    (delta, t) <- unbind bnd
+    checkEq g t EStar
+    return $ EPi bnd
+infer g (EDataCon c) = do 
+  bnd <- unPi =<< lookUp c sigmaData
+  (delta, t) <- unbind bnd
+  bnd' <- unPi t
+  (delta', EApp (ETyCon _) vars) <- unbind bnd'
+  vs <- mapM unVar vars
+  if vs == binders delta then return $ EPi bnd
+     else throwError $ "incorrect result type for " ++ show (EDataCon c)
 
-check :: Tele -> Exp -> Exp -> M ()
+check :: Ctx -> Exp -> Exp -> M ()
 check g m a = do
   b <- infer g m
-  checkEq b a
+  checkEq g b a
 
-checkList :: Tele -> [Exp] -> Tele -> M ()
-checkList _ [] Empty = ok
-checkList g (e:es) (Cons rb) = do
+checks :: Ctx -> [Exp] -> Tele -> M ()
+checks _ [] Empty = ok
+checks g (e:es) (Cons rb) = do
   let ((x, Annot a), t') = unrebind rb
   check g e a
-  checkList (subst x e g) (subst x e es) (subst x e t')
-checkList _ _ _ = throwError $ "Unequal number of parameters and arguments"
+  checks (subst x e g) (subst x e es) (subst x e t')
+checks _ _ _ = throwError $ "Unequal number of parameters and arguments"
 
--- replace this ?  
-multiSubst :: Tele -> [Exp] -> Exp -> M Exp
--- multiSubst t es a = return (foldr (\x -> subst x es a) (binders t))
-multiSubst Empty     [] e = return e
-multiSubst (Cons rb) (e1:es) e = multiSubst t' es e'
-  where ((x,_), t') = unrebind rb
-        e' = subst x e1 e
-multiSubst _ _ _ = throwError $ "Unequal lengths in multiSubst" -- shouldn't happen
 
 -- A conservative, inexpressive notion of equality, just for the sake
 -- of the example.
-checkEq :: Exp -> Exp -> M ()
-checkEq e1 e2 = if aeq e1 e2 then return () else throwError $ "Couldn't match: " ++ show e1 ++ " " ++ show e2
+checkEq :: Ctx -> Exp -> Exp -> M ()
+checkEq _ e1 e2 = if aeq e1 e2 then return () else throwError $ "Couldn't match: " ++ show e1 ++ " " ++ show e2
 
