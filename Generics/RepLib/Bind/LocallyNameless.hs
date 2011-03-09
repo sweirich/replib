@@ -1078,6 +1078,7 @@ instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b)
 
 instance (Subst c a) => Subst c (Annot a)
+instance (Subst c a) => Subst c (Rec a)
 
 -------------------- TESTING CODE --------------------------------
 data Exp = V (Name Exp)
