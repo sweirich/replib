@@ -135,7 +135,7 @@ instance Alpha Exp
 instance Alpha Tele
 
 instance Subst Exp Exp where
-  isvar (EVar v) = Just (v, id)
+  isvar (EVar v) = Just (SubstName v)
   isvar _        = Nothing
 
 instance Subst Exp Tele

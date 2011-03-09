@@ -44,7 +44,7 @@ instance Alpha Exp
 -- avoiding substitution. It just needs to know where the variables
 -- are.
 instance Subst Exp Exp where
-   isvar (Var x) = Just (x,id)
+   isvar (Var x) = Just (SubstName x)
    isvar _       = Nothing
 
 

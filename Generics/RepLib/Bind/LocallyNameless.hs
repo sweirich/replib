@@ -10,7 +10,8 @@
              GADTs,
              EmptyDataDecls,
              StandaloneDeriving,
-             GeneralizedNewtypeDeriving
+             GeneralizedNewtypeDeriving, 
+             TypeFamilies
   #-}
 {- LANGUAGE  KitchenSink -}
 
@@ -81,7 +82,7 @@ module Generics.RepLib.Bind.LocallyNameless
     rec, unrec,
 
     -- * Substitution
-    Subst(..),
+    Subst(..),SubstName(..),
 
    -- * Advanced
    AlphaCtx, matchR1,
@@ -990,41 +991,45 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) g =
 -- Substitution
 ------------------------------------------------------------
 
+data SubstName a b where
+  SubstName :: (a ~ b) => Name a -> SubstName a b
+
+
 -- | The 'Subst' class governs capture-avoiding substitution.  To
 --   derive this class, you only need to indicate where the variables
 --   are in the data type, by overriding the method 'isvar'.
 class (Rep1 (SubstD b) a) => Subst b a where
 
-  -- | If the argument is a variable, return its name and a function
-  --   to generate a substituted term.  Return 'Nothing' for
+  -- | If the argument is a variable, return its name wrapped in the
+  --   'SubstName' constructor.  Return 'Nothing' for
   --   non-variable arguments.
+
   -- why not isvar:: (a ~ b) => a -> Maybe (Name b) ??
-  isvar :: a -> Maybe (Name b, b -> a)
+  isvar :: a -> Maybe (SubstName a b)
   isvar x = Nothing
 
   -- | @'subst' nm sub tm@ substitutes @sub@ for @nm@ in @tm@.
   subst :: Name b -> b -> a -> a
   subst n u x =
-      case isvar x of
-        Just (m, f) | m == n -> f u
-        Just (_, _) -> x
+     case (isvar x :: Maybe (SubstName a b)) of
+        Just (SubstName m) -> if  m == n then u else x
         Nothing -> substR1 rep1 n u x
 
   -- | Perform several simultaneous substitutions.
   substs :: [Name b] -> [b] -> a -> a
   substs ns us x =
-      case isvar x of
-        Just (m, f) ->
+      case (isvar x :: Maybe (SubstName a b)) of
+        Just (SubstName m) ->
           if length ns /= length us
             then error "BUG: Number of vars and terms must match in multisubstitution"
             else case m `List.elemIndex` ns of
-               Just i  -> f (us !! i)
+               Just i  -> (us !! i)
                Nothing -> x
         Nothing -> substsR1 rep1 ns us x
 
 -- | Reified class dictionary for 'Subst'.
 data SubstD b a = SubstD {
-  isvarD  :: a -> Maybe (Name b, b -> a),
+  isvarD  :: a -> Maybe (SubstName a b),
   substD  ::  Name b -> b -> a -> a ,
   substsD :: [Name b] -> [b] -> a -> a
 }
@@ -1089,7 +1094,7 @@ $(derive [''Exp])
 
 instance Alpha Exp
 instance Subst Exp Exp where
-   isvar (V n) = Just (n, id)
+   isvar (V n) = Just (SubstName n)
    isvar _     = Nothing
 
 nameA, nameB, nameC :: Name Exp
