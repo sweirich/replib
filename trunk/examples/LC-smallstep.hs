@@ -30,7 +30,7 @@ $(derive [''Term])
 
 instance Alpha Term
 instance Subst Term Term where
-  isvar (Var v) = Just (v, id)
+  isvar (Var v) = Just (SubstName v)
   isvar _       = Nothing
 
 done :: MonadPlus m => m a

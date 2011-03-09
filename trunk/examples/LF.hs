@@ -89,7 +89,7 @@ instance Subst Tm Ty
 -- For Tm we must implement isvar so the Subst instance knows about
 -- term variables.
 instance Subst Tm Tm where
-  isvar (TmVar v) = Just (v, id)
+  isvar (TmVar v) = Just (SubstName v)
   isvar _         = Nothing
 
 -- A declaration is either

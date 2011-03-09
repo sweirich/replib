@@ -39,9 +39,9 @@ instance Alpha Tm where
 
 instance Subst Tm Ty where
 instance Subst Tm Tm where
-  isvar (TmVar x) = Just (x, id)
+  isvar (TmVar x) = Just (SubstName x)
 instance Subst Ty Ty where
-  isvar (TyVar x) = Just (x, id)
+  isvar (TyVar x) = Just (SubstName x)
 ------------------------------------------------------
 type Delta = [ TyName ]
 type Gamma = [ (TmName, Ty) ]

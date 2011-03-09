@@ -38,7 +38,7 @@ instance Alpha Exp where
 
 instance Subst Exp Ty where
 instance Subst Exp Exp where
-   isvar (Var x) = Just (x,id)
+   isvar (Var x) = Just (SubstName x)
    isvar _       = Nothing
 
 -- Equivalence for expressions is alpha equivalence. So we can't derive Eq

@@ -118,17 +118,17 @@ use the `subst` function to substitute things of type `b` for `Name`s
 occurring in things of type `a`.  The only method we must implement
 ourselves is `isvar`, which has the type
 
-    isvar :: a -> Maybe (Name b, b -> a)
+    isvar :: a -> Maybe (SubstName a b)
 
 The documentation for `isvar` states "If the argument is a variable,
-return its name and a function to generate a substituted term. Return
+return its name wrapped with the 'SubstName' constructor. Return
 `Nothing` for non-variable arguments."  Even the most sophisticated
 generic programming library can't read our minds: we have to tell it
 which values of our data type are variables (*i.e.* things that can be
 substituted for).  For `Term` this is not hard:
 
 > instance Subst Term Term where
->   isvar (Var v) = Just (v, id)
+>   isvar (Var v) = Just (SubstName v)
 >   isvar _       = Nothing
 
 That's all!
@@ -434,7 +434,7 @@ other expressions.
 > instance Alpha Tele
 
 > instance Subst Exp Exp where
->   isvar (EVar v) = Just (v, id)
+>   isvar (EVar v) = Just (SubstName v)
 >   isvar _        = Nothing
 
 We also need to be able to substitute expressions for variables

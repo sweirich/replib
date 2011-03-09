@@ -79,7 +79,7 @@ deriving instance Eq Exp
 
 instance Subst Exp SourcePos where
 instance Subst Exp Exp where
-   isvar (Var _ x) = Just (x,id)
+   isvar (Var _ x) = Just (SubstName x)
    isvar _       = Nothing
 
 type M a = Reader Integer a
