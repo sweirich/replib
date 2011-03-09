@@ -60,7 +60,8 @@ typing rules:
  
      G |- inf M : Pi D.B      G |- [N] : D
      ---------------------------------------      
-     G |- inf M [N] : B [ D |-> [N] ]          ** note: simultaneous substitution **
+     G |- inf M [N] : B [ D |-> [N] ]         
+       ** note: simultaneous substitution for the domain **
 
      ----------
      G |- inf * : *
@@ -74,18 +75,19 @@ typing rules:
      ---------------------  
      G |- inf T : A
 
-     dom(D) = [x]
-     A = Pi D. Pi D'. T [x]
      c: A \in Sigma
+     A = Pi D. Pi D'. T [x]
+     dom(D) = [x]
      -------------
      G |- inf c : A 
 
      G |- inf M : T [ P ] 
+     G |- chk A : *
      for each i,  
          ci : Pi D. Pi Di. T [x] \in Sigma  where dom(D) = [x] 
-         (G, Di, y : M = C [w] |- chk N : A) [ D |-> [N] ]    
+         G, Di[ D |-> [P] ], y : M = C [w] |- chk N : A     
     ------------------------------------------------------
-     G |- inf case M in A with y of [ c [w] => N ] : A 
+     G |-inf case M in A with y of [ c [w] => N ] : A 
 
 -}
 
@@ -107,6 +109,8 @@ sigmaData = undefined
 sigmaTy  :: [(Name TyCon, Exp)]
 sigmaTy = undefined
 
+teq :: Name TyCon
+teq = string2Name "=="
 
 data Exp = EVar (Name Exp)
          | EStar
@@ -115,8 +119,8 @@ data Exp = EVar (Name Exp)
          | EPi (Bind Tele Exp)
          | ETyCon (Name TyCon)
          | EDataCon (Name DataCon)
-         | ECase Exp (Bind (Name Exp)
-                           [Bind [Name Exp] Exp])
+         | ECase Exp Exp (Bind (Name Exp)
+                    [(Name DataCon,Bind [Name Exp] Exp)])
   deriving Show
 
 data Tele = Empty
@@ -197,8 +201,6 @@ lookUp n []     = throwError $ "Not in scope: " ++ show n
 lookUp v ((x,a):t') | v == x    = return a
                     | otherwise = lookUp v t'
 
-
-
 unPi :: Ctx -> Exp -> M (Bind Tele Exp)
 unPi g (EPi bnd) = return bnd
 unPi g e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
@@ -206,6 +208,10 @@ unPi g e         = throwError $ "Expected pi type, got " ++ show e ++ " instead"
 unVar :: Exp -> M (Name Exp)
 unVar (EVar x) = return x
 unVar e        = throwError $ "Expected variable, got " ++ show e ++ " instead"
+
+unTApp :: Ctx -> Exp -> M (Name TyCon, [Exp])
+unTApp _ (EApp (ETyCon n) args) = return (n, args)
+unTApp _ e = throwError $ "Expected datatype, got " ++ show e++ " instead"
 
 -- Check a telescope and push it onto the context
 checkTele :: Ctx -> Tele -> M Ctx
@@ -248,11 +254,21 @@ infer g (EDataCon c) = do
   if vs == binders delta then return $ EPi bnd
      else throwError $ "incorrect result type for " ++ show (EDataCon c)
 infer g (ECase m a bnd) = do 
+   check g a EStar
    (y, brs) <- unbind bnd
    t <- infer g m
    (n, ps)  <- unTApp g t
-   _ <- mapM (checkBr y) brs
-
+   _ <- mapM (checkBr y ps) brs 
+   return a 
+    where 
+      checkBr y ps (c,bnd) = do     
+         cbnd <- (unPi g) =<< lookUp c sigmaData
+         (delta, rest) <- unbind cbnd
+         cbnd' <- unPi g rest
+         Just (deltai, _, ws, n) <- unbind2 cbnd' bnd
+         g' <- checkTele g (substs (binders delta) ps deltai)
+         let g'' = (y, EApp (ETyCon teq) [m, (EApp (EDataCon c) (map EVar ws))]): g' 
+         check g' n a
 
 check :: Ctx -> Exp -> Exp -> M ()
 check g m a = do
