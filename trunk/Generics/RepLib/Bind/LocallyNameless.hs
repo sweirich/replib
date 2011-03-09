@@ -14,13 +14,6 @@
   #-}
 {- LANGUAGE  KitchenSink -}
 
-{- Tricky things about the design.
-
-Single/multiple substitutions are *not* defined in terms of
-each other.
-
- -}
-
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Generics.RepLib.Bind.LocallyNameless
@@ -47,7 +40,7 @@ each other.
 
 module Generics.RepLib.Bind.LocallyNameless
   ( -- * Basic types
-    Name, AnyName(..), Bind, Annot(..), Rebind,
+    Name, AnyName(..), Bind, Annot(..), Rebind, Rec,
 
     -- ** Utilities
     integer2Name, string2Name, s2n, makeName,
@@ -83,6 +76,9 @@ module Generics.RepLib.Bind.LocallyNameless
 
     -- * Rebinding operations
     rebind, unrebind,
+
+    -- * Rec operations
+    rec, unrec,
 
     -- * Substitution
     Subst(..),
@@ -178,7 +174,12 @@ newtype Annot a = Annot a deriving Eq
 --   bound variables appear in multiple subterms.
 data Rebind a b = R a b
 
-$(derive [''Bind, ''Name, ''Annot, ''Rebind])
+-- | 'Rec' supports recursive patterns --- that is, patterns where
+-- any variables anywhere in the pattern are bound in the pattern
+-- itself.  Useful for lectrec (and Agda's dot notation).
+data Rec a = Rec a 
+
+$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec])
 
 --------------------------------------------------
 -- Pointed functors
@@ -337,7 +338,6 @@ openR1 (Data1 _ cons) = \i a d ->
 openR1 _               = \_ _ d -> d
 
 
-
 swapsR1 :: R1 AlphaD a -> AlphaCtx -> Perm AnyName -> a -> a
 swapsR1 (Data1 _ cons)  = \ p x d ->
   case (findCon cons d) of
@@ -484,7 +484,7 @@ compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
 ------------------------------------------------------------
 -- Specific Alpha instances for the four important type 
 -- constructors:
---      Names, Bind, Annot, and Rebind
+--      Names, Bind, Annot, Rebind and Rec
 -----------------------------------------------------------
 
 -- in the name instance, if the mode is Term then the operation
@@ -540,6 +540,9 @@ instance Rep a => Alpha (Name a) where
   nthpatrec nm i = (i - 1, Nothing)
 
   acompare' c (Nm r1 n1) (Nm r2 n2) | mode c == Term = lexord (compare r1 r2) (compare n1 n2)
+  acompare' c (Bn r1 m1 n1) (Bn r2 m2 n2) | mode c == Term = lexord (compare r1 r2) (lexord (compare m1 m2) (compare n1 n2))
+  acompare' c (Nm _ _) (Bn _ _ _) | mode c == Term = LT
+  acompare' c (Bn _ _ _) (Nm _ _) | mode c == Term = GT
   acompare' c _ _ | mode c == Pat = EQ
 
 instance Alpha AnyName  where
@@ -625,7 +628,6 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
 
     match' c (B x1 y1) (B x2 y2) = do
       px <- match' (pat c) x1 x2
-      --- check this!
       py <- match' (incr c) y1 y2
       -- need to make sure that all permutations of
       -- bound variables at this
@@ -682,13 +684,15 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
         (j , Just n) -> (j, Just n)
         (j , Nothing) -> nthpatrec y j
 
-
+-- note: for Annots, when the mode is "term" then we are 
+-- implementing the "binding" version of the function
+-- and we generally should treat the annots as constants
 instance Alpha a => Alpha (Annot a) where
    swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
-   swaps' c pm (Annot t) | mode c == Term = error "swaps in Annot" 
+   swaps' c pm (Annot t) | mode c == Term = Annot t 
 
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
-   fv' c _         | mode c == Term = error "fv' in Annot"
+   fv' c _         | mode c == Term = mempty
 
    freshen' c (Annot t) | mode c == Pat = do
        (t', p) <- freshen' (term c) t
@@ -700,13 +704,15 @@ instance Alpha a => Alpha (Annot a) where
      | mode c == Pat  = error "lfreshen' called on Annot in Pat mode!?"
 
    aeq' c (Annot x) (Annot y) | mode c == Pat = aeq' (term c) x y
-   aeq' c _ _                 | mode c == Term = error "aeq' called on Annot in Term Mode!"
+   aeq' c (Annot x) (Annot y) | mode c == Term = aeq' (term c) x y -- yes, exactly the same
+
+   acompare' c (Annot x) (Annot y) = acompare' (term c) x y
 
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
-   match' c (Annot x) (Annot y) | mode c == Term = error "match' on Annot"
-                                    -- if x `aeq` y
-                                    -- then Just empty
-                                    -- else Nothing
+   match' c (Annot x) (Annot y) | mode c == Term = 
+                                    if x `aeq` y
+                                    then Just empty
+                                    else Nothing
 
    close c b (Annot x) | mode c == Pat  = Annot (close (term c) b x)
                        | mode c == Term = error "close on Annot"
@@ -717,6 +723,12 @@ instance Alpha a => Alpha (Annot a) where
 
    findpatrec _ _ = (0, False)
    nthpatrec nm i = (i, Nothing)
+
+
+instance Alpha a => Alpha (Rec a) where
+   close c b (Rec x) = Rec (close (incr c) b x)
+
+   open c b (Rec x)  = Rec (open (incr c) b x)
 
 -- Instances for other types use the default definitions.
 instance Alpha Bool
@@ -789,6 +801,19 @@ unrebind :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 unrebind (R a b) = (a, open (pat initial) a b)
 
 ----------------------------------------------------------
+-- Rec operations
+----------------------------------------------------------
+
+rec :: (Alpha a) => a -> Rec a 
+rec a = Rec (close (pat initial) a a)
+
+unrec :: (Alpha a) => Rec a -> a 
+unrec (Rec a) = (open (pat initial) a a)
+
+instance Show a => Show (Rec a) where
+  showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
+
+----------------------------------------------------------
 -- Annot
 ----------------------------------------------------------
 
@@ -803,10 +828,9 @@ aeq :: Alpha a => a -> a -> Bool
 aeq t1 t2 = aeq' initial t1 t2
 
 -- | Determine (alpha-)equivalence of patterns
+-- Do they bind the same variables and have alpha-equal annotations?
 aeqBinders :: Alpha a => a -> a -> Bool
-aeqBinders t1 t2 = case matchBinders t1 t2 of
-              Just p -> isid p
-              _      -> False
+aeqBinders t1 t2 = aeq' initial t1 t2
 
 -- | Calculate the free variables (of any sort) contained in a term.
 fvAny :: (Alpha a, Pointed f, Monoid (f AnyName)) => a -> f (AnyName)
@@ -820,10 +844,10 @@ fv :: forall a b f.
 fv = fromList . catMaybes . map toSortedName . F.toList . (fv' initial :: a -> f AnyName)
 
 -- | List all the binding variables (of a particular sort) in a pattern.
-binders :: (Rep a, Alpha b) => b -> Set (Name a)
+binders :: (Rep a, Alpha b) => b -> [Name a]
 binders = fv
 
--- | List variables of a particular sort that occur freely in
+-- | Set of variables of a particular sort that occur freely in
 --   annotations (not bindings).
 patfv :: (Rep a, Alpha b) => b -> Set (Name a)
 patfv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' (pat initial)
@@ -935,7 +959,6 @@ unbind3 (B b1 c) (B b2 d) (B b3 e) = do
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
 lunbind (B a b) g =
-  -- avoid (S.elems $ fv b) $ -- don't think we need this
   lfreshen a (\x _ -> g (x, open initial x b))
 
 
@@ -975,6 +998,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
   -- | If the argument is a variable, return its name and a function
   --   to generate a substituted term.  Return 'Nothing' for
   --   non-variable arguments.
+  -- why not isvar:: (a ~ b) => a -> Maybe (Name b) ??
   isvar :: a -> Maybe (Name b, b -> a)
   isvar x = Nothing
 
@@ -1055,12 +1079,6 @@ instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
 
 instance (Subst c a) => Subst c (Annot a)
 
-
-------------------------------------------------------------
--- Alpha-respecting comparison
------------------------------------------------------------
-
-
 -------------------- TESTING CODE --------------------------------
 data Exp = V (Name Exp)
          | A Exp Exp
@@ -1072,9 +1090,6 @@ instance Alpha Exp
 instance Subst Exp Exp where
    isvar (V n) = Just (n, id)
    isvar _     = Nothing
-
--- deriving instance Eq Exp
--- deriving instance Ord Exp
 
 nameA, nameB, nameC :: Name Exp
 nameA = integer2Name 1
@@ -1181,7 +1196,7 @@ tests_acompare = do
    assert "ac9" $ acompare (A (V nameB) (V nameA)) (A (V nameA) (V nameB)) == GT
    -- comparison goes under binders, alpha-respectingly.
    assert "ac10" $ acompare (bind nameA (A (V nameA) (V nameA))) (bind nameA (A (V nameA) (V nameA))) == EQ
-   assert "ac11" $ acompare (bind nameA (A (V nameA) (V nameA))) (bind nameA (A (V nameA) (V nameB))) == LT
+   assert "ac11" $ acompare (bind nameA (A (V nameA) (V nameA))) (bind nameA (A (V nameA) (V nameB))) == GT
    assert "ac12" $ acompare (bind nameC (A (V nameC) (V nameA))) (bind nameA (A (V nameA) (V nameB))) == LT
    -- non-matching binders handled alpha-respectingly.
    assert "ac13" $ acompare (bind [nameA] nameA) (bind [nameA,nameB] nameA)
@@ -1191,7 +1206,7 @@ tests_acompare = do
    -- non-binding stuff in patterns gets compared
    assert "ac15" $ acompare (Annot nameA) (Annot nameB) == LT
    assert "ac16" $ acompare (bind (nameC, Annot nameA) (A (V nameC) (V nameC)))
-                          (bind (nameC, Annot nameB) (A (V nameC) (V nameC))) == LT
+                            (bind (nameC, Annot nameB) (A (V nameC) (V nameC))) == LT
    assert "ac17" $ acompare (bind (nameC, Annot nameA) (A (V nameB) (V nameB)))
                           (bind (nameC, Annot nameB) (A (V nameA) (V nameA))) == LT
    -- TODO: do we need anything special for rebind? For AnyName?
