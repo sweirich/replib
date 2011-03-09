@@ -178,7 +178,7 @@ data Rebind a b = R a b
 -- | 'Rec' supports recursive patterns --- that is, patterns where
 -- any variables anywhere in the pattern are bound in the pattern
 -- itself.  Useful for lectrec (and Agda's dot notation).
-data Rec a = Rec a 
+newtype Rec a = Rec (Rebind [AnyName] a)
 
 $(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec])
 
@@ -485,7 +485,7 @@ compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
 ------------------------------------------------------------
 -- Specific Alpha instances for the four important type 
 -- constructors:
---      Names, Bind, Annot, Rebind and Rec
+--      Names, Bind, Annot, Rebind and Rec 
 -----------------------------------------------------------
 
 -- in the name instance, if the mode is Term then the operation
@@ -727,9 +727,7 @@ instance Alpha a => Alpha (Annot a) where
 
 
 instance Alpha a => Alpha (Rec a) where
-   close c b (Rec x) = Rec (close (incr c) b x)
-
-   open c b (Rec x)  = Rec (open (incr c) b x)
+   -- default definitions suffice
 
 -- Instances for other types use the default definitions.
 instance Alpha Bool
@@ -806,10 +804,11 @@ unrebind (R a b) = (a, open (pat initial) a b)
 ----------------------------------------------------------
 
 rec :: (Alpha a) => a -> Rec a 
-rec a = Rec (close (pat initial) a a)
+rec a = Rec (rebind xs a) where
+              xs = fv' initial a 
 
 unrec :: (Alpha a) => Rec a -> a 
-unrec (Rec a) = (open (pat initial) a a)
+unrec (Rec rbnd) = snd (unrebind a)
 
 instance Show a => Show (Rec a) where
   showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
