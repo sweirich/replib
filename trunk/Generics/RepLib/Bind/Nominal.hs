@@ -79,6 +79,9 @@ import qualified Control.Monad as Monad
 import Control.Monad.Reader (Reader,ask,local,runReader)
 import System.IO.Unsafe (unsafePerformIO)
 
+(<>) :: Monoid m => m -> m -> m
+(<>) = mappend
+
 ---------------------------------------------------
 
 $(derive_abstract [''R])
