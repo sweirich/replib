@@ -10,7 +10,7 @@
              GADTs,
              EmptyDataDecls,
              StandaloneDeriving,
-             GeneralizedNewtypeDeriving, 
+             GeneralizedNewtypeDeriving,
              TypeFamilies
   #-}
 {- LANGUAGE  KitchenSink -}
@@ -115,38 +115,41 @@ import System.IO.Unsafe (unsafePerformIO)
 ------------------------------------------------------------
 -- Overview
 --
--- We have two classes of types: 
---    Terms (which contain binders) and 
+-- We have two classes of types:
+--    Terms (which contain binders) and
 --    Patterns (which contain variables)
--- 
--- Terms include 
---    Names 
+--
+-- Terms include
+--    Names
 --    Bind a b when a is a Pattern and b is a Term
 --    Standard type constructors (Unit, (,), Maybe, [], etc)
--- 
+--
 -- Patterns include
 --    Names
 --    Annot a when a is a Term
 --    Rebind a b when a and b are both Patterns
 --    Standard type constructors (Unit, (,), Maybe, [], etc)
--- 
+--
 -- Terms support a number of operations, including alpha-equivalence,
 -- free variables, swapping, etc.  Because Patterns occur in terms, so
--- they too support the same operations, but only for the annotations 
+-- they too support the same operations, but only for the annotations
 -- inside them.
 -- Therefore, both Terms and Patterns are instances of the "Alpha" type class
 -- which lists these operations.  However, some types (such as [Name])
--- are both Terms and Patterns, and the behavior of the operations 
+-- are both Terms and Patterns, and the behavior of the operations
 -- is different when we use [Name] as a term and [Name] as a pattern.
--- Therefore, we index each of the operations with a mode that tells us 
+-- Therefore, we index each of the operations with a mode that tells us
 -- what version we should be defining.
 --
 -- [SCW: could we use multiparameter type classes? Alpha m t]
--- 
--- Patterns also support a few extra operations that Terms do not 
--- for dealing with the binding variables. 
+--
+-- Patterns also support a few extra operations that Terms do not
+-- for dealing with the binding variables.
 --     These are used to find the index of names inside patterns.
 ------------------------------------------------------------
+
+(<>) :: Monoid m => m -> m -> m
+(<>) = mappend
 
 ------------------------------------------------------------
 -- Basic types
@@ -267,11 +270,29 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   nthpatrec :: a -> Integer -> (Integer, Maybe AnyName)
   nthpatrec = nthpatR1 rep1
 
-  -- | Find the (first) index of the name in the pattern if it exists;
-  --   if not found ('Bool' = 'False'), return the number of names
-  --   encountered instead.
-  findpatrec :: a -> AnyName -> (Integer, Bool)
+  -- | Find the (first) index of the name in the pattern if one
+  --   exists; otherwise, return the number of names encountered
+  --   instead.
+  findpatrec :: a -> AnyName -> FindResult
   findpatrec = findpatR1 rep1
+
+-- | The result of a 'findpatrec' operation.
+data FindResult = Index Integer      -- ^ The (first) index of the name we
+                                     --   sought
+                | NamesSeen Integer  -- ^ We haven't found the name
+                                     --   (yet), but have seen this many
+                                     --   others while looking for it
+  deriving (Eq, Ord, Show)
+
+-- | @FindResult@ forms a monoid which combines information from
+--   several 'findpatrec' operations.  @mappend@ takes the leftmost
+--   'Index', and combines the number of names seen to the left of it
+--   so we can correctly compute its global index.
+instance Monoid FindResult where
+  mempty = NamesSeen 0
+  NamesSeen i `mappend` NamesSeen j = NamesSeen (i + j)
+  NamesSeen i `mappend` Index j     = Index (i + j)
+  Index j     `mappend` _           = Index j
 
 -- | Many of the operations in the 'Alpha' class take an 'AlphaCtx':
 -- stored information about the iteration as it progresses. This type
@@ -309,7 +330,7 @@ data AlphaD a = AlphaD {
   matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
   closeD    :: Alpha b => AlphaCtx -> b -> a -> a,
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
-  findpatD  :: a -> AnyName -> (Integer, Bool),
+  findpatD  :: a -> AnyName -> FindResult,
   nthpatD   :: a -> Integer -> (Integer, Maybe AnyName),
   acompareD :: AlphaCtx -> a -> a -> Ordering
   }
@@ -355,7 +376,7 @@ fvR1 _ = \ _ _ -> mempty
 fv1 :: (Pointed f, Monoid (f AnyName)) => MTup (AlphaD) l -> AlphaCtx -> l -> f AnyName
 fv1 MNil _ Nil = mempty
 fv1 (r :+: rs) p (p1 :*: t1) =
-   fvD r p p1 `mappend` fv1 rs p t1
+   fvD r p p1 <> fv1 rs p t1
 
 
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm AnyName)
@@ -386,8 +407,8 @@ aeqR1 (Data1 _ cons) = loop cons where
       (Nothing, Nothing) -> loop rest p x y
       (_,_)              -> False
    loop [] _ _ _ = error "Impossible"
-aeqR1 Int1     = \ _ x y ->  x == y 
-aeqR1 Integer1 = \ _ x y -> x == y 
+aeqR1 Int1     = \ _ x y ->  x == y
+aeqR1 Integer1 = \ _ x y -> x == y
 aeqR1 Char1    = \ _ x y -> x == y
 aeqR1 _        = \ _ _ _ -> False
 
@@ -427,20 +448,16 @@ lfreshenL (r :+: rs) p (t :*: ts) f =
      f (x :*: y) (p1 <> p2)))
 
 
--- returns either (# of names in b, false) or (index, true)
-findpatR1 :: R1 AlphaD b -> b -> AnyName -> (Integer, Bool)
+findpatR1 :: R1 AlphaD b -> b -> AnyName -> FindResult
 findpatR1 (Data1 dt cons) = \ d n ->
    case findCon cons d of
      Val c rec kids -> findpatL rec kids n
-findpatR1 _ = \ x n -> (0, False)
+findpatR1 _ = \ x n -> mempty
 
-findpatL :: MTup AlphaD l -> l -> AnyName -> (Integer, Bool)
-findpatL MNil Nil n = (0, False)
+findpatL :: MTup AlphaD l -> l -> AnyName -> FindResult
+findpatL MNil Nil n = mempty
 findpatL (r :+: rs) (t :*: ts) n =
-  case findpatD r t n of
-    s@(i, True) -> s
-    (i, False) -> case findpatL rs ts n of
-                    (j, b) -> (i+j, b)
+  findpatD r t n <> findpatL rs ts n
 
 nthpatR1 :: R1 AlphaD b -> b -> Integer -> (Integer, Maybe AnyName)
 nthpatR1 (Data1 dt cons) = \ d n ->
@@ -483,9 +500,9 @@ compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
 
 
 ------------------------------------------------------------
--- Specific Alpha instances for the four important type 
+-- Specific Alpha instances for the four important type
 -- constructors:
---      Names, Bind, Annot, Rebind and Rec 
+--      Names, Bind, Annot, Rebind and Rec
 -----------------------------------------------------------
 
 -- in the name instance, if the mode is Term then the operation
@@ -534,8 +551,8 @@ instance Rep a => Alpha (Name a) where
 
   findpatrec nm1 (AnyName nm2) =
     case gcastR (getR nm1) (getR nm2) nm1 of
-      Just nm1' -> if nm1' == nm2 then (0, True) else (1, False)
-      Nothing -> (1, False)
+      Just nm1' -> if nm1' == nm2 then Index 0 else NamesSeen 1
+      Nothing -> NamesSeen 1
 
   nthpatrec nm 0 = (0, Just (AnyName nm))
   nthpatrec nm i = (i - 1, Nothing)
@@ -600,8 +617,8 @@ instance Alpha AnyName  where
 
   close _ _ n = n
 
-  findpatrec nm1 nm2 | nm1 == nm2 = ( 0 , True )
-  findpatrec _ _ = (1, False)
+  findpatrec nm1 nm2 | nm1 == nm2 = Index 0
+  findpatrec _ _ = NamesSeen 1
 
   nthpatrec nm 0 = (0, Just nm)
   nthpatrec nm i = (i - 1, Nothing)
@@ -611,7 +628,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         (B (swaps' (pat c) pm x)
            (swaps' (incr c) pm y))
 
-    fv' c (B x y) = fv' (pat c) x `mappend` fv' (incr c) y
+    fv' c (B x y) = fv' (pat c) x <> fv' (incr c) y
 
     freshen' c (B x y) = do
       (x', pm1) <- freshen' (pat c) x
@@ -639,14 +656,14 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     close c a (B x y)    = B (close (pat c) a x) (close (incr c) a y)
 
     --  Comparing two binding terms.
-    acompare' c (B a1 a2) (B b1 b2) = 
+    acompare' c (B a1 a2) (B b1 b2) =
       lexord (acompare' (pat c) a1 b1) (acompare' (incr c) a2 b2)
 
 instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
   swaps' p pm (R x y) = R (swaps' p pm x) (swaps' (incr p) pm y)
 
-  fv' p (R x y) =  fv' p x `mappend` fv' (incr p) y
+  fv' p (R x y) =  fv' p x <> fv' (incr p) y
 
   lfreshen' p (R x y) g =
     lfreshen' p x $ \ x' pm1 ->
@@ -658,7 +675,7 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
       (y', pm2) <- freshen' (incr p) (swaps' (incr p) pm1 y)
       return (R x' y', pm1 <> pm2)
 
-  aeq' p (R x1 y1) (R x2 y2 ) = do 
+  aeq' p (R x1 y1) (R x2 y2 ) = do
       aeq' p x1 x2 && aeq' p y1 y2
 
   match' p (R x1 y1) (R x2 y2) = do
@@ -666,31 +683,26 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
      py <- match' (incr p)  y1 y2
      (px `join` py)
 
-  acompare' c (R a1 a2) (R b1 b2) = 
+  acompare' c (R a1 a2) (R b1 b2) =
       lexord (acompare' c a1 b1) (acompare' (incr c) a2 b2)
 
 
   open c a (R x y)  = R (open c a x) (open (incr c) a y)
   close c a (R x y) = R (close c a x) (close (incr c) a y)
 
-  findpatrec (R x y) nm =
-     case findpatrec x nm of
-         (i, True) -> (i, True)
-         (i, False) -> case findpatrec y nm of
-                         (j, True) -> (i + j, True)
-                         (j, False) -> (i+j, False)
+  findpatrec (R x y) nm = findpatrec x nm <> findpatrec y nm
 
   nthpatrec (R x y) i =
       case nthpatrec x i of
         (j , Just n) -> (j, Just n)
         (j , Nothing) -> nthpatrec y j
 
--- note: for Annots, when the mode is "term" then we are 
+-- note: for Annots, when the mode is "term" then we are
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
 instance Alpha a => Alpha (Annot a) where
    swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
-   swaps' c pm (Annot t) | mode c == Term = Annot t 
+   swaps' c pm (Annot t) | mode c == Term = Annot t
 
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
    fv' c _         | mode c == Term = mempty
@@ -710,7 +722,7 @@ instance Alpha a => Alpha (Annot a) where
    acompare' c (Annot x) (Annot y) = acompare' (term c) x y
 
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
-   match' c (Annot x) (Annot y) | mode c == Term = 
+   match' c (Annot x) (Annot y) | mode c == Term =
                                     if x `aeq` y
                                     then Just empty
                                     else Nothing
@@ -722,7 +734,7 @@ instance Alpha a => Alpha (Annot a) where
                       | mode c == Term = error "open on Annot"
 
 
-   findpatrec _ _ = (0, False)
+   findpatrec _ _ = mempty
    nthpatrec nm i = (i, Nothing)
 
 
@@ -803,12 +815,12 @@ unrebind (R a b) = (a, open (pat initial) a b)
 -- Rec operations
 ----------------------------------------------------------
 
-rec :: (Alpha a) => a -> Rec a 
+rec :: (Alpha a) => a -> Rec a
 rec a = Rec (rebind xs a) where
-              xs = fv' initial a 
+              xs = fv' initial a
 
-unrec :: (Alpha a) => Rec a -> a 
-unrec (Rec rbnd) = snd (unrebind a)
+unrec :: (Alpha a) => Rec a -> a
+unrec (Rec rbnd) = snd (unrebind rbnd)
 
 instance Show a => Show (Rec a) where
   showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
@@ -912,8 +924,8 @@ nthpat x i = case nthpatrec x i of
 -- | Find the (first) index of the name in the pattern, if it exists.
 findpat :: Alpha a => a -> AnyName -> Maybe Integer
 findpat x n = case findpatrec x n of
-                   (i, True) -> Just i
-                   (_, False) -> Nothing
+                   Index i     -> Just i
+                   NamesSeen _ -> Nothing
 
 -- | An alpha-respecting total order on terms involving binders.
 acompare :: Alpha a => a -> a -> Ordering
@@ -1082,7 +1094,7 @@ instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b)
 
 instance (Subst c a) => Subst c (Annot a)
-instance (Subst c a) => Subst c (Rec a)
+instance (Alpha a, Subst c a) => Subst c (Rec a)
 
 -------------------- TESTING CODE --------------------------------
 data Exp = V (Name Exp)

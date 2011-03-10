@@ -13,13 +13,17 @@
 ----------------------------------------------------------------------
 
 module Generics.RepLib.Bind.PermM (
-    Perm, single, (<>), apply, support, isid, join, empty, restrict
+    Perm, single, compose, apply, support, isid, join, empty, restrict
   ) where
 
+import Data.Monoid
 import Data.List
 import Data.Map (Map)
 import qualified Data.Map as Map
 import System.IO.Unsafe
+
+(<>) :: Monoid m => m -> m -> m
+(<>) = mappend
 
 newtype Perm a = Perm (Map a a)
 
@@ -30,7 +34,6 @@ instance Ord a => Eq (Perm a) where
 
 instance Show a => Show (Perm a) where
   show (Perm p) = show p
-
 
 apply :: Ord a => Perm a -> a -> a
 apply (Perm p) x = Map.findWithDefault x x p
@@ -44,10 +47,14 @@ empty = Perm Map.empty
 
 -- | Compose two permutations.  The right-hand permutation will be
 --   applied first.
-(<>) :: Ord a => Perm a -> Perm a -> Perm a
-(Perm b) <> (Perm a) =
+compose :: Ord a => Perm a -> Perm a -> Perm a
+compose (Perm b) (Perm a) =
   Perm (Map.fromList ([ (x,Map.findWithDefault y y b) | (x,y) <- Map.toList a]
          ++ [ (x, Map.findWithDefault x x b) | x <- Map.keys b, Map.notMember x a]))
+
+instance Ord a => Monoid (Perm a) where
+  mempty  = empty
+  mappend = compose
 
 -- | isid -- do all keys map to themselves?
 isid :: Ord a => Perm a -> Bool
