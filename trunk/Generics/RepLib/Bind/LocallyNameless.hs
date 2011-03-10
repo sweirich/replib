@@ -271,7 +271,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   -- | @'nthpatrec' b n@ looks up the @n@th name in the pattern @b@
   -- (zero-indexed), returning the number of names encountered if not
   -- found.
-  nthpatrec :: a -> Integer -> (Integer, Maybe AnyName)
+  nthpatrec :: a -> NthCont
   nthpatrec = nthpatR1 rep1
 
   -- | Find the (first) index of the name in the pattern if one
@@ -297,6 +297,37 @@ instance Monoid FindResult where
   NamesSeen i `mappend` NamesSeen j = NamesSeen (i + j)
   NamesSeen i `mappend` Index j     = Index (i + j)
   Index j     `mappend` _           = Index j
+
+-- | The result of an 'nthpatrec' operation.
+data NthResult = Found AnyName    -- ^ The name found at the given
+                                  --   index.
+               | CurIndex Integer -- ^ We haven't yet reached the
+                                  --   required index; this is the
+                                  --   index into the remainder of the
+                                  --   pattern (which decreases as we
+                                  --   traverse the pattern).
+
+-- | A continuation which takes the remaining index and searches for
+--   that location in a pattern, yielding a name or a remaining index
+--   if the end of the pattern was reached too soon.
+newtype NthCont = NthCont { runNthCont :: Integer -> NthResult }
+
+-- | @NthCont@ forms a monoid: function composition which
+--   short-circuits once a result is found.
+instance Monoid NthCont where
+  mempty = NthCont $ \i -> CurIndex i
+  (NthCont f) `mappend` (NthCont g)
+    = NthCont $ \i -> case f i of
+                        Found n     -> Found n
+                        CurIndex i' -> g i'
+
+-- | If we see a name, check whether the index is 0: if it is, we've
+--   found the name we're looking for, otherwise continue with a
+--   decremented index.
+nthName :: AnyName -> NthCont
+nthName nm = NthCont $ \i -> if i == 0
+                               then Found nm
+                               else CurIndex (i-1)
 
 -- | Many of the operations in the 'Alpha' class take an 'AlphaCtx':
 -- stored information about the iteration as it progresses. This type
@@ -340,7 +371,7 @@ data AlphaD a = AlphaD {
   closeD    :: Alpha b => AlphaCtx -> b -> a -> a,
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> AnyName -> FindResult,
-  nthpatD   :: a -> Integer -> (Integer, Maybe AnyName),
+  nthpatD   :: a -> NthCont,
   acompareD :: AlphaCtx -> a -> a -> Ordering
   }
 
@@ -464,22 +495,18 @@ findpatR1 (Data1 dt cons) = \ d n ->
 findpatR1 _ = \ x n -> mempty
 
 findpatL :: MTup AlphaD l -> l -> AnyName -> FindResult
-findpatL MNil Nil n = mempty
-findpatL (r :+: rs) (t :*: ts) n =
-  findpatD r t n <> findpatL rs ts n
+findpatL MNil Nil n              = mempty
+findpatL (r :+: rs) (t :*: ts) n = findpatD r t n <> findpatL rs ts n
 
-nthpatR1 :: R1 AlphaD b -> b -> Integer -> (Integer, Maybe AnyName)
-nthpatR1 (Data1 dt cons) = \ d n ->
+nthpatR1 :: R1 AlphaD b -> b -> NthCont
+nthpatR1 (Data1 dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> nthpatL rec kids n
-nthpatR1 _ = \ x n -> (n, Nothing)
+     Val c rec kids -> nthpatL rec kids
+nthpatR1 _ = \ x -> mempty
 
-nthpatL :: MTup AlphaD l -> l -> Integer -> (Integer, Maybe AnyName)
-nthpatL MNil Nil i = (i, Nothing)
-nthpatL (r :+: rs) (t :*: ts) i =
-  case nthpatD r t i of
-    s@(_, Just n) -> s
-    (j, Nothing) -> nthpatL rs ts j
+nthpatL :: MTup AlphaD l -> l -> NthCont
+nthpatL MNil Nil              = mempty
+nthpatL (r :+: rs) (t :*: ts) = nthpatD r t <> nthpatL rs ts
 
 -- Exactly like the generic Ord instance defined in Generics.RepLib.PreludeLib,
 -- except that the comparison operation takes an AlphaCtx
@@ -563,8 +590,7 @@ instance Rep a => Alpha (Name a) where
       Just nm1' -> if nm1' == nm2 then Index 0 else NamesSeen 1
       Nothing -> NamesSeen 1
 
-  nthpatrec nm 0 = (0, Just (AnyName nm))
-  nthpatrec nm i = (i - 1, Nothing)
+  nthpatrec = nthName . AnyName
 
   acompare' c (Nm r1 n1) (Nm r2 n2) | mode c == Term = lexord (compare r1 r2) (compare n1 n2)
   acompare' c (Bn r1 m1 n1) (Bn r2 m2 n2) | mode c == Term = lexord (compare r1 r2) (lexord (compare m1 m2) (compare n1 n2))
@@ -629,8 +655,7 @@ instance Alpha AnyName  where
   findpatrec nm1 nm2 | nm1 == nm2 = Index 0
   findpatrec _ _ = NamesSeen 1
 
-  nthpatrec nm 0 = (0, Just nm)
-  nthpatrec nm i = (i - 1, Nothing)
+  nthpatrec = nthName
 
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     swaps' c pm (B x y) =
@@ -701,10 +726,7 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
 
   findpatrec (R x y) nm = findpatrec x nm <> findpatrec y nm
 
-  nthpatrec (R x y) i =
-      case nthpatrec x i of
-        (j , Just n) -> (j, Just n)
-        (j , Nothing) -> nthpatrec y j
+  nthpatrec (R x y) = nthpatrec x <> nthpatrec y
 
 
 instance Alpha a => Alpha (Rec a) where
@@ -761,7 +783,7 @@ instance Alpha a => Alpha (Annot a) where
 
 
    findpatrec _ _ = mempty
-   nthpatrec nm i = (i, Nothing)
+   nthpatrec _    = mempty
 
 
 instance Alpha a => Alpha (Outer a) where
@@ -944,10 +966,11 @@ matchBinders = match' initial
 -- (zero-indexed).  PRECONDITION: the number of names in the pattern
 -- must be at least @n@.
 nthpat :: Alpha a => a -> Integer -> AnyName
-nthpat x i = case nthpatrec x i of
-                 (j, Nothing) -> error
-                   ("BUG: pattern index " ++ show i ++ " out of bounds by " ++ show j ++ "in" ++ show x)
-                 (_, Just n)  -> n
+nthpat x i = case runNthCont (nthpatrec x) i of
+                 CurIndex j -> error
+                   ("BUG: pattern index " ++ show i ++
+                    " out of bounds by " ++ show j ++ "in" ++ show x)
+                 Found nm   -> nm
 
 -- | Find the (first) index of the name in the pattern, if it exists.
 findpat :: Alpha a => a -> AnyName -> Maybe Integer
