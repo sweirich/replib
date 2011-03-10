@@ -41,7 +41,7 @@
 
 module Generics.RepLib.Bind.LocallyNameless
   ( -- * Basic types
-    Name, AnyName(..), Bind, Annot(..), Rebind, Rec,
+    Name, AnyName(..), Bind, Annot(..), Rebind, Rec, Outer,
 
     -- ** Utilities
     integer2Name, string2Name, s2n, makeName,
@@ -167,13 +167,6 @@ $(derive_abstract [''R])
 --   using 'bind' and take them apart with 'unbind' and friends.
 data Bind a b = B a b
 
--- | An annotation is a \"hole\" in a pattern where variables can be
---   used, but not bound. For example, patterns may include type
---   annotations, and those annotations can reference variables
---   without binding them.  Annotations do nothing special when they
---   appear elsewhere in terms.
-newtype Annot a = Annot a deriving Eq
-
 -- | 'Rebind' supports \"telescopes\" --- that is, patterns where
 --   bound variables appear in multiple subterms.
 data Rebind a b = R a b
@@ -181,9 +174,20 @@ data Rebind a b = R a b
 -- | 'Rec' supports recursive patterns --- that is, patterns where
 -- any variables anywhere in the pattern are bound in the pattern
 -- itself.  Useful for lectrec (and Agda's dot notation).
-newtype Rec a = Rec (Rebind [AnyName] a)
+data Rec a = Rec a
 
-$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec])
+-- | An annotation is a \"hole\" in a pattern where variables can be
+--   used, but not bound. For example, patterns may include type
+--   annotations, and those annotations can reference variables
+--   without binding them.  Annotations do nothing special when they
+--   appear elsewhere in terms.
+newtype Annot a = Annot a deriving Eq
+
+-- | An outer can shift an annotation \"hole\" to refer to higher context.
+newtype Outer a = Outer a deriving Eq
+
+
+$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
 
 --------------------------------------------------
 -- Pointed functors
@@ -305,6 +309,11 @@ initial = AC Term 0
 
 incr :: AlphaCtx -> AlphaCtx
 incr c = c { level = level c + 1 }
+
+decr :: AlphaCtx -> AlphaCtx
+decr c = if level c == 0 then error "Too many outers"
+         else c { level = level c - 1 }
+
 
 pat  :: AlphaCtx -> AlphaCtx
 pat c  = c { mode = Pat }
@@ -697,7 +706,24 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
         (j , Just n) -> (j, Just n)
         (j , Nothing) -> nthpatrec y j
 
--- note: for Annots, when the mode is "term" then we are
+
+instance Alpha a => Alpha (Rec a) where
+   {-  default defs of these work if we don't care about incrs
+
+   fv' c (Rec a) = fv' c a
+   aeq' c (Rec a) (Rec b) = aeq' c a b
+   acompare' c (Rec a) (Rec b) = acompare' c a b
+   swaps' p pm (Rec a) = Rec (swaps' p pm a)
+   findpatrec (Rec a) nm = findpatrec a nm
+   nthpatrec (Rec a)  i  = nthpatrec a i
+
+   -}
+   open c b (Rec a) = Rec (open (incr c) b a)
+   close c b (Rec a) = Rec (close (incr c) b a)
+
+
+
+-- note: for Annots, when the mode is "term" then we are 
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
 instance Alpha a => Alpha (Annot a) where
@@ -738,9 +764,9 @@ instance Alpha a => Alpha (Annot a) where
    nthpatrec nm i = (i, Nothing)
 
 
-instance Alpha a => Alpha (Rec a) where
-   -- default definitions suffice
-
+instance Alpha a => Alpha (Outer a) where
+   close c b (Outer x) = Outer (close (decr c) b x)
+   open  c b (Outer x) = Outer (open  (decr c) b x)
 -- Instances for other types use the default definitions.
 instance Alpha Bool
 instance Alpha Float
@@ -816,11 +842,10 @@ unrebind (R a b) = (a, open (pat initial) a b)
 ----------------------------------------------------------
 
 rec :: (Alpha a) => a -> Rec a
-rec a = Rec (rebind xs a) where
-              xs = fv' initial a
+rec a = Rec (close (pat initial) a a) where
 
-unrec :: (Alpha a) => Rec a -> a
-unrec (Rec rbnd) = snd (unrebind rbnd)
+unrec :: (Alpha a) => Rec a -> a 
+unrec (Rec a) = open (pat initial) a a 
 
 instance Show a => Show (Rec a) where
   showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
@@ -831,6 +856,9 @@ instance Show a => Show (Rec a) where
 
 instance Show a => Show (Annot a) where
   showsPrec p (Annot a) = showString "{" . showsPrec 0 a . showString "}"
+
+instance Show a => Show (Outer a) where
+  showsPrec p (Outer a) = showString "{" . showsPrec 0 a . showString "}"
 
 ----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
@@ -1014,8 +1042,6 @@ class (Rep1 (SubstD b) a) => Subst b a where
   -- | If the argument is a variable, return its name wrapped in the
   --   'SubstName' constructor.  Return 'Nothing' for
   --   non-variable arguments.
-
-  -- why not isvar:: (a ~ b) => a -> Maybe (Name b) ??
   isvar :: a -> Maybe (SubstName a b)
   isvar x = Nothing
 
@@ -1027,6 +1053,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
         Nothing -> substR1 rep1 n u x
 
   -- | Perform several simultaneous substitutions.
+  -- list lengths must match, or will throw an error
   substs :: [Name b] -> [b] -> a -> a
   substs ns us x =
       case (isvar x :: Maybe (SubstName a b)) of
