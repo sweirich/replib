@@ -358,6 +358,14 @@ term c  = c { mode = Term }
 --   standard mode is to use 'Term'; many functions do this by default.
 data Mode = Term | Pat deriving (Show, Eq, Read)
 
+-- | Open a term using the given pattern.
+openT :: (Alpha p, Alpha t) => p -> t -> t
+openT = open initial
+
+-- | @openP p1 p2@ opens the pattern @p2@ using the pattern @p1@.
+openP :: (Alpha p1, Alpha p2) => p1 -> p2 -> p2
+openP = open (pat initial)
+
 -- | Class constraint hackery to allow us to override the default
 --   definitions for certain classes.  'AlphaD' is essentially a
 --   reified dictionary for the 'Alpha' class.
@@ -745,7 +753,7 @@ instance Alpha a => Alpha (Rec a) where
 
 
 
--- note: for Annots, when the mode is "term" then we are 
+-- note: for Annots, when the mode is "term" then we are
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
 instance Alpha a => Alpha (Annot a) where
@@ -819,7 +827,7 @@ bind b c = B b (close initial b c)
 -- | A destructor for binders that does /not/ guarantee fresh
 --   names for the binders.
 unsafeUnbind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
-unsafeUnbind (B a b) = (a, open initial a b)
+unsafeUnbind (B a b) = (a, openT a b)
 
 instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
          readPrec = R.parens $ (R.prec app_prec $ do
@@ -857,7 +865,7 @@ instance (Show a, Show b) => Show (Rebind a b) where
 --   pattern of a `Bind`; hence a previous call to `open` must have
 --   already freshened the names at this point.
 unrebind :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-unrebind (R a b) = (a, open (pat initial) a b)
+unrebind (R a b) = (a, openP a b)
 
 ----------------------------------------------------------
 -- Rec operations
@@ -866,8 +874,8 @@ unrebind (R a b) = (a, open (pat initial) a b)
 rec :: (Alpha a) => a -> Rec a
 rec a = Rec (close (pat initial) a a) where
 
-unrec :: (Alpha a) => Rec a -> a 
-unrec (Rec a) = open (pat initial) a a 
+unrec :: (Alpha a) => Rec a -> a
+unrec (Rec a) = openP a a
 
 instance Show a => Show (Rec a) where
   showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
@@ -991,7 +999,7 @@ acompare x y = acompare' initial x y
 unbind  :: (Fresh m, Alpha b, Alpha c) => Bind b c -> m (b,c)
 unbind (B b c) = do
       (b', _) <- freshen b
-      return (b', open initial b' c)
+      return (b', openT b' c)
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders have the same number of binding variables.
@@ -1001,8 +1009,8 @@ unbind2 (B b1 c) (B b2 d) = do
       case match (fvAny b1 :: [AnyName]) (fvAny b2) of
          Just p -> do
            (b1', p') <- freshen b1
-           return $ Just (b1', open initial b1' c,
-                          swaps (p' <> p) b2, open initial b1' d)
+           return $ Just (b1', openT b1' c,
+                          swaps (p' <> p) b2, openT b1' d)
          Nothing -> return Nothing
 
 -- | Unbind three terms with the same fresh names, provided the
@@ -1014,15 +1022,15 @@ unbind3 (B b1 c) (B b2 d) (B b3 e) = do
            , match (fvAny b1 :: [AnyName]) (fvAny b3) ) of
          (Just p12, Just p13) -> do
            (b1', p') <- freshen b1
-           return $ Just (b1', open initial b1' c,
-                          swaps (p' <> p12) b2, open initial b1' d,
-                          swaps (p' <> p13) b3, open initial b1' e)
+           return $ Just (b1', openT b1' c,
+                          swaps (p' <> p12) b2, openT b1' d,
+                          swaps (p' <> p13) b3, openT b1' e)
          _ -> return Nothing
 
 -- | Destruct a binding in an 'LFresh' monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
 lunbind (B a b) g =
-  lfreshen a (\x _ -> g (x, open initial x b))
+  lfreshen a (\x _ -> g (x, openT x b))
 
 
 -- | Unbind two terms with the same fresh names, provided the
@@ -1032,8 +1040,8 @@ lunbind2  :: (LFresh m, Alpha b1, Alpha b2, Alpha c, Alpha d) =>
 lunbind2 (B b1 c) (B b2 d) g =
   case match (fvAny b1 :: [AnyName]) (fvAny b2) of
     Just p1 ->
-      lfreshen b1 (\b1' p2 -> g $ Just (b1', open initial b1' c,
-                                        swaps (p2 <> p1) b2, open initial b1' d))
+      lfreshen b1 (\b1' p2 -> g $ Just (b1', openT b1' c,
+                                        swaps (p2 <> p1) b2, openT b1' d))
     Nothing -> g Nothing
 
 -- | Unbind three terms with the same fresh names, provided the
@@ -1044,9 +1052,9 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) g =
   case ( match (fvAny b1 :: [AnyName]) (fvAny b2)
        , match (fvAny b1 :: [AnyName]) (fvAny b3) ) of
          (Just p12, Just p13) ->
-           lfreshen b1 (\b1' p' -> g $ Just (b1', open initial b1' c,
-                                             swaps (p' <> p12) b2, open initial b1' d,
-                                             swaps (p' <> p13) b3, open initial b1' e))
+           lfreshen b1 (\b1' p' -> g $ Just (b1', openT b1' c,
+                                             swaps (p' <> p12) b2, openT b1' d,
+                                             swaps (p' <> p13) b3, openT b1' e))
          _ -> g Nothing
 
 ------------------------------------------------------------
