@@ -366,6 +366,14 @@ openT = open initial
 openP :: (Alpha p1, Alpha p2) => p1 -> p2 -> p2
 openP = open (pat initial)
 
+-- | Close a term using the given pattern.
+closeT :: (Alpha p, Alpha t) => p -> t -> t
+closeT = close initial
+
+-- | @closeP p1 p2@ closes the pattern @p2@ using the pattern @p1@.
+closeP :: (Alpha p1, Alpha p2) => p1 -> p2 -> p2
+closeP = close (pat initial)
+
 -- | Class constraint hackery to allow us to override the default
 --   definitions for certain classes.  'AlphaD' is essentially a
 --   reified dictionary for the 'Alpha' class.
@@ -822,7 +830,7 @@ instance (Rep a) => Alpha (R a)
 -- | A smart constructor for binders, also sometimes known as
 -- \"close\".
 bind ::(Alpha b, Alpha c) => b -> c -> Bind b c
-bind b c = B b (close initial b c)
+bind b c = B b (closeT b c)
 
 -- | A destructor for binders that does /not/ guarantee fresh
 --   names for the binders.
@@ -850,7 +858,7 @@ instance (Show a, Show b) => Show (Bind a b) where
 
 -- | Constructor for binding in patterns.
 rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (close (pat initial) a b)
+rebind a b = R a (closeP a b)
 
 -- | Compare for alpha-equality.
 instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
@@ -872,7 +880,7 @@ unrebind (R a b) = (a, openP a b)
 ----------------------------------------------------------
 
 rec :: (Alpha a) => a -> Rec a
-rec a = Rec (close (pat initial) a a) where
+rec a = Rec (closeP a a) where
 
 unrec :: (Alpha a) => Rec a -> a
 unrec (Rec a) = openP a a
