@@ -138,6 +138,8 @@ true = lam x (lam y (Var x))
 false = lam x (lam y (Var y))
 if_ x y z = (App (App x y) z)
 
+e = Letrec (bind (rec [(y, Annot(Var x)), (x, Annot (Var z))]) (Var y))
+
 main :: IO ()
 main = do
   -- \x.x == \x.y
