@@ -33,14 +33,6 @@ data Name a
 -- | A name with a hidden (existentially quantified) sort.
 data AnyName = forall a. Rep a => AnyName (Name a)
 
-isBound :: Name a -> Bool
-isBound (Nm _ _) = False
-isBound (Bn _ _ _) = True
-
-isFree :: Name a -> Bool
-isFree (Nm _ _) = True
-isFree (Bn _ _ _) = False
-
 -- AnyName has an existential in it, so we cannot create a complete
 -- representation for it, unfortunately.
 
