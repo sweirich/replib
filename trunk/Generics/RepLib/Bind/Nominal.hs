@@ -12,7 +12,7 @@
 -- Generic implementation of name binding functions, based on the library
 -- RepLib. This version uses a nominal representation of binding structure.
 --
--- DISCLAIMER: this module probably contains bugs and is noticeably
+-- DISCLAIMER: this module probably contains bugs and may be
 -- slower than "Generics.RepLib.Bind.LocallyNameless".  At this point
 -- we recommend it only for the curious or intrepid.
 --
@@ -26,7 +26,7 @@
 --------------------------------------------------------------------------
 module Generics.RepLib.Bind.Nominal
   (-- * Basic types
-    Name, Bind, Annot(..), Rebind,
+    Name,  AnyName(..), Bind, Annot(..), Rebind, Rec, Outer,
 
     -- ** Utilities
     integer2Name, string2Name, name2Integer, name2String, makeName,
@@ -55,6 +55,9 @@ module Generics.RepLib.Bind.Nominal
     -- * Rebinding operations
     rebind, reopen,
 
+    -- * Rec operations
+    rec, unrec,
+
     -- * Substitution
     Subst(..),
 
@@ -63,9 +66,10 @@ module Generics.RepLib.Bind.Nominal
 
    -- * Pay no attention to the man behind the curtain
    -- $paynoattention
-   rName, rBind, rRebind, rAnnot) where
+   rName, rBind, rRebind, rAnnot, rRec, rOuter) where
 
 import Generics.RepLib
+import Generics.RepLib.Bind.NominalName
 import Generics.RepLib.Bind.PermM
 
 import qualified Data.List as List
@@ -87,11 +91,6 @@ import System.IO.Unsafe (unsafePerformIO)
 $(derive_abstract [''R])
 -- The above only works with GHC 7.
 
--- | Names are things that get bound. The usual protocol
--- is for names to get created by some automatic process,
--- that preserves alpha renaming under operations over
--- Binding instances.
-data Name a = Nm (R a) (String,Integer) deriving (Eq, Ord)
 
 -- | Type of a binding.  Morally, the type a should be in the
 -- class 'Pattern' and the type b should be in the class 'Alpha'.
@@ -103,10 +102,6 @@ data Name a = Nm (R a) (String,Integer) deriving (Eq, Ord)
 -- but that need not be the case.
 data Bind a b = B a b
 
-
--- | A name with a hidden (existentially quantified) sort.
-data AnyName = forall a. Rep a => AnyName (Name a)
-
 -- | An annotation is a 'hole' in a pattern where variables
 -- can be used, but not bound. For example patterns may include
 -- type annotations, and those annotations can reference variables
@@ -114,98 +109,24 @@ data AnyName = forall a. Rep a => AnyName (Name a)
 -- Annotations do nothing special when they appear elsewhere in terms
 newtype Annot a = Annot a deriving (Read, Eq)
 
+-- | An outer can shift an annotation \"hole\" to refer to higher context
+newtype Outer a = Outer a deriving Eq
+
 -- | Rebinding is for telescopes --- i.e. to support patterns that
 -- also bind variables that appear later
 data Rebind a b = R a (Bind [AnyName] b)
 
--- Fragily deriving the replib instances for Bind and Name
--- in the same file that they are defined in. This shouldn't
--- work but it does.
-$(derive [''Bind, ''Name, ''Annot, ''Rebind])
+-- | 'Rec' supports recursive patterns --- that is, patterns where
+-- any variables anywhere in the pattern are bound in the pattern
+-- itself.  Useful for lectrec (and Agda's dot notation).
+data Rec a = Rec a (Bind [AnyName] a)
 
-
--- AnyName has an existential in it, so we cannot create a complete
--- representation for it, unfortunately.
-
-$(derive_abstract [''AnyName])
-
-instance Show AnyName where
-  show (AnyName n1) = show n1
-
-instance Eq AnyName where
-   (AnyName n1) == (AnyName n2) =
-      case gcastR (getR n1) (getR n2) n1 of
-           Just n1' -> n1' == n2
-           Nothing  -> False
-
-instance Ord AnyName where
-   compare (AnyName n1) (AnyName n2) =
-       case compareR (getR n1) (getR n2) of
-         EQ  -> case gcastR (getR n1) (getR n2) n1 of
-           Just n1' -> compare n1' n2
-           Nothing  -> error "Panic: equal types are not equal in Ord AnyName instance!"
-         ord -> ord
-
--- | Get the integer index of an 'AnyName'.
-anyName2Integer :: AnyName -> Integer
-anyName2Integer (AnyName nm) = name2Integer nm
-
--- | Get the string part of an 'AnyName'.
-anyName2String :: AnyName -> String
-anyName2String (AnyName nm) = name2String nm
-
-toSortedName :: Rep a => AnyName -> Maybe (Name a)
-toSortedName (AnyName n) = gcastR (getR n) rep n
-
----------------------------------------------------------------
--- Constructors and destructors for builtin types
----------------------------------------------------------------
-name1, name2, name3, name4, name5, name6, name7, name8, name9, name10, name11
-  :: Rep a => Name a
-name1 = integer2Name 1
-name2 = integer2Name 2
-name3 = integer2Name 3
-name4 = integer2Name 4
-name5 = integer2Name 5
-name6 = integer2Name 6
-name7 = integer2Name 7
-name8 = integer2Name 8
-name9 = integer2Name 9
-name10 = integer2Name 10
-name11 = integer2Name 11
-
-instance Show (Name a)  where
-  show (Nm _ ("",n)) = "_" ++ (show n)
-  show (Nm _ (x,0)) = x
-  show (Nm _ (x,n)) = x ++ (show n)
-
-name2Integer :: Name a -> Integer
-name2Integer (Nm _ (_,x)) = x
-
-integer2Name :: Rep a => Integer -> Name a
-integer2Name n = Nm rep ("",n)
-
--- | Get the string part of a 'Name'.
-name2String :: Name a -> String
-name2String (Nm _ (s,_)) = s
-
-string2Name :: Rep a => String -> Name a
-string2Name s = Nm rep (s,0)
-
-makeName :: Rep a => String -> Integer -> Name a
-makeName s i = Nm rep (s,i)
-
--- | Determine the sort of a 'Name'.
-getR :: Name a -> R a
-getR (Nm r _)   = r
-
--- | Change the sort of a name
-translate :: (Rep b) => Name a -> Name b
-translate (Nm _ x) = Nm rep x
+$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
 
 ----------------------------------------------------------
 -- Binding operations & instances
 ----------------------------------------------------------
+
 -- | Smart constructor for binders
 bind :: (Alpha b,Alpha c) => b -> c -> Bind b c
 bind a b = B a b
@@ -218,9 +139,6 @@ unsafeUnbind (B a b) = (a,b)
 instance (Show a, Show b) => Show (Bind a b) where
   showsPrec p (B a b) = showParen (p>0)
       (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
-
-instance (Show a) => Show (Annot a) where
-  showsPrec p (Annot a) = (showString "[:" . showsPrec 0 a . showString "]")
 
 instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
          readPrec = R.parens $ (R.prec app_prec $ do
@@ -238,7 +156,7 @@ instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
 
 -- | Constructor for binding in patterns
 rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (bind (binders' initial a) b)
+rebind a b = R a (bind (binders a) b)
 
 instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
   showsPrec p (R a (B a' b)) =  showParen (p>0)
@@ -254,6 +172,26 @@ reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
 reopen (R a1 (B names b)) = (a1, swaps p b) where
    p = fromJust $ Monad.foldM join empty
           (zipWith single (binders' initial a1) names)
+
+----------------------------------------------------------
+-- Rec operations
+----------------------------------------------------------
+
+rec :: (Alpha a) => a -> Rec a
+rec a = Rec a (bind (binders a) a) where
+
+unrec :: (Alpha a) => Rec a -> a 
+unrec (Rec a _) = a
+
+instance Show a => Show (Rec a) where
+  showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
+
+----------------------------------------------------------
+-- Annot
+----------------------------------------------------------
+instance (Show a) => Show (Annot a) where
+  showsPrec p (Annot a) =
+      (showString "{" . showsPrec 0 a . showString "}")
 
 ----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
@@ -346,6 +284,9 @@ term c  = Term
 mode :: AlphaCtx -> AlphaCtx
 mode = id
 
+------------------------------------------------------------
+-- The Alpha class
+------------------------------------------------------------
 -- | The Alpha class is for all terms that may contain binders
 -- The 'Rep1' class constraint means that we can only
 -- make instances of this class for types that have
