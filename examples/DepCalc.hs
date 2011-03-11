@@ -91,8 +91,9 @@ typing rules:
 
 -}
 
-import Generics.RepLib.Bind.LocallyNameless
+
 import Generics.RepLib
+import Generics.RepLib.Bind.LocallyNameless
 
 import Data.Monoid
 import Control.Monad

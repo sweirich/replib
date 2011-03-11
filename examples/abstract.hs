@@ -45,8 +45,8 @@ $(derive_abstract [''SourcePos])
 
 -- | A Simple datatype for the Lambda Calculus that includes source position
 -- information
-data Exp = Var SourcePos Name
-         | Lam (Bind Name Exp)
+data Exp = Var SourcePos (Name Exp)
+         | Lam (Bind (Name Exp) Exp)
          | App Exp Exp
   deriving Show
 
@@ -54,16 +54,16 @@ $(derive [''Exp])
 
 -- To make Exp an instance of Alpha, we also need SourcePos to be an
 -- instance of Alpha, because it appears inside the Exp type.  When we
--- do so, we override the default definition of match'.  There are a
+-- do so, we override the default definition of aeq'.  There are a
 -- few reasonable choices for this:
 --
 -- (1) match no source positions together  --- default definition
---      match' c s1 s2 = Nothing
+--      aeq' c s1 s2 = False
 -- (2) match all source positions together
---      match' c s1 s2 = Just empty
+--      aeq' c s1 s2 = True
 -- (3) only match equal source positions together
---      match' c s1 s2 | s1 == s2 = Just empty
---      match' c s1 s2 = Nothing
+--      aeq' c s1 s2 = s1 == s2 
+--      
 --
 -- Below, we choose option (2) because we would like
 -- (alpha-)equivalence for Exp to ignore the source position
@@ -72,10 +72,11 @@ $(derive [''Exp])
 --
 -- The other defaults for Alpha are fine.
 instance Alpha SourcePos where
+   aeq' c s1 s2 = True
+   acompare' c s1 s2 = EQ
    match' c s1 s2 = Just empty
 
 instance Alpha Exp where
-deriving instance Eq Exp
 
 instance Subst Exp SourcePos where
 instance Subst Exp Exp where
@@ -86,11 +87,11 @@ type M a = Reader Integer a
 
 -- | Beta-Eta equivalence for lambda calculus terms.
 (=~) :: Exp -> Exp -> M Bool
-e1 =~ e2 | e1 == e2 = return True
+e1 =~ e2 | e1 `aeq` e2 = return True
 e1 =~ e2 = do
     e1' <- red e1
     e2' <- red e2
-    if e1' == e1 && e2' == e2
+    if e1' `aeq` e1 && e2' `aeq` e2
       then return False
       else e1' =~ e2'
 
@@ -112,7 +113,7 @@ red (Lam bnd) = lunbind bnd $ \ (x, e) -> do
    e' <- red e
    case e of
      -- look for an eta-reduction
-     App e1 (Var _ y) | y == x && x `S.notMember` fv e1 -> return e1
+     App e1 (Var _ y) | y `aeq` x && x `S.notMember` fv e1 -> return e1
      otherwise -> return (Lam (bind x e'))
 red v = return $ v
 
@@ -130,25 +131,25 @@ assertM s c =
   if (runReader c (0 :: Integer)) then return ()
   else print ("Assertion " ++ s ++ " failed")
 
-x :: Name
+x :: Name Exp
 x = string2Name "x"
 
-y :: Name
+y :: Name Exp
 y = string2Name "y"
 
-z :: Name
+z :: Name Exp
 z = string2Name "z"
 
-s :: Name
+s :: Name Exp
 s = string2Name "s"
 
 sp = newPos "Foo" 1 2
 sp2 = newPos "Bar" 3 4
 
-lam :: Name -> Exp -> Exp
+lam :: Name Exp -> Exp -> Exp
 lam x y = Lam (bind x y)
 
-var :: Name -> Exp
+var :: Name Exp -> Exp
 var n = Var sp n
 
 zero  = lam s (lam z (var z))
@@ -164,13 +165,13 @@ if_ x y z = (App (App x y) z)
 
 main :: IO ()
 main = do
-  -- \x.x == \x.y, no matter what the source positions are
-  assert "a1" $ lam x (var x) == lam y (Var sp2 y)
+  -- \x.x `aeq` \x.y, no matter what the source positions are
+  assert "a1" $ lam x (var x) `aeq` lam y (Var sp2 y)
   -- \x.x /= \x.y
-  assert "a2" $ lam x (var y) /= lam x (var x)
-  -- \x.(\y.x) (\y.y) == \y.y
+  assert "a2" $ not(lam x (var y) `aeq` lam x (var x))
+  -- \x.(\y.x) (\y.y) `aeq` \y.y
   assertM "be1" $ lam x (App (lam y (var x)) (lam y (var y))) =~ (lam y (var y))
-  -- \x. f x === f
+  -- \x. f x `aeq` f
   assertM "be2" $ lam x (App (var y) (var x)) =~ var y
   assertM "be3" $ if_ true (var x) (var y) =~ var x
   assertM "be4" $ if_ false (var x) (var y) =~ var y

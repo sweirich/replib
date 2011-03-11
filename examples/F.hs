@@ -25,8 +25,8 @@ data Ty = TyVar TyName
    deriving Show
 
 data Tm = TmVar TmName
-        | Lam Ty (Bind TmName Tm) 
-        | TLam   (Bind TyName Tm)
+        | Lam (Bind (TmName, Annot Ty) Tm) 
+        | TLam (Bind TyName Tm)
         | App Tm Tm
         | TApp Tm Ty
    deriving Show
@@ -34,15 +34,42 @@ data Tm = TmVar TmName
 $(derive [''Ty, ''Tm])
 
 ------------------------------------------------------  
-instance Alpha Ty where
+instance Alpha Ty where   
 instance Alpha Tm where
 
 instance Subst Tm Ty where
 instance Subst Tm Tm where
   isvar (TmVar x) = Just (SubstName x)
+  isvar _  = Nothing
 instance Subst Ty Ty where
   isvar (TyVar x) = Just (SubstName x)
+  isvar _ = Nothing
 ------------------------------------------------------
+-- Example terms
+------------------------------------------------------
+
+x :: Name Tm
+y :: Name Tm
+z :: Name Tm
+(x,y,z) = (string2Name "x", string2Name "y", string2Name "z")
+
+a :: Name Ty
+b :: Name Ty
+c :: Name Ty
+(a,b,c) = (string2Name "a", string2Name "b", string2Name "c")
+
+-- /\a. \x:a. x
+polyid :: Tm
+polyid = TLam (bind a (Lam (TyVar a) (bind x (TmVar x))))
+
+-- All a. a -> a
+polyidty :: Ty
+polyidty = All (bind a (Arr (TyVar a) (TyVar a)))
+
+
+-----------------------------------------------------------------
+-- Typechecker
+-----------------------------------------------------------------
 type Delta = [ TyName ]
 type Gamma = [ (TmName, Ty) ]
 
@@ -110,6 +137,4 @@ ti g (TApp t ty) = do
       tcty g  ty 
       (n1, ty1) <- unbind b
       return $ subst n1 ty ty1
-
----------------------------------------
 
