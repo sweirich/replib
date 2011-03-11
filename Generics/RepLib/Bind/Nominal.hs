@@ -119,7 +119,7 @@ data Rebind a b = R a (Bind [AnyName] b)
 -- | 'Rec' supports recursive patterns --- that is, patterns where
 -- any variables anywhere in the pattern are bound in the pattern
 -- itself.  Useful for lectrec (and Agda's dot notation).
-data Rec a = Rec a (Bind [AnyName] a)
+data Rec a = Rec a 
 
 $(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
 
@@ -178,10 +178,10 @@ reopen (R a1 (B names b)) = (a1, swaps p b) where
 ----------------------------------------------------------
 
 rec :: (Alpha a) => a -> Rec a
-rec a = Rec a (bind (binders a) a) where
+rec a = Rec a where
 
 unrec :: (Alpha a) => Rec a -> a 
-unrec (Rec a _) = a
+unrec (Rec a) = a
 
 instance Show a => Show (Rec a) where
   showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
