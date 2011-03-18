@@ -35,6 +35,7 @@ Library
     Generics.RepLib.SYB.Schemes,
     Generics.RepLib.Unify,
     Generics.RepLib.Bind.Name,
+    Generics.RepLib.Bind.NominalName,
     Generics.RepLib.Bind.Fresh,
     Generics.RepLib.Bind.Nominal,
     Generics.RepLib.Bind.LocallyNameless,

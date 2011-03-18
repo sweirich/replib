@@ -287,6 +287,13 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   --   possible.
   isTerm :: a -> Bool
   isTerm = isTermR1 rep1
+
+  -- | @isAnnot@ is needed internally for the implementation of
+  --   @isPat@.  @isAnnot@ is true for terms wrapped in @Annot@ and zero
+  --   or more occurrences of @Outer@.  The default implementation
+  --   simply returns @False@.
+  isAnnot :: a -> Bool
+  isAnnot _ = False
   ---------------- PATTERN OPERATIONS ----------------------------
 
   -- | @'nthpatrec' p n@ looks up the @n@th name in the pattern @p@
@@ -413,6 +420,7 @@ closeP = close (pat initial)
 data AlphaD a = AlphaD {
   isPatD    :: a -> Bool,
   isTermD   :: a -> Bool,
+  isAnnotD  :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
   fvD       :: Collection f => AlphaCtx -> a -> f AnyName,
   freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
@@ -427,7 +435,7 @@ data AlphaD a = AlphaD {
   }
 
 instance Alpha a => Sat (AlphaD a) where
-  dict = AlphaD isPat isTerm swaps' fv' freshen' lfreshen' aeq' match'
+  dict = AlphaD isPat isTerm isAnnot swaps' fv' freshen' lfreshen' aeq' match'
            close open findpatrec nthpatrec acompare'
 
 ----------------------------------------------------------------------
@@ -838,8 +846,9 @@ instance Alpha p => Alpha (Rec p) where
 -- and we generally should treat the annots as constants
 -- XXX todo: remove the above note once it is no longer needed
 instance Alpha t => Alpha (Annot t) where
-   isPat (Annot t) = isTerm t
-   isTerm t        = False
+   isPat (Annot t)   = isTerm t
+   isTerm t          = False
+   isAnnot (Annot t) = isPat t
 
    swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
    swaps' c pm (Annot t) | mode c == Term = Annot t
@@ -878,11 +887,14 @@ instance Alpha t => Alpha (Annot t) where
 
 
 instance Alpha a => Alpha (Outer a) where
-   isPat (Outer a) = isPat a   -- XXX this isn't quite right! Can't have any old pattern...
-   isTerm a        = False
 
-   close c b (Outer x) = Outer (close (decr c) b x)
-   open  c b (Outer x) = Outer (open  (decr c) b x)
+  -- The contents of Outer may only be an Annot or another Outer.
+  isPat (Outer a)   = isAnnot a
+  isTerm a          = False
+  isAnnot (Outer a) = isAnnot a
+
+  close c b (Outer x) = Outer (close (decr c) b x)
+  open  c b (Outer x) = Outer (open  (decr c) b x)
 
 
 -- Instances for other types use the default definitions.
@@ -1179,26 +1191,24 @@ class (Rep1 (SubstD b) a) => Subst b a where
         Nothing -> substR1 rep1 n u x
   subst m u x = error $ "Cannot substitute for bound variable " ++ show m
 
-  -- XXX
-  -- | Perform several simultaneous substitutions.  The lengths of the
-  -- lists must match, or will throw an error
-  substs :: [Name b] -> [b] -> a -> a
-  substs ns us x | all isFree ns =
+  -- | Perform several simultaneous substitutions.
+  substs :: [(Name b, b)] -> a -> a
+  substs ss x
+    | all (isFree . fst) ss =
       case (isvar x :: Maybe (SubstName a b)) of
         Just (SubstName m) ->
-          if length ns /= length us
-            then error "BUG: Number of vars and terms must match in multisubstitution"
-            else case m `List.elemIndex` ns of
-               Just i  -> (us !! i)
-               Nothing -> x
-        Nothing -> substsR1 rep1 ns us x
-  substs ns us x = error $ "Cannot substitute for bound variable in: " ++ show ns
+          case List.find ((==m) . fst) ss of
+            Just (_, u) -> u
+            Nothing     -> x
+        Nothing -> substsR1 rep1 ss x
+    | otherwise =
+      error $ "Cannot substitute for bound variable in: " ++ show (map fst ss)
 
 -- | Reified class dictionary for 'Subst'.
 data SubstD b a = SubstD {
   isvarD  :: a -> Maybe (SubstName a b),
   substD  ::  Name b -> b -> a -> a ,
-  substsD :: [Name b] -> [b] -> a -> a
+  substsD :: [(Name b, b)] -> a -> a
 }
 
 instance Subst b a => Sat (SubstD b a) where
@@ -1215,13 +1225,13 @@ substR1 (Data1 dt cons) = \ x y d ->
       in (to c z)
 substR1 r               = \ x y c -> c
 
-substsR1 :: R1 (SubstD b) a -> [Name b] -> [b] -> a -> a
-substsR1 (Data1 dt cons) = \ x y d ->
+substsR1 :: R1 (SubstD b) a -> [(Name b, b)] -> a -> a
+substsR1 (Data1 dt cons) = \ s d ->
   case (findCon cons d) of
   Val c rec kids ->
-      let z = map_l (\ w -> substsD w x y) rec kids
+      let z = map_l (\ w -> substsD w s) rec kids
       in (to c z)
-substsR1 r               = \ x y c -> c
+substsR1 r               = \ s c -> c
 
 instance Subst b Int
 instance Subst b Bool
