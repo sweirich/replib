@@ -844,7 +844,6 @@ instance Alpha p => Alpha (Rec p) where
 -- note: for Annots, when the mode is "term" then we are
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
--- XXX todo: remove the above note once it is no longer needed
 instance Alpha t => Alpha (Annot t) where
    isPat (Annot t)   = isTerm t
    isTerm t          = False
@@ -994,41 +993,56 @@ instance Show a => Show (Outer a) where
 ----------------------------------------------------------
 -- Wrappers for operations in the Alpha class
 ----------------------------------------------------------
--- | Determine alpha-equivalence of terms
-aeq :: Alpha a => a -> a -> Bool
+
+-- | Determine alpha-equivalence of terms.
+aeq :: Alpha t => t -> t -> Bool
 aeq t1 t2 = aeq' initial t1 t2
 
--- | Determine (alpha-)equivalence of patterns
--- Do they bind the same variables and have alpha-equal annotations?
-aeqBinders :: Alpha a => a -> a -> Bool
-aeqBinders t1 t2 = aeq' initial t1 t2
+-- | Determine (alpha-)equivalence of patterns.  Do they bind the same
+--   variables and have alpha-equal annotations?
+aeqBinders :: Alpha p => p -> p -> Bool
+aeqBinders p1 p2 = aeq' initial p1 p2
 
 -- | An alpha-respecting total order on terms involving binders.
-acompare :: Alpha a => a -> a -> Ordering
+acompare :: Alpha t => t -> t -> Ordering
 acompare x y = acompare' initial x y
 
 
 -- | Calculate the free variables (of any sort) contained in a term.
-fvAny :: (Alpha a, Collection f) => a -> f (AnyName)
+fvAny :: (Alpha t, Collection f) => t -> f AnyName
 fvAny = fv' initial
 
--- | Calculate the free variables of a particular sort contained in a term.
-fv :: forall a b f. (Rep b, Alpha a, Collection f)
-      => a -> f (Name b)
+-- | Calculate the free variables of a particular sort contained in a
+--   term.
+fv :: forall a t f. (Rep a, Alpha t, Collection f) => t -> f (Name a)
 fv = fromList
    . catMaybes
    . map toSortedName
    . F.toList
-   . (fv' initial :: a -> f AnyName)
+   . (fvAny :: t -> f AnyName)
 
--- | List all the binding variables (of a particular sort) in a pattern.
-binders :: (Rep a, Alpha b) => b -> [Name a]
-binders = fv
-
--- | Set of variables of a particular sort that occur freely in
+-- | Calculate the variables (of any sort) that occur freely within
 --   pattern annotations (but are not bound by the pattern).
-patfv :: (Rep a, Alpha b) => b -> Set (Name a)
-patfv = S.map fromJust . S.filter isJust . S.map toSortedName . fv' (pat initial)
+patfvAny :: (Alpha p, Collection f) => p -> f AnyName
+patfvAny = fv' (pat initial)
+
+-- | Calculate the variables of a particular sort that occur freely in
+--   pattern annotations (but are not bound by the pattern).
+patfv :: forall a p f. (Rep a, Alpha p, Collection f) => p -> f (Name a)
+patfv = fromList
+      . catMaybes
+      . map toSortedName
+      . F.toList
+      . (patfvAny :: p -> f AnyName)
+
+-- | Calculate the binding variables (of any sort) in a pattern.
+bindersAny :: (Alpha p, Collection f) => p -> f AnyName
+bindersAny = fvAny
+
+-- | Calculate the binding variables (of a particular sort) in a
+--   pattern.
+binders :: (Rep a, Alpha p, Collection f) => p -> f (Name a)
+binders = fv
 
 
 -- | Apply a permutation to a term.
@@ -1102,65 +1116,67 @@ findpat x n = case findpatrec x n of
 
 -- | Unbind (also known as \"open\") is the destructor for
 -- bindings. It ensures that the names in the binding are fresh.
-unbind  :: (Fresh m, Alpha b, Alpha c) => Bind b c -> m (b,c)
-unbind (B b c) = do
-      (b', _) <- freshen b
-      return (b', openT b' c)
+unbind  :: (Fresh m, Alpha p, Alpha t) => Bind p t -> m (p,t)
+unbind (B p t) = do
+      (p', _) <- freshen p
+      return (p', openT p' t)
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders have the same number of binding variables.
-unbind2  :: (Fresh m, Alpha b1, Alpha b2, Alpha c, Alpha d) =>
-            Bind b1 c -> Bind b2 d -> m (Maybe (b1,c,b2,d))
-unbind2 (B b1 c) (B b2 d) = do
-      case match (fvAny b1 :: [AnyName]) (fvAny b2) of
+unbind2  :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
+            Bind p1 t1 -> Bind p2 t2 -> m (Maybe (p1,t1,p2,t2))
+unbind2 (B p1 t1) (B p2 t2) = do
+      case match (fvAny p1 :: [AnyName]) (fvAny p2) of
          Just p -> do
-           (b1', p') <- freshen b1
-           return $ Just (b1', openT b1' c,
-                          swaps (p' <> p) b2, openT b1' d)
+           (p1', p') <- freshen p1
+           return $ Just (p1', openT p1' t1,
+                          swaps (p' <> p) p2, openT p1' t2)
          Nothing -> return Nothing
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders have the same number of binding variables.
-unbind3  :: (Fresh m, Alpha b1, Alpha b2, Alpha b3, Alpha c, Alpha d, Alpha e) =>
-            Bind b1 c -> Bind b2 d -> Bind b3 e ->  m (Maybe (b1,c,b2,d,b3,e))
-unbind3 (B b1 c) (B b2 d) (B b3 e) = do
-      case ( match (fvAny b1 :: [AnyName]) (fvAny b2)
-           , match (fvAny b1 :: [AnyName]) (fvAny b3) ) of
+unbind3  :: (Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
+            Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->  m (Maybe (p1,t1,p2,t2,p3,t3))
+unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
+      case ( match (fvAny p1 :: [AnyName]) (fvAny p2)
+           , match (fvAny p1 :: [AnyName]) (fvAny p3) ) of
          (Just p12, Just p13) -> do
-           (b1', p') <- freshen b1
-           return $ Just (b1', openT b1' c,
-                          swaps (p' <> p12) b2, openT b1' d,
-                          swaps (p' <> p13) b3, openT b1' e)
+           (p1', p') <- freshen p1
+           return $ Just (p1', openT p1' t1,
+                          swaps (p' <> p12) p2, openT p1' t2,
+                          swaps (p' <> p13) p3, openT p1' t3)
          _ -> return Nothing
 
 -- | Destruct a binding in an 'LFresh' monad.
-lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> ((a, b) -> m c) -> m c
-lunbind (B a b) g =
-  lfreshen a (\x _ -> g (x, openT x b))
+lunbind :: (LFresh m, Alpha p, Alpha t) => Bind p t -> ((p, t) -> m c) -> m c
+lunbind (B p t) g =
+  lfreshen p (\x _ -> g (x, openT x t))
 
 
 -- | Unbind two terms with the same fresh names, provided the
 --   binders have the same number of binding variables.
-lunbind2  :: (LFresh m, Alpha b1, Alpha b2, Alpha c, Alpha d) =>
-            Bind b1 c -> Bind b2 d -> (Maybe (b1,c,b2,d) -> m e) -> m e
-lunbind2 (B b1 c) (B b2 d) g =
-  case match (fvAny b1 :: [AnyName]) (fvAny b2) of
-    Just p1 ->
-      lfreshen b1 (\b1' p2 -> g $ Just (b1', openT b1' c,
-                                        swaps (p2 <> p1) b2, openT b1' d))
+lunbind2  :: (LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
+            Bind p1 t1 -> Bind p2 t2 -> (Maybe (p1,t1,p2,t2) -> m r) -> m r
+lunbind2 (B p1 t1) (B p2 t2) g =
+  case match (fvAny p1 :: [AnyName]) (fvAny p2) of
+    Just pm1 ->
+      lfreshen p1 (\p1' pm2 -> g $ Just (p1', openT p1' t1,
+                                         swaps (pm2 <> pm1) p2, openT p1' t2))
     Nothing -> g Nothing
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders have the same number of binding variables.
-lunbind3  :: (LFresh m, Alpha b1, Alpha b2, Alpha b3, Alpha c, Alpha d, Alpha e) =>
-            Bind b1 c -> Bind b2 d -> Bind b3 e ->  (Maybe (b1,c,b2,d,b3,e) -> m f) -> m f
-lunbind3 (B b1 c) (B b2 d) (B b3 e) g =
-  case ( match (fvAny b1 :: [AnyName]) (fvAny b2)
-       , match (fvAny b1 :: [AnyName]) (fvAny b3) ) of
-         (Just p12, Just p13) ->
-           lfreshen b1 (\b1' p' -> g $ Just (b1', openT b1' c,
-                                             swaps (p' <> p12) b2, openT b1' d,
-                                             swaps (p' <> p13) b3, openT b1' e))
+lunbind3 :: (LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
+            Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->
+            (Maybe (p1,t1,p2,t2,p3,t3) -> m r) ->
+            m r
+lunbind3 (B p1 t1) (B p2 t2) (B p3 t3) g =
+  case ( match (fvAny p1 :: [AnyName]) (fvAny p2)
+       , match (fvAny p1 :: [AnyName]) (fvAny p3) ) of
+         (Just pm12, Just pm13) ->
+           lfreshen p1 (\p1' pm' -> g $ Just (p1', openT p1' t1,
+                                              swaps (pm' <> pm12) p2, openT p1' t2,
+                                              swaps (pm' <> pm13) p3, openT p1' t3))
          _ -> g Nothing
 
 ------------------------------------------------------------
