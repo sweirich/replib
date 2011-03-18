@@ -9,13 +9,13 @@
 
 {- A "simple" core dependent calculus.
 
-term     M ::= x | * | \D. M | M [N] | Pi D. B 
-             | T | c 
+term     M ::= x | * | \D. M | M [N] | Pi D. B
+             | T | c
              | case M with y of [ c [x] => N ]
 
 tele     D ::= . | x:A, D
 
-ctx      G ::= . | G, x:A          
+ctx      G ::= . | G, x:A
 
 judgement forms:
     G |- D wf         telescope wellformedness
@@ -50,44 +50,44 @@ typing rules:
      -----------
      G |- inf x : A
 
-     G |- D wf        G, D |- chk B : *              
+     G |- D wf        G, D |- chk B : *
      --------------------------------
      G |- inf Pi D.B : *
 
      G |- D wf        G, D |- inf M : B
      -------------------------------
      G |- inf \D.M : Pi D. B
- 
+
      G |- inf M : Pi D.B      G |- [N] : D
-     ---------------------------------------      
-     G |- inf M [N] : B [ D |-> [N] ]         
+     ---------------------------------------
+     G |- inf M [N] : B [ D |-> [N] ]
        ** note: simultaneous substitution for the domain **
 
      ----------
      G |- inf * : *
 
-     G |- inf  M : A    G |- A == B      
+     G |- inf  M : A    G |- A == B
      ----------------------------
      G |- chk  M : B
 
      A = Pi D . *
-     T : A \in Sigma 
-     ---------------------  
+     T : A \in Sigma
+     ---------------------
      G |- inf T : A
 
      c: A \in Sigma
      A = Pi D. Pi D'. T [x]
      dom(D) = [x]
      -------------
-     G |- inf c : A 
+     G |- inf c : A
 
-     G |- inf M : T [ P ] 
+     G |- inf M : T [ P ]
      G |- chk A : *
-     for each i,  
-         ci : Pi D. Pi Di. T [x] \in Sigma  where dom(D) = [x] 
-         G, Di[ D |-> [P] ], y : M = C [w] |- chk N : A     
+     for each i,
+         ci : Pi D. Pi Di. T [x] \in Sigma  where dom(D) = [x]
+         G, Di[ D |-> [P] ], y : M = C [w] |- chk N : A
     ------------------------------------------------------
-     G |-inf case M in A with y of [ c [w] => N ] : A 
+     G |-inf case M in A with y of [ c [w] => N ] : A
 
 -}
 
@@ -132,7 +132,7 @@ type Ctx  = [ (Name Exp, Exp) ]
 
 $(derive [''TyCon, ''DataCon, ''Exp, ''Tele])
 
-instance Alpha Exp    
+instance Alpha Exp
 instance Alpha Tele
 
 instance Subst Exp Exp where
@@ -166,7 +166,7 @@ mkTele ((x,e) : t) = Cons (rebind (string2Name x, Annot e) (mkTele t))
 
 {- Polymorphic identity function -}
 
-pid :: Exp 
+pid :: Exp
 pid = elam [("A", EStar), ("x", evar "A")] (evar "x")
 
 {-
@@ -174,7 +174,7 @@ ELam (<(Cons (<<(A,{EStar})>> Cons (<<(x,{EVar 0@0})>> Empty)))> EVar 0@1)
 -}
 
 {- Polymorphic identity type: -}
-sid :: Exp 
+sid :: Exp
 sid = epi [("A", EStar), ("x", evar "A")] (evar "A")
 
 {-
@@ -182,7 +182,7 @@ EPi (<(Cons (<<(A,{EStar})>> Cons (<<(x,{EVar 0@0})>> Empty)))> EVar 0@0)
 -}
 
 {- Polymorphic identity type: -}
-sid2 :: Exp 
+sid2 :: Exp
 sid2 = epi [("B", EStar), ("y", evar "B")] (evar "B")
 
 
@@ -192,10 +192,10 @@ sid2 = epi [("B", EStar), ("y", evar "B")] (evar "B")
 type M = ErrorT String FreshM
 ok = return ()
 
-runM :: M a -> a 
-runM m = case (runFreshM (runErrorT m)) of 
+runM :: M a -> a
+runM m = case (runFreshM (runErrorT m)) of
    Left s  -> error s
-   Right a -> a 
+   Right a -> a
 
 lookUp :: Name a -> [(Name a, b)] -> M b
 lookUp n []     = throwError $ "Not in scope: " ++ show n
@@ -217,8 +217,8 @@ unTApp _ e = throwError $ "Expected datatype, got " ++ show e++ " instead"
 -- Check a telescope and push it onto the context
 checkTele :: Ctx -> Tele -> M Ctx
 checkTele g Empty = return g
-checkTele g (Cons rb) = do 
-  let ((x,Annot t), tele) = unrebind rb 
+checkTele g (Cons rb) = do
+  let ((x,Annot t), tele) = unrebind rb
   a <- infer g t
   check g a EStar
   checkTele ((x,t) : g) tele
@@ -235,7 +235,7 @@ infer g (EApp m ns) = do
     bnd <- (unPi g) =<< infer g m
     (delta, b) <- unbind bnd
     checks g ns delta  --- ensures that the length ns == length (binders delta)
-    return $ substs (binders delta) ns b
+    return $ substs (zip (binders delta) ns) b
 infer g (EPi bnd) = do
     (delta, b) <- unbind bnd
     g' <- checkTele g delta
@@ -246,7 +246,7 @@ infer g (ETyCon n) = do
     (delta, t) <- unbind bnd
     checkEq g t EStar
     return $ EPi bnd
-infer g (EDataCon c) = do 
+infer g (EDataCon c) = do
   bnd <- (unPi g) =<< lookUp c sigmaData
   (delta, t) <- unbind bnd
   bnd' <- unPi g t
@@ -254,21 +254,21 @@ infer g (EDataCon c) = do
   vs <- mapM unVar vars
   if vs == binders delta then return $ EPi bnd
      else throwError $ "incorrect result type for " ++ show (EDataCon c)
-infer g (ECase m a bnd) = do 
+infer g (ECase m a bnd) = do
    check g a EStar
    (y, brs) <- unbind bnd
    t <- infer g m
    (n, ps)  <- unTApp g t
-   _ <- mapM (checkBr y ps) brs 
-   return a 
-    where 
-      checkBr y ps (c,bnd) = do     
+   _ <- mapM (checkBr y ps) brs
+   return a
+    where
+      checkBr y ps (c,bnd) = do
          cbnd <- (unPi g) =<< lookUp c sigmaData
          (delta, rest) <- unbind cbnd
          cbnd' <- unPi g rest
          Just (deltai, _, ws, n) <- unbind2 cbnd' bnd
-         g' <- checkTele g (substs (binders delta) ps deltai)
-         let g'' = (y, EApp (ETyCon teq) [m, (EApp (EDataCon c) (map EVar ws))]): g' 
+         g' <- checkTele g (substs (zip (binders delta) ps) deltai)
+         let g'' = (y, EApp (ETyCon teq) [m, (EApp (EDataCon c) (map EVar ws))]): g'
          check g' n a
 
 check :: Ctx -> Exp -> Exp -> M ()
