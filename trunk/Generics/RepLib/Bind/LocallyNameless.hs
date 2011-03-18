@@ -94,8 +94,8 @@ module Generics.RepLib.Bind.LocallyNameless
 
 import Generics.RepLib hiding (GT)
 import Generics.RepLib.Bind.PermM
-import Generics.RepLib.Bind.Name
-import Generics.RepLib.Bind.Fresh
+import Generics.RepLib.Bind.LocallyNameless.Name
+import Generics.RepLib.Bind.LocallyNameless.Fresh
 
 import qualified Data.List as List
 import qualified Data.Char as Char

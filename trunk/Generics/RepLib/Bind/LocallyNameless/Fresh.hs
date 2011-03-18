@@ -8,7 +8,7 @@
   #-}
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.Fresh
+-- Module      :  Generics.RepLib.Bind.LocallyNameless.Fresh
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
@@ -20,7 +20,7 @@
 -- monad (transformers) which provide useful default implementations.
 ----------------------------------------------------------------------
 
-module Generics.RepLib.Bind.Fresh
+module Generics.RepLib.Bind.LocallyNameless.Fresh
   ( -- * The 'Fresh' class
 
     Fresh(..),
@@ -38,7 +38,7 @@ module Generics.RepLib.Bind.Fresh
   ) where
 
 import Generics.RepLib
-import Generics.RepLib.Bind.Name
+import Generics.RepLib.Bind.LocallyNameless.Name
 
 import Data.Set (Set)
 import qualified Data.Set as S

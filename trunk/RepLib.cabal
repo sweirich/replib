@@ -34,10 +34,10 @@ Library
     Generics.RepLib.SYB.Aliases,
     Generics.RepLib.SYB.Schemes,
     Generics.RepLib.Unify,
-    Generics.RepLib.Bind.Name,
-    Generics.RepLib.Bind.NominalName,
-    Generics.RepLib.Bind.Fresh,
-    Generics.RepLib.Bind.Nominal,
     Generics.RepLib.Bind.LocallyNameless,
+    Generics.RepLib.Bind.LocallyNameless.Name,
+    Generics.RepLib.Bind.LocallyNameless.Fresh,
+    Generics.RepLib.Bind.Nominal,
+    Generics.RepLib.Bind.Nominal.Name,
     Generics.RepLib.Bind.PermM
   extensions: GADTs
