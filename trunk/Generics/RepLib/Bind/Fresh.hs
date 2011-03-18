@@ -76,7 +76,7 @@ import qualified Control.Monad.IO.Class as IC
 class Monad m => Fresh m where
   fresh :: Name a -> m (Name a)
 
--- | The Fresh monad transformer.  Keeps track of the lowest index
+-- | The @FreshM@ monad transformer.  Keeps track of the lowest index
 --   still globally unused, and increments the index every time it is
 --   asked for a fresh name.
 newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT Integer m a }
@@ -166,6 +166,8 @@ instance RC.MonadReader r m => RC.MonadReader r (FreshMT m) where
 -- LFresh
 ---------------------------------------------------
 
+-- XXX todo: generalize 'avoid' to take an arbitrary term/pattern?
+-- would make the modules recursive though...
 -- | This is the class of monads that support freshness in an
 --   (implicit) local scope.  Generated names are fresh for the current
 --   local scope, but not globally fresh.
