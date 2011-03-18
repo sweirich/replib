@@ -1,8 +1,11 @@
 {-# LANGUAGE RankNTypes
            , TemplateHaskell
            , GADTs
+           , UndecidableInstances
            , FlexibleInstances
+           , FlexibleContexts
            , MultiParamTypeClasses
+           , ScopedTypeVariables
   #-}
 ----------------------------------------------------------------------
 -- |
@@ -21,6 +24,9 @@ module Generics.RepLib.Bind.LocallyNameless.Name where
 
 import Generics.RepLib
 
+$(derive_abstract [''R])
+-- The above only works with GHC 7.
+
 -- | 'Name's are things that get bound.  This type is intentionally
 --   abstract; to create a 'Name' you can use 'string2Name' or
 --   'integer2Name'. The type parameter is a tag, or /sort/, which tells
@@ -30,6 +36,8 @@ data Name a
   = Nm (R a) (String, Integer)   -- free names
   | Bn (R a) Integer Integer     -- bound names / binding level + pattern index
    deriving (Eq, Ord)
+
+$(derive [''Name])
 
 -- | A name with a hidden (existentially quantified) sort.
 data AnyName = forall a. Rep a => AnyName (Name a)

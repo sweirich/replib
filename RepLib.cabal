@@ -37,7 +37,10 @@ Library
     Generics.RepLib.Bind.LocallyNameless,
     Generics.RepLib.Bind.LocallyNameless.Name,
     Generics.RepLib.Bind.LocallyNameless.Fresh,
+    Generics.RepLib.Bind.LocallyNameless.Internal,
+    Generics.RepLib.Bind.LocallyNameless.Types,
     Generics.RepLib.Bind.Nominal,
     Generics.RepLib.Bind.Nominal.Name,
+    Generics.RepLib.Bind.Nominal.Internal,
     Generics.RepLib.Bind.PermM
   extensions: GADTs
