@@ -190,21 +190,32 @@ newtype Outer p = Outer p deriving Eq
 $(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
 
 --------------------------------------------------
--- Pointed functors
+-- Collections
 --------------------------------------------------
 
--- Pointed
-class Pointed f where
+-- | Collections are foldable types that support empty, singleton, and
+--   union operations.  The result of a free variable calculation may be
+--   any collection.  Instances are provided for lists and sets.
+class F.Foldable f => Collection f where
+  emptyC    :: f a
   singleton :: a -> f a
+  union     :: Ord a => f a -> f a -> f a
 
-instance Pointed [] where
+unions :: (Ord a, Collection f) => [f a] -> f a
+unions = foldr union emptyC
+
+fromList :: (Ord a, Collection f) => [a] -> f a
+fromList = unions . map singleton
+
+instance Collection [] where
+  emptyC    = []
   singleton = (:[])
+  union     = (++)
 
-instance Pointed S.Set where
+instance Collection S.Set where
+  emptyC    = S.empty
   singleton = S.singleton
-
-fromList :: (Pointed f, Monoid (f a)) => [a] -> f a
-fromList = mconcat . map singleton
+  union     = S.union
 
 ------------------------------------------------------------
 -- The Alpha class
@@ -234,7 +245,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   swaps' = swapsR1 rep1
 
   -- | See 'fv'.
-  fv' :: (Pointed f, Monoid (f AnyName)) => AlphaCtx -> a -> f AnyName
+  fv' :: Collection f => AlphaCtx -> a -> f AnyName
   fv' = fvR1 rep1
 
   -- | See 'lfreshen'.
@@ -403,7 +414,7 @@ data AlphaD a = AlphaD {
   isPatD    :: a -> Bool,
   isTermD   :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
-  fvD       :: (Monoid (f AnyName), Pointed f) => AlphaCtx -> a -> f AnyName,
+  fvD       :: Collection f => AlphaCtx -> a -> f AnyName,
   freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
   lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
   aeqD      :: AlphaCtx -> a -> a -> Bool,
@@ -447,16 +458,16 @@ swapsR1 (Data1 _ cons)  = \ p x d ->
 swapsR1 _               = \ _ _ d -> d
 
 
-fvR1 :: (Pointed f, Monoid (f AnyName)) => R1 (AlphaD) a -> AlphaCtx -> a -> f AnyName
+fvR1 :: Collection f => R1 (AlphaD) a -> AlphaCtx -> a -> f AnyName
 fvR1 (Data1 _ cons) = \ p  d ->
   case (findCon cons d) of
     Val _ rec kids -> fv1 rec p kids
-fvR1 _ = \ _ _ -> mempty
+fvR1 _ = \ _ _ -> emptyC
 
-fv1 :: (Pointed f, Monoid (f AnyName)) => MTup (AlphaD) l -> AlphaCtx -> l -> f AnyName
-fv1 MNil _ Nil = mempty
+fv1 :: Collection f => MTup (AlphaD) l -> AlphaCtx -> l -> f AnyName
+fv1 MNil _ Nil = emptyC
 fv1 (r :+: rs) p (p1 :*: t1) =
-   fvD r p p1 <> fv1 rs p t1
+   fvD r p p1 `union` fv1 rs p t1
 
 
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm AnyName)
@@ -605,7 +616,7 @@ instance Rep a => Alpha (Name a) where
   isPat _       = False
 
   fv' c n@(Nm _ _)  | mode c == Term = singleton (AnyName n)
-  fv' _ _                            = mempty
+  fv' _ _                            = emptyC
 
   swaps' c p x | mode c == Term =
                      case apply p (AnyName x) of
@@ -670,7 +681,7 @@ instance Alpha AnyName  where
   isPat _                 = False
 
   fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
-  fv' _ _                                      = mempty
+  fv' _ _                                      = emptyC
 
   swaps' c p x = case mode c of
                    Term -> apply p x
@@ -733,7 +744,7 @@ instance (Alpha p, Alpha t) => Alpha (Bind p t) where
         (B (swaps' (pat c) pm p)
            (swaps' (incr c) pm t))
 
-    fv' c (B p t) = fv' (pat c) p <> fv' (incr c) t
+    fv' c (B p t) = fv' (pat c) p `union` fv' (incr c) t
 
     freshen' c (B p t) = do
       (p', pm1) <- freshen' (pat c) p
@@ -772,7 +783,7 @@ instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
 
   swaps' c pm (R p q) = R (swaps' c pm p) (swaps' (incr c) pm q)
 
-  fv' c (R p q) =  fv' c p <> fv' (incr c) q
+  fv' c (R p q) =  fv' c p `union` fv' (incr c) q
 
   lfreshen' c (R p q) g =
     lfreshen' c p $ \ p' pm1 ->
@@ -834,7 +845,7 @@ instance Alpha t => Alpha (Annot t) where
    swaps' c pm (Annot t) | mode c == Term = Annot t
 
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
-   fv' c _         | mode c == Term = mempty
+   fv' c _         | mode c == Term = emptyC
 
    freshen' c (Annot t) | mode c == Pat = do
        (t', p) <- freshen' (term c) t
@@ -986,15 +997,17 @@ acompare x y = acompare' initial x y
 
 
 -- | Calculate the free variables (of any sort) contained in a term.
-fvAny :: (Alpha a, Pointed f, Monoid (f AnyName)) => a -> f (AnyName)
+fvAny :: (Alpha a, Collection f) => a -> f (AnyName)
 fvAny = fv' initial
 
 -- | Calculate the free variables of a particular sort contained in a term.
-fv :: forall a b f.
-      (Rep b, Alpha a,
-       Pointed f, F.Foldable f, Monoid (f AnyName), Monoid (f (Name b)))
+fv :: forall a b f. (Rep b, Alpha a, Collection f)
       => a -> f (Name b)
-fv = fromList . catMaybes . map toSortedName . F.toList . (fv' initial :: a -> f AnyName)
+fv = fromList
+   . catMaybes
+   . map toSortedName
+   . F.toList
+   . (fv' initial :: a -> f AnyName)
 
 -- | List all the binding variables (of a particular sort) in a pattern.
 binders :: (Rep a, Alpha b) => b -> [Name a]
