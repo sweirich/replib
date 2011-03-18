@@ -135,14 +135,14 @@ instance Erasable Kind where
   type Erased Kind = SKind
   erase Type = SKType
   erase (KPi b) = SKArr (erase ty) (erase k)
-    where ((_, Annot ty), k) = unsafeUnBind b
+    where ((_, Annot ty), k) = unsafeUnbind b
           -- this is actually safe since we ignore the name
           -- and promise to erase it from k.
 
 instance Erasable Ty where
   type Erased Ty = STy
   erase (TyPi b)      = STyArr (erase t1) (erase t2)
-    where ((_, Annot t1), t2) = unsafeUnBind b
+    where ((_, Annot t1), t2) = unsafeUnbind b
   erase (TyApp ty _)  = erase ty
   erase (TyConst c)   = STyConst c
 
