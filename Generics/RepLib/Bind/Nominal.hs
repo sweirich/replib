@@ -69,7 +69,7 @@ module Generics.RepLib.Bind.Nominal
    rName, rBind, rRebind, rAnnot, rRec, rOuter) where
 
 import Generics.RepLib
-import Generics.RepLib.Bind.NominalName
+import Generics.RepLib.Bind.Nominal.Name
 import Generics.RepLib.Bind.PermM
 
 import qualified Data.List as List
@@ -119,7 +119,7 @@ data Rebind a b = R a (Bind [AnyName] b)
 -- | 'Rec' supports recursive patterns --- that is, patterns where
 -- any variables anywhere in the pattern are bound in the pattern
 -- itself.  Useful for lectrec (and Agda's dot notation).
-data Rec a = Rec a 
+data Rec a = Rec a
 
 $(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
 
@@ -180,7 +180,7 @@ reopen (R a1 (B names b)) = (a1, swaps p b) where
 rec :: (Alpha a) => a -> Rec a
 rec a = Rec a where
 
-unrec :: (Alpha a) => Rec a -> a 
+unrec :: (Alpha a) => Rec a -> a
 unrec (Rec a) = a
 
 instance Show a => Show (Rec a) where
