@@ -41,7 +41,7 @@
 
 module Generics.RepLib.Bind.LocallyNameless
   ( -- * Basic types
-    Name, AnyName(..), Bind, Annot(..), Rebind, Rec, Outer,
+    Name, AnyName(..), Bind, Annot(..), Rebind, Rec, Outer(..),
 
     -- ** Utilities
     integer2Name, string2Name, s2n, makeName,
@@ -165,26 +165,26 @@ $(derive_abstract [''R])
 --
 --   Like 'Name', 'Bind' is also abstract. You can create bindings
 --   using 'bind' and take them apart with 'unbind' and friends.
-data Bind a b = B a b
+data Bind p t = B p t
 
 -- | 'Rebind' supports \"telescopes\" --- that is, patterns where
 --   bound variables appear in multiple subterms.
-data Rebind a b = R a b
+data Rebind p1 p2 = R p1 p2
 
 -- | 'Rec' supports recursive patterns --- that is, patterns where
 -- any variables anywhere in the pattern are bound in the pattern
 -- itself.  Useful for lectrec (and Agda's dot notation).
-data Rec a = Rec a
+data Rec p = Rec p
 
 -- | An annotation is a \"hole\" in a pattern where variables can be
 --   used, but not bound. For example, patterns may include type
 --   annotations, and those annotations can reference variables
 --   without binding them.  Annotations do nothing special when they
 --   appear elsewhere in terms.
-newtype Annot a = Annot a deriving Eq
+newtype Annot t = Annot t deriving Eq
 
 -- | An outer can shift an annotation \"hole\" to refer to higher context.
-newtype Outer a = Outer a deriving Eq
+newtype Outer p = Outer p deriving Eq
 
 
 $(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
@@ -265,14 +265,20 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   acompare' :: AlphaCtx -> a -> a -> Ordering
   acompare' = acompareR1 rep1
 
+  -- | @isPat x@ dynamically checks whether @x@ can be used as a valid
+  --   pattern.  The default instance returns @True@ if at all
+  --   possible.
   isPat :: a -> Bool
   isPat = isPatR1 rep1
 
+  -- | @isTerm x@ dynamically checks whether @x@ can be used as a
+  --   valid term. The default instance returns @True@ if at all
+  --   possible.
   isTerm :: a -> Bool
   isTerm = isTermR1 rep1
   ---------------- PATTERN OPERATIONS ----------------------------
 
-  -- | @'nthpatrec' b n@ looks up the @n@th name in the pattern @b@
+  -- | @'nthpatrec' p n@ looks up the @n@th name in the pattern @p@
   -- (zero-indexed), returning the number of names encountered if not
   -- found.
   nthpatrec :: a -> NthCont
@@ -283,6 +289,10 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   --   instead.
   findpatrec :: a -> AnyName -> FindResult
   findpatrec = findpatR1 rep1
+
+------------------------------------------------------------
+--  Pattern operation internals
+------------------------------------------------------------
 
 -- | The result of a 'findpatrec' operation.
 data FindResult = Index Integer      -- ^ The (first) index of the name we
@@ -332,6 +342,14 @@ nthName :: AnyName -> NthCont
 nthName nm = NthCont $ \i -> if i == 0
                                then Found nm
                                else CurIndex (i-1)
+
+------------------------------------------------------------
+--  AlphaCtx
+------------------------------------------------------------
+
+-- An AlphaCtx records the current mode (Term/Pat) and current level,
+-- and gets passed along during operations which need to keep track of
+-- the mode and/or level.
 
 -- | Many of the operations in the 'Alpha' class take an 'AlphaCtx':
 -- stored information about the iteration as it progresses. This type
@@ -383,7 +401,7 @@ closeP = close (pat initial)
 --   reified dictionary for the 'Alpha' class.
 data AlphaD a = AlphaD {
   isPatD    :: a -> Bool,
-  isTermD    :: a -> Bool,
+  isTermD   :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
   fvD       :: (Monoid (f AnyName), Pointed f) => AlphaCtx -> a -> f AnyName,
   freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
@@ -531,15 +549,15 @@ nthpatL MNil Nil              = mempty
 nthpatL (r :+: rs) (t :*: ts) = nthpatD r t <> nthpatL rs ts
 
 isPatR1 :: R1 AlphaD b -> b -> Bool
-isPatR1 (Data1 dt cons) = \ d -> 
+isPatR1 (Data1 dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> foldl_l (\ c b a -> isPatD c a && b) True rec kids 
+     Val c rec kids -> foldl_l (\ c b a -> isPatD c a && b) True rec kids
 isPatR1 _ = \ d -> True
 
 isTermR1 :: R1 AlphaD b -> b -> Bool
-isTermR1 (Data1 dt cons) = \ d -> 
+isTermR1 (Data1 dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> foldl_l (\ c b a -> isTermD c a && b) True rec kids 
+     Val c rec kids -> foldl_l (\ c b a -> isTermD c a && b) True rec kids
 isTermR1 _ = \ d -> True
 
 -- Exactly like the generic Ord instance defined in Generics.RepLib.PreludeLib,
@@ -570,16 +588,21 @@ compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
 
 
 ------------------------------------------------------------
--- Specific Alpha instances for the important type
--- constructors:
---      Names, Bind, Annot, Rebind and Rec
+-- Specific Alpha instances for the binding combinators:
+--      Name, Bind, Annot, Rebind, Rec, Outer
 -----------------------------------------------------------
 
--- in the Name instance, if the mode is Term then the operation
--- observes the name. In Pat mode the name is pretty much ignored
--- because the name is only there for documentation.
+-- In the Name instance, if the mode is Term then the operation
+-- observes the name. In Pat mode the name is a binder, so the name is
+-- usually ignored.
 instance Rep a => Alpha (Name a) where
-  -- default isTerm/isPat
+
+  -- Both bound and free names are valid terms.
+  isTerm _ = True
+
+  -- Only free names are valid as patterns, which serve as binders.
+  isPat (Nm {}) = True
+  isPat _       = False
 
   fv' c n@(Nm _ _)  | mode c == Term = singleton (AnyName n)
   fv' _ _                            = mempty
@@ -625,17 +648,27 @@ instance Rep a => Alpha (Name a) where
   findpatrec nm1 (AnyName nm2) =
     case gcastR (getR nm1) (getR nm2) nm1 of
       Just nm1' -> if nm1' == nm2 then Index 0 else NamesSeen 1
-      Nothing -> NamesSeen 1
+      Nothing   -> NamesSeen 1
 
   nthpatrec = nthName . AnyName
 
-  acompare' c (Nm r1 n1) (Nm r2 n2) | mode c == Term = lexord (compare r1 r2) (compare n1 n2)
-  acompare' c (Bn r1 m1 n1) (Bn r2 m2 n2) | mode c == Term = lexord (compare r1 r2) (lexord (compare m1 m2) (compare n1 n2))
-  acompare' c (Nm _ _) (Bn _ _ _) | mode c == Term = LT
-  acompare' c (Bn _ _ _) (Nm _ _) | mode c == Term = GT
-  acompare' c _ _ | mode c == Pat = EQ
+  acompare' c (Nm r1 n1)    (Nm r2 n2)
+    | mode c == Term = lexord (compare r1 r2) (compare n1 n2)
+
+  acompare' c (Bn r1 m1 n1) (Bn r2 m2 n2)
+    | mode c == Term = lexord (compare r1 r2) (lexord (compare m1 m2) (compare n1 n2))
+
+  acompare' c (Nm _ _)   (Bn _ _ _) | mode c == Term = LT
+  acompare' c (Bn _ _ _) (Nm _ _)   | mode c == Term = GT
+  acompare' c _          _          | mode c == Pat = EQ
 
 instance Alpha AnyName  where
+
+  isTerm _ = True
+
+  isPat (AnyName (Nm {})) = True
+  isPat _                 = False
+
   fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
   fv' _ _                                      = mempty
 
@@ -692,83 +725,86 @@ instance Alpha AnyName  where
 
   nthpatrec = nthName
 
-instance (Alpha a, Alpha b) => Alpha (Bind a b) where
-    isPat x = False
-    isTerm (B x y) = isPat x && isTerm y
+instance (Alpha p, Alpha t) => Alpha (Bind p t) where
+    isPat _ = False
+    isTerm (B p t) = isPat p && isTerm t
 
-    swaps' c pm (B x y) =
-        (B (swaps' (pat c) pm x)
-           (swaps' (incr c) pm y))
+    swaps' c pm (B p t) =
+        (B (swaps' (pat c) pm p)
+           (swaps' (incr c) pm t))
 
-    fv' c (B x y) = fv' (pat c) x <> fv' (incr c) y
+    fv' c (B p t) = fv' (pat c) p <> fv' (incr c) t
 
-    freshen' c (B x y) = do
-      (x', pm1) <- freshen' (pat c) x
-      (y', pm2) <- freshen' (incr c) (swaps' (incr c) pm1 y)
-      return (B x' y', pm1 <> pm2)
+    freshen' c (B p t) = do
+      (p', pm1) <- freshen' (pat c) p
+      (t', pm2) <- freshen' (incr c) (swaps' (incr c) pm1 t)
+      return (B p' t', pm1 <> pm2)
 
-    lfreshen' c (B x y) f =
-        lfreshen' (pat c) x (\ x' pm1 ->
-        lfreshen' (incr c) (swaps' (incr c) pm1 y) (\ y' pm2 ->
-        f (B x' y') (pm1 <> pm2)))
+    lfreshen' c (B p t) f =
+        lfreshen' (pat c) p (\ p' pm1 ->
+        lfreshen' (incr c) (swaps' (incr c) pm1 t) (\ t' pm2 ->
+        f (B p' t') (pm1 <> pm2)))
 
-    aeq' c (B x1 y1) (B x2 y2) = do
-      aeq' (pat c) x1 x2  && aeq' (incr c) y1 y2
+    aeq' c (B p1 t1) (B p2 t2) = do
+      aeq' (pat c) p1 p2  && aeq' (incr c) t1 t2
 
-    match' c (B x1 y1) (B x2 y2) = do
-      px <- match' (pat c) x1 x2
-      py <- match' (incr c) y1 y2
+    match' c (B p1 t1) (B p2 t2) = do
+      pp <- match' (pat c) p1 p2
+      pt <- match' (incr c) t1 t2
       -- need to make sure that all permutations of
       -- bound variables at this
       -- level are the identity
-      (px `join` py)
+      (pp `join` pt)
 
-    open  c a (B x y)    = B (open (pat c) a x)  (open  (incr c) a y)
-    close c a (B x y)    = B (close (pat c) a x) (close (incr c) a y)
+    open  c a (B p t)    = B (open (pat c) a p)  (open  (incr c) a t)
+    close c a (B p t)    = B (close (pat c) a p) (close (incr c) a t)
 
     --  Comparing two binding terms.
-    acompare' c (B a1 a2) (B b1 b2) =
-      lexord (acompare' (pat c) a1 b1) (acompare' (incr c) a2 b2)
+    acompare' c (B p1 t1) (B p2 t2) =
+      lexord (acompare' (pat c) p1 p2) (acompare' (incr c) t1 t2)
 
-instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
-  isTerm x = False
-  isPat (R x y) = isPat x && isPat y
+    findpatrec _ b = error $ "Binding " ++ show b ++ " used as a pattern"
+    nthpatrec    b = error $ "Binding " ++ show b ++ " used as a pattern"
 
-  swaps' p pm (R x y) = R (swaps' p pm x) (swaps' (incr p) pm y)
+instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
+  isTerm _ = False
+  isPat (R p q) = isPat p && isPat q
 
-  fv' p (R x y) =  fv' p x <> fv' (incr p) y
+  swaps' c pm (R p q) = R (swaps' c pm p) (swaps' (incr c) pm q)
 
-  lfreshen' p (R x y) g =
-    lfreshen' p x $ \ x' pm1 ->
-      lfreshen' (incr p) (swaps' (incr p) pm1 y) $ \ y' pm2 ->
-        g (R x' y') (pm1 <> pm2)
+  fv' c (R p q) =  fv' c p <> fv' (incr c) q
 
-  freshen' p (R x y) = do
-      (x', pm1) <- freshen' p x
-      (y', pm2) <- freshen' (incr p) (swaps' (incr p) pm1 y)
-      return (R x' y', pm1 <> pm2)
+  lfreshen' c (R p q) g =
+    lfreshen' c p $ \ p' pm1 ->
+      lfreshen' (incr c) (swaps' (incr c) pm1 q) $ \ q' pm2 ->
+        g (R p' q') (pm1 <> pm2)
 
-  aeq' p (R x1 y1) (R x2 y2 ) = do
-      aeq' p x1 x2 && aeq' p y1 y2
+  freshen' c (R p q) = do
+      (p', pm1) <- freshen' c p
+      (q', pm2) <- freshen' (incr c) (swaps' (incr c) pm1 q)
+      return (R p' q', pm1 <> pm2)
 
-  match' p (R x1 y1) (R x2 y2) = do
-     px <- match' p x1 x2
-     py <- match' (incr p)  y1 y2
-     (px `join` py)
+  aeq' c (R p1 q1) (R p2 q2 ) = do
+      aeq' c p1 p2 && aeq' c q1 q2
+
+  match' c (R p1 q1) (R p2 q2) = do
+     pp <- match' c p1 p2
+     pq <- match' (incr c)  q1 q2
+     (pp `join` pq)
 
   acompare' c (R a1 a2) (R b1 b2) =
       lexord (acompare' c a1 b1) (acompare' (incr c) a2 b2)
 
 
-  open c a (R x y)  = R (open c a x) (open (incr c) a y)
-  close c a (R x y) = R (close c a x) (close (incr c) a y)
+  open c a (R p q)  = R (open c a p) (open (incr c) a q)
+  close c a (R p q) = R (close c a p) (close (incr c) a q)
 
-  findpatrec (R x y) nm = findpatrec x nm <> findpatrec y nm
+  findpatrec (R p q) nm = findpatrec p nm <> findpatrec q nm
 
-  nthpatrec (R x y) = nthpatrec x <> nthpatrec y
+  nthpatrec (R p q) = nthpatrec p <> nthpatrec q
 
 
-instance Alpha a => Alpha (Rec a) where
+instance Alpha p => Alpha (Rec p) where
    {-  default defs of these work if we don't care about incrs
 
    fv' c (Rec a) = fv' c a
@@ -779,20 +815,20 @@ instance Alpha a => Alpha (Rec a) where
    nthpatrec (Rec a)  i  = nthpatrec a i
 
    -}
-   isPat (Rec a) = isPat a
+   isPat (Rec p) = isPat p
    isTerm _ = False
 
-   open c b (Rec a) = Rec (open (incr c) b a)
-   close c b (Rec a) = Rec (close (incr c) b a)
-
+   open  c a (Rec p) = Rec (open  (incr c) a p)
+   close c a (Rec p) = Rec (close (incr c) a p)
 
 
 -- note: for Annots, when the mode is "term" then we are
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
-instance Alpha a => Alpha (Annot a) where
+-- XXX todo: remove the above note once it is no longer needed
+instance Alpha t => Alpha (Annot t) where
    isPat (Annot t) = isTerm t
-   isTerm t = False
+   isTerm t        = False
 
    swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
    swaps' c pm (Annot t) | mode c == Term = Annot t
@@ -805,12 +841,12 @@ instance Alpha a => Alpha (Annot a) where
        return (Annot t', p)
    freshen' c a | mode c == Term = return (a, empty)
 
+   -- XXX is this right???
    lfreshen' c a f
      | mode c == Term = f a empty
      | mode c == Pat  = error "lfreshen' called on Annot in Pat mode!?"
 
-   aeq' c (Annot x) (Annot y) | mode c == Pat = aeq' (term c) x y
-   aeq' c (Annot x) (Annot y) | mode c == Term = aeq' (term c) x y -- yes, exactly the same
+   aeq' c (Annot x) (Annot y) = aeq' (term c) x y
 
    acompare' c (Annot x) (Annot y) = acompare' (term c) x y
 
@@ -826,17 +862,18 @@ instance Alpha a => Alpha (Annot a) where
    open c b (Annot x) | mode c == Pat  = Annot (open (term c) b x)
                       | mode c == Term = error "open on Annot"
 
-
    findpatrec _ _ = mempty
    nthpatrec _    = mempty
 
 
 instance Alpha a => Alpha (Outer a) where
-   isPat (Outer a) = isPat a
-   isTerm a = False
+   isPat (Outer a) = isPat a   -- XXX this isn't quite right! Can't have any old pattern...
+   isTerm a        = False
 
    close c b (Outer x) = Outer (close (decr c) b x)
    open  c b (Outer x) = Outer (open  (decr c) b x)
+
+
 -- Instances for other types use the default definitions.
 instance Alpha Bool
 instance Alpha Float
@@ -859,6 +896,7 @@ instance (Rep a) => Alpha (R a)
 ----------------------------------------------------------
 -- Binding operations & instances
 ----------------------------------------------------------
+
 -- | A smart constructor for binders, also sometimes known as
 -- \"close\".
 bind :: (Alpha c, Alpha b) => b -> c -> Bind b c
@@ -983,9 +1021,9 @@ swapsAnnots :: Alpha a => Perm AnyName -> a -> a
 swapsAnnots = swaps' (pat initial)
 
 
--- | \"Locally\" freshen a pattern replacing all binding names with 
---  new names that have not already been used. The second argument is 
--- a continuation, which takes the renamed term and a permutation that 
+-- | \"Locally\" freshen a pattern replacing all binding names with
+--  new names that have not already been used. The second argument is
+-- a continuation, which takes the renamed term and a permutation that
 -- specifies how the pattern has been renamed.
 lfreshen :: (Alpha a, LFresh m) => a -> (a -> Perm AnyName -> m b) -> m b
 lfreshen = lfreshen' initial
@@ -1104,10 +1142,9 @@ lunbind3 (B b1 c) (B b2 d) (B b3 e) g =
 -- Substitution
 ------------------------------------------------------------
 
--- | See 'isvar'
+-- | See 'isvar'.
 data SubstName a b where
   SubstName :: (a ~ b) => Name a -> SubstName a b
-
 
 -- | The 'Subst' class governs capture-avoiding substitution.  To
 --   derive this class, you only need to indicate where the variables
@@ -1115,8 +1152,9 @@ data SubstName a b where
 class (Rep1 (SubstD b) a) => Subst b a where
 
   -- | If the argument is a variable, return its name wrapped in the
-  --   'SubstName' constructor.  Return 'Nothing' for
-  --   non-variable arguments.
+  --   'SubstName' constructor.  Return 'Nothing' for non-variable
+  --   arguments.  The default implementation always returns
+  --   'Nothing'.
   isvar :: a -> Maybe (SubstName a b)
   isvar x = Nothing
 
@@ -1128,8 +1166,9 @@ class (Rep1 (SubstD b) a) => Subst b a where
         Nothing -> substR1 rep1 n u x
   subst m u x = error $ "Cannot substitute for bound variable " ++ show m
 
-  -- | Perform several simultaneous substitutions.
-  -- list lengths must match, or will throw an error
+  -- XXX
+  -- | Perform several simultaneous substitutions.  The lengths of the
+  -- lists must match, or will throw an error
   substs :: [Name b] -> [b] -> a -> a
   substs ns us x | all isFree ns =
       case (isvar x :: Maybe (SubstName a b)) of
