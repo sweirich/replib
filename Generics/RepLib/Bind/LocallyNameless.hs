@@ -642,14 +642,14 @@ instance Rep a => Alpha (Name a) where
   match' c n1 n2  | mode c == Term = Just $ single (AnyName n1) (AnyName n2)
   match' c _ _    | mode c == Pat  = Just empty
 
-  freshen' c nm | mode c == Term = do x <- fresh nm
+  freshen' c nm | mode c == Pat  = do x <- fresh nm
                                       return (x, single (AnyName nm) (AnyName x))
-  freshen' c nm | mode c == Pat  = return (nm, empty)
+  freshen' c nm | mode c == Term = error "freshen' on Name in Term mode"
 
   lfreshen' c nm f = case mode c of
-     Term -> do x <- lfresh nm
+     Pat  -> do x <- lfresh nm
                 avoid [AnyName x] $ f x (single (AnyName nm) (AnyName x))
-     Pat  -> f nm empty
+     Term -> error "lfreshen' on Name in Term mode"
 
   open c a (Bn r j x) | mode c == Term && level c == j =
     case nthpat a x of
@@ -720,14 +720,14 @@ instance Alpha AnyName  where
 
 
   freshen' c (AnyName nm) = case mode c of
-     Term -> do x <- fresh nm
+     Pat  -> do x <- fresh nm
                 return (AnyName x, single (AnyName nm) (AnyName x))
-     Pat  -> return (AnyName nm, empty)
+     Term -> error "freshen' on AnyName in Term mode"
 
   lfreshen' c (AnyName nm) f = case mode c of
-     Term -> do x <- lfresh nm
+     Pat  -> do x <- lfresh nm
                 avoid [AnyName x] $ f (AnyName x) (single (AnyName nm) (AnyName x))
-     Pat  -> f (AnyName nm) empty
+     Term -> error "lfreshen' on AnyName in Term mode"
 
   open c a (AnyName (Bn _ j x)) | level c == j = nthpat a x
   open _ _ n = n
@@ -760,9 +760,9 @@ instance (Alpha p, Alpha t) => Alpha (Bind p t) where
       return (B p' t', pm1 <> pm2)
 
     lfreshen' c (B p t) f =
-        lfreshen' (pat c) p (\ p' pm1 ->
-        lfreshen' (incr c) (swaps' (incr c) pm1 t) (\ t' pm2 ->
-        f (B p' t') (pm1 <> pm2)))
+      lfreshen' (pat c) p (\ p' pm1 ->
+      lfreshen' (incr c) (swaps' (incr c) pm1 t) (\ t' pm2 ->
+      f (B p' t') (pm1 <> pm2)))
 
     aeq' c (B p1 t1) (B p2 t2) = do
       aeq' (pat c) p1 p2  && aeq' (incr c) t1 t2
@@ -793,15 +793,19 @@ instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
 
   fv' c (R p q) =  fv' c p `union` fv' (incr c) q
 
-  lfreshen' c (R p q) g =
-    lfreshen' c p $ \ p' pm1 ->
-      lfreshen' (incr c) (swaps' (incr c) pm1 q) $ \ q' pm2 ->
+  lfreshen' c (R p q) g
+    | mode c == Term = error "lfreshen' on Rebind in Term mode"
+    | otherwise =
+        lfreshen' c p $ \ p' pm1 ->
+        lfreshen' (incr c) (swaps' (incr c) pm1 q) $ \ q' pm2 ->
         g (R p' q') (pm1 <> pm2)
 
-  freshen' c (R p q) = do
-      (p', pm1) <- freshen' c p
-      (q', pm2) <- freshen' (incr c) (swaps' (incr c) pm1 q)
-      return (R p' q', pm1 <> pm2)
+  freshen' c (R p q)
+    | mode c == Term = error "freshen' on Rebind in Term mode"
+    | otherwise = do
+        (p', pm1) <- freshen' c p
+        (q', pm2) <- freshen' (incr c) (swaps' (incr c) pm1 q)
+        return (R p' q', pm1 <> pm2)
 
   aeq' c (R p1 q1) (R p2 q2 ) = do
       aeq' c p1 p2 && aeq' c q1 q2
@@ -855,15 +859,11 @@ instance Alpha t => Alpha (Annot t) where
    fv' c (Annot t) | mode c == Pat  = fv' (term c) t
    fv' c _         | mode c == Term = emptyC
 
-   freshen' c (Annot t) | mode c == Pat = do
-       (t', p) <- freshen' (term c) t
-       return (Annot t', p)
-   freshen' c a | mode c == Term = return (a, empty)
+   freshen' c p | mode c == Term = error "freshen' called on a term"
+                | otherwise      = return (p, empty)
 
-   -- XXX is this right???
-   lfreshen' c a f
-     | mode c == Term = f a empty
-     | mode c == Pat  = error "lfreshen' called on Annot in Pat mode!?"
+   lfreshen' c p f         | mode c == Term = error "lfreshen' called on a term"
+                           | otherwise      = f p empty
 
    aeq' c (Annot x) (Annot y) = aeq' (term c) x y
 
@@ -1064,14 +1064,14 @@ swapsAnnots = swaps' (pat initial)
 --  new names that have not already been used. The second argument is
 -- a continuation, which takes the renamed term and a permutation that
 -- specifies how the pattern has been renamed.
-lfreshen :: (Alpha a, LFresh m) => a -> (a -> Perm AnyName -> m b) -> m b
-lfreshen = lfreshen' initial
+lfreshen :: (Alpha p, LFresh m) => p -> (p -> Perm AnyName -> m b) -> m b
+lfreshen = lfreshen' (pat initial)
 
 -- | Freshen a pattern by replacing all old /binding/ 'Name's with new
 -- fresh 'Name's, returning a new pattern and a @'Perm' 'Name'@
 -- specifying how 'Name's were replaced.
-freshen :: (Fresh m, Alpha a) => a -> m (a, Perm AnyName)
-freshen = freshen' initial
+freshen :: (Alpha p, Fresh m) => p -> m (p, Perm AnyName)
+freshen = freshen' (pat initial)
 
 -- | Compare two terms and produce a permutation of their 'Name's that
 -- will make them alpha-equivalent to each other.  Return 'Nothing' if
