@@ -26,7 +26,7 @@ module Generics.RepLib.Bind.LocallyNameless.Internal where
 
 import Generics.RepLib hiding (GT)
 import Generics.RepLib.Bind.PermM
-import Generics.RepLib.Bind.LocallyNameless.Name
+import Generics.RepLib.Bind.LocallyNameless.Types
 import Generics.RepLib.Bind.LocallyNameless.Fresh
 
 import qualified Data.List as List
@@ -48,18 +48,20 @@ import System.IO.Unsafe (unsafePerformIO)
 -- Overview
 --
 -- We have two classes of types:
---    Terms (which contain binders) and
---    Patterns (which contain variables)
+--    Terms (which contain variables) and
+--    Patterns (which contain binders)
 --
 -- Terms include
 --    Names
---    Bind a b when a is a Pattern and b is a Term
+--    Bind p t when p is a Pattern and t is a Term
 --    Standard type constructors (Unit, (,), Maybe, [], etc)
 --
 -- Patterns include
 --    Names
---    Annot a when a is a Term
---    Rebind a b when a and b are both Patterns
+--    Annot t when t is a Term
+--    Rebind p q when p and q are both Patterns
+--    Rec p when p is a pattern
+--    Outer a when a is an Annot or some number of Outers wrapped around Annot
 --    Standard type constructors (Unit, (,), Maybe, [], etc)
 --
 -- Terms support a number of operations, including alpha-equivalence,
@@ -82,44 +84,6 @@ import System.IO.Unsafe (unsafePerformIO)
 
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
-
-------------------------------------------------------------
--- Basic types
-------------------------------------------------------------
-
-$(derive_abstract [''R])
--- The above only works with GHC 7.
-
--- | The type of a binding.  We can 'Bind' an @a@ object in a @b@
---   object if we can create \"fresh\" @a@ objects, and @a@ objects
---   can occur unbound in @b@ objects. Often @a@ is 'Name' but that
---   need not be the case.
---
---   Like 'Name', 'Bind' is also abstract. You can create bindings
---   using 'bind' and take them apart with 'unbind' and friends.
-data Bind p t = B p t
-
--- | 'Rebind' supports \"telescopes\" --- that is, patterns where
---   bound variables appear in multiple subterms.
-data Rebind p1 p2 = R p1 p2
-
--- | 'Rec' supports recursive patterns --- that is, patterns where
--- any variables anywhere in the pattern are bound in the pattern
--- itself.  Useful for lectrec (and Agda's dot notation).
-data Rec p = Rec p
-
--- | An annotation is a \"hole\" in a pattern where variables can be
---   used, but not bound. For example, patterns may include type
---   annotations, and those annotations can reference variables
---   without binding them.  Annotations do nothing special when they
---   appear elsewhere in terms.
-newtype Annot t = Annot t deriving Eq
-
--- | An outer can shift an annotation \"hole\" to refer to higher context.
-newtype Outer p = Outer p deriving Eq
-
-
-$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
 
 --------------------------------------------------
 -- Collections
@@ -1344,8 +1308,3 @@ tests_acompare = do
 
 -- properties
 -- if match t1 t2 = Some p then swaps p t1 = t2
-
--- $paynoattention
--- These type representation objects are exported so they can be
--- referenced by auto-generated code.  Please pretend they do not
--- exist.

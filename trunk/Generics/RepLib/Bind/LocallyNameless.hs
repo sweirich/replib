@@ -79,3 +79,9 @@ module Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib.Bind.LocallyNameless.Name
 import Generics.RepLib.Bind.LocallyNameless.Fresh
 import Generics.RepLib.Bind.LocallyNameless.Internal
+import Generics.RepLib.Bind.LocallyNameless.Types
+
+-- $paynoattention
+-- These type representation objects are exported so they can be
+-- referenced by auto-generated code.  Please pretend they do not
+-- exist.
