@@ -28,6 +28,7 @@ import Generics.RepLib hiding (GT)
 import Generics.RepLib.Bind.PermM
 import Generics.RepLib.Bind.LocallyNameless.Types
 import Generics.RepLib.Bind.LocallyNameless.Fresh
+import Generics.RepLib.Bind.Util
 
 import qualified Data.List as List
 import qualified Data.Char as Char
@@ -81,37 +82,6 @@ import System.IO.Unsafe (unsafePerformIO)
 -- for dealing with the binding variables.
 --     These are used to find the index of names inside patterns.
 ------------------------------------------------------------
-
-(<>) :: Monoid m => m -> m -> m
-(<>) = mappend
-
---------------------------------------------------
--- Collections
---------------------------------------------------
-
--- | Collections are foldable types that support empty, singleton, and
---   union operations.  The result of a free variable calculation may be
---   any collection.  Instances are provided for lists and sets.
-class F.Foldable f => Collection f where
-  emptyC    :: f a
-  singleton :: a -> f a
-  union     :: Ord a => f a -> f a -> f a
-
-unions :: (Ord a, Collection f) => [f a] -> f a
-unions = foldr union emptyC
-
-fromList :: (Ord a, Collection f) => [a] -> f a
-fromList = unions . map singleton
-
-instance Collection [] where
-  emptyC    = []
-  singleton = (:[])
-  union     = (++)
-
-instance Collection S.Set where
-  emptyC    = S.empty
-  singleton = S.singleton
-  union     = S.union
 
 ------------------------------------------------------------
 -- The Alpha class
@@ -910,12 +880,10 @@ fvAny = fv' initial
 
 -- | Calculate the free variables of a particular sort contained in a
 --   term.
-fv :: forall a t f. (Rep a, Alpha t, Collection f) => t -> f (Name a)
-fv = fromList
-   . catMaybes
-   . map toSortedName
-   . F.toList
-   . (fvAny :: t -> f AnyName)
+fv :: (Rep a, Alpha t, Collection f) => t -> f (Name a)
+fv = filterC
+   . cmap toSortedName
+   . fvAny
 
 -- | Calculate the variables (of any sort) that occur freely within
 --   pattern annotations (but are not bound by the pattern).
@@ -924,12 +892,10 @@ patfvAny = fv' (pat initial)
 
 -- | Calculate the variables of a particular sort that occur freely in
 --   pattern annotations (but are not bound by the pattern).
-patfv :: forall a p f. (Rep a, Alpha p, Collection f) => p -> f (Name a)
-patfv = fromList
-      . catMaybes
-      . map toSortedName
-      . F.toList
-      . (patfvAny :: p -> f AnyName)
+patfv :: (Rep a, Alpha p, Collection f) => p -> f (Name a)
+patfv = filterC
+      . cmap toSortedName
+      . patfvAny
 
 -- | Calculate the binding variables (of any sort) in a pattern.
 bindersAny :: (Alpha p, Collection f) => p -> f AnyName
