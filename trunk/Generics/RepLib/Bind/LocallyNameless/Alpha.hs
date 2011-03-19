@@ -17,7 +17,6 @@ import Generics.RepLib.Bind.LocallyNameless.Types
 import Generics.RepLib.Bind.LocallyNameless.Fresh
 import Generics.RepLib.Bind.Util
 
-import qualified Text.Read as R
 import Data.Monoid
 
 ------------------------------------------------------------
@@ -101,9 +100,11 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   aeq' :: AlphaCtx -> a -> a -> Bool
   aeq' = aeqR1 rep1
 
+{-
   -- | See 'match'.
   match'   :: AlphaCtx -> a -> a -> Maybe (Perm AnyName)
   match'   = matchR1 rep1
+-}
 
   -- | Replace free names by bound names.
   close :: Alpha b => AlphaCtx -> b -> a -> a
@@ -171,6 +172,13 @@ instance Monoid FindResult where
   NamesSeen i `mappend` Index j     = Index (i + j)
   Index j     `mappend` _           = Index j
 
+-- | Find the (first) index of the name in the pattern, if it exists.
+findpat :: Alpha a => a -> AnyName -> Maybe Integer
+findpat x n = case findpatrec x n of
+                   Index i     -> Just i
+                   NamesSeen _ -> Nothing
+
+
 -- | The result of an 'nthpatrec' operation.
 data NthResult = Found AnyName    -- ^ The name found at the given
                                   --   index.
@@ -201,6 +209,16 @@ nthName :: AnyName -> NthCont
 nthName nm = NthCont $ \i -> if i == 0
                                then Found nm
                                else CurIndex (i-1)
+
+-- | @'nthpat' b n@ looks up up the @n@th name in the pattern @b@
+-- (zero-indexed).  PRECONDITION: the number of names in the pattern
+-- must be at least @n@.
+nthpat :: Alpha a => a -> Integer -> AnyName
+nthpat x i = case runNthCont (nthpatrec x) i of
+                 CurIndex j -> error
+                   ("BUG: pattern index " ++ show i ++
+                    " out of bounds by " ++ show j ++ "in" ++ show x)
+                 Found nm   -> nm
 
 ------------------------------------------------------------
 --  AlphaCtx
@@ -267,7 +285,7 @@ data AlphaD a = AlphaD {
   freshenD  :: Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
   lfreshenD :: LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
   aeqD      :: AlphaCtx -> a -> a -> Bool,
-  matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
+  -- matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
   closeD    :: Alpha b => AlphaCtx -> b -> a -> a,
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> AnyName -> FindResult,
@@ -276,7 +294,7 @@ data AlphaD a = AlphaD {
   }
 
 instance Alpha a => Sat (AlphaD a) where
-  dict = AlphaD isPat isTerm isAnnot swaps' fv' freshen' lfreshen' aeq' match'
+  dict = AlphaD isPat isTerm isAnnot swaps' fv' freshen' lfreshen' aeq' -- match'
            close open findpatrec nthpatrec acompare'
 
 ----------------------------------------------------------------------
@@ -318,7 +336,7 @@ fv1 MNil _ Nil = emptyC
 fv1 (r :+: rs) p (p1 :*: t1) =
    fvD r p p1 `union` fv1 rs p t1
 
-
+{-
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm AnyName)
 matchR1 (Data1 _ cons) = loop cons where
    loop (Con emb reps : rest) p x y =
@@ -338,6 +356,7 @@ match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   l1 <- matchD r c p1 p2
   l2 <- match1 rs c t1 t2
   (l1 `join` l2)
+-}
 
 aeqR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Bool
 aeqR1 (Data1 _ cons) = loop cons where
@@ -479,9 +498,11 @@ instance Rep a => Alpha (Name a) where
   aeq' c n1 n2 | mode c == Term = False
   aeq' c _ _   | mode c == Pat  = True
 
+{-
   match' _ x  y   | x == y         = Just empty
   match' c n1 n2  | mode c == Term = Just $ single (AnyName n1) (AnyName n2)
   match' c _ _    | mode c == Pat  = Just empty
+-}
 
   freshen' c nm | mode c == Pat  = do x <- fresh nm
                                       return (x, single (AnyName nm) (AnyName x))
@@ -540,6 +561,7 @@ instance Alpha AnyName  where
   aeq' c _ _ | mode c == Term = False
   aeq' c _ _ | mode c == Pat  = True
 
+{-
   match' _ x y | x == y          = Just empty
   match' c (AnyName n1) (AnyName n2)
     | mode c == Term =
@@ -547,7 +569,7 @@ instance Alpha AnyName  where
         Just n1' -> Just $ single (AnyName n1) (AnyName n2)
         Nothing  -> Nothing
   match' c _ _           | mode c == Pat   = Just empty
-
+-}
 
   acompare' _ x y | x == y          = EQ
   acompare' c (AnyName n1) (AnyName n2)
@@ -608,6 +630,7 @@ instance (Alpha p, Alpha t) => Alpha (Bind p t) where
     aeq' c (B p1 t1) (B p2 t2) = do
       aeq' (pat c) p1 p2  && aeq' (incr c) t1 t2
 
+{-
     match' c (B p1 t1) (B p2 t2) = do
       pp <- match' (pat c) p1 p2
       pt <- match' (incr c) t1 t2
@@ -615,6 +638,7 @@ instance (Alpha p, Alpha t) => Alpha (Bind p t) where
       -- bound variables at this
       -- level are the identity
       (pp `join` pt)
+-}
 
     open  c a (B p t)    = B (open (pat c) a p)  (open  (incr c) a t)
     close c a (B p t)    = B (close (pat c) a p) (close (incr c) a t)
@@ -651,10 +675,12 @@ instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
   aeq' c (R p1 q1) (R p2 q2 ) = do
       aeq' c p1 p2 && aeq' c q1 q2
 
+{-
   match' c (R p1 q1) (R p2 q2) = do
      pp <- match' c p1 p2
      pq <- match' (incr c)  q1 q2
      (pp `join` pq)
+-}
 
   acompare' c (R a1 a2) (R b1 b2) =
       lexord (acompare' c a1 b1) (acompare' (incr c) a2 b2)
@@ -710,11 +736,13 @@ instance Alpha t => Alpha (Annot t) where
 
    acompare' c (Annot x) (Annot y) = acompare' (term c) x y
 
+{-
    match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
    match' c (Annot x) (Annot y) | mode c == Term =
                                     if x `aeq` y
                                     then Just empty
                                     else Nothing
+-}
 
    close c b (Annot x) | mode c == Pat  = Annot (close (term c) b x)
                        | mode c == Term = error "close on Annot"
@@ -724,7 +752,6 @@ instance Alpha t => Alpha (Annot t) where
 
    findpatrec _ _ = mempty
    nthpatrec _    = mempty
-
 
 instance Alpha a => Alpha (Outer a) where
 
@@ -755,263 +782,3 @@ instance (Alpha a, Alpha b,Alpha c, Alpha d, Alpha e) =>
    Alpha (a,b,c,d,e)
 
 instance (Rep a) => Alpha (R a)
-
-----------------------------------------------------------
--- Binding operations & instances
-----------------------------------------------------------
-
--- | A smart constructor for binders, also sometimes known as
--- \"close\".
-bind :: (Alpha c, Alpha b) => b -> c -> Bind b c
-bind b c = B b (closeT b c)
-
--- | A destructor for binders that does /not/ guarantee fresh
---   names for the binders.
-unsafeUnbind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
-unsafeUnbind (B a b) = (a, openT a b)
-
-instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
-         readPrec = R.parens $ (R.prec app_prec $ do
-                                  R.Ident "<" <- R.lexP
-                                  m1 <- R.step R.readPrec
-                                  R.Ident ">" <- R.lexP
-                                  m2 <- R.step R.readPrec
-                                  return (bind m1 m2))
-           where app_prec = 10
-
-         readListPrec = R.readListPrecDefault
-
-instance (Show a, Show b) => Show (Bind a b) where
-  showsPrec p (B a b) = showParen (p>0)
-      (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
-
-----------------------------------------------------------
--- Rebinding operations
-----------------------------------------------------------
-
--- | Constructor for binding in patterns.
-rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (closeP a b)
-
--- | Compare for alpha-equality.
-instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
-   b1 == b2 = b1 `aeqBinders` b2
-
-instance (Show a, Show b) => Show (Rebind a b) where
-  showsPrec p (R a b) = showParen (p>0)
-      (showString "<<" . showsPrec p a . showString ">> " . showsPrec 0 b)
-
--- | Destructor for `Rebind`.  It does not need a monadic context for
---   generating fresh names, since `Rebind` can only occur in the
---   pattern of a `Bind`; hence a previous call to `open` must have
---   already freshened the names at this point.
-unrebind :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-unrebind (R a b) = (a, openP a b)
-
-----------------------------------------------------------
--- Rec operations
-----------------------------------------------------------
-
-rec :: (Alpha a) => a -> Rec a
-rec a = Rec (closeP a a) where
-
-unrec :: (Alpha a) => Rec a -> a
-unrec (Rec a) = openP a a
-
-instance Show a => Show (Rec a) where
-  showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
-
-----------------------------------------------------------
--- Annot
-----------------------------------------------------------
-
-instance Show a => Show (Annot a) where
-  showsPrec p (Annot a) = showString "{" . showsPrec 0 a . showString "}"
-
-instance Show a => Show (Outer a) where
-  showsPrec p (Outer a) = showString "{" . showsPrec 0 a . showString "}"
-
-----------------------------------------------------------
--- Wrappers for operations in the Alpha class
-----------------------------------------------------------
-
--- | Determine alpha-equivalence of terms.
-aeq :: Alpha t => t -> t -> Bool
-aeq t1 t2 = aeq' initial t1 t2
-
--- | Determine (alpha-)equivalence of patterns.  Do they bind the same
---   variables and have alpha-equal annotations?
-aeqBinders :: Alpha p => p -> p -> Bool
-aeqBinders p1 p2 = aeq' initial p1 p2
-
--- | An alpha-respecting total order on terms involving binders.
-acompare :: Alpha t => t -> t -> Ordering
-acompare x y = acompare' initial x y
-
-
--- | Calculate the free variables (of any sort) contained in a term.
-fvAny :: (Alpha t, Collection f) => t -> f AnyName
-fvAny = fv' initial
-
--- | Calculate the free variables of a particular sort contained in a
---   term.
-fv :: (Rep a, Alpha t, Collection f) => t -> f (Name a)
-fv = filterC
-   . cmap toSortedName
-   . fvAny
-
--- | Calculate the variables (of any sort) that occur freely within
---   pattern annotations (but are not bound by the pattern).
-patfvAny :: (Alpha p, Collection f) => p -> f AnyName
-patfvAny = fv' (pat initial)
-
--- | Calculate the variables of a particular sort that occur freely in
---   pattern annotations (but are not bound by the pattern).
-patfv :: (Rep a, Alpha p, Collection f) => p -> f (Name a)
-patfv = filterC
-      . cmap toSortedName
-      . patfvAny
-
--- | Calculate the binding variables (of any sort) in a pattern.
-bindersAny :: (Alpha p, Collection f) => p -> f AnyName
-bindersAny = fvAny
-
--- | Calculate the binding variables (of a particular sort) in a
---   pattern.
-binders :: (Rep a, Alpha p, Collection f) => p -> f (Name a)
-binders = fv
-
-
--- | Apply a permutation to a term.
-swaps :: Alpha a => Perm AnyName -> a -> a
-swaps = swaps' initial
-
--- | Apply a permutation to the binding variables in a pattern.
--- Annotations are left alone by the permutation.
-swapsBinders :: Alpha a => Perm AnyName -> a -> a
-swapsBinders = swaps' initial
-
--- | Apply a permutation to the annotations in a pattern. Binding
--- names are left alone by the permutation.
-swapsAnnots :: Alpha a => Perm AnyName -> a -> a
-swapsAnnots = swaps' (pat initial)
-
-
--- | \"Locally\" freshen a pattern replacing all binding names with
---  new names that have not already been used. The second argument is
--- a continuation, which takes the renamed term and a permutation that
--- specifies how the pattern has been renamed.
-lfreshen :: (Alpha p, LFresh m) => p -> (p -> Perm AnyName -> m b) -> m b
-lfreshen = lfreshen' (pat initial)
-
--- | Freshen a pattern by replacing all old /binding/ 'Name's with new
--- fresh 'Name's, returning a new pattern and a @'Perm' 'Name'@
--- specifying how 'Name's were replaced.
-freshen :: (Alpha p, Fresh m) => p -> m (p, Perm AnyName)
-freshen = freshen' (pat initial)
-
--- | Compare two terms and produce a permutation of their 'Name's that
--- will make them alpha-equivalent to each other.  Return 'Nothing' if
--- no such renaming is possible.  Note that two terms are
--- alpha-equivalent if the empty permutation is returned.
-match   :: Alpha a => a -> a -> Maybe (Perm AnyName)
-match   = match' initial
-
--- | Compare two patterns, ignoring the names of binders, and produce
--- a permutation of their annotations to make them alpha-equivalent
--- to eachother. Return 'Nothing' if no such renaming is possible.
-matchAnnots :: Alpha a => a -> a -> Maybe (Perm AnyName)
-matchAnnots = match' (pat initial)
-
--- | Compare two patterns for equality and produce a permutation of
--- their binding 'Names' to make them alpha-equivalent to each other
--- (Free 'Name's that appear in annotations must match exactly). Return
--- 'Nothing' if no such renaming is possible.
-matchBinders ::  Alpha a => a -> a -> Maybe (Perm AnyName)
-matchBinders = match' initial
-
-
--- | @'nthpat' b n@ looks up up the @n@th name in the pattern @b@
--- (zero-indexed).  PRECONDITION: the number of names in the pattern
--- must be at least @n@.
-nthpat :: Alpha a => a -> Integer -> AnyName
-nthpat x i = case runNthCont (nthpatrec x) i of
-                 CurIndex j -> error
-                   ("BUG: pattern index " ++ show i ++
-                    " out of bounds by " ++ show j ++ "in" ++ show x)
-                 Found nm   -> nm
-
--- | Find the (first) index of the name in the pattern, if it exists.
-findpat :: Alpha a => a -> AnyName -> Maybe Integer
-findpat x n = case findpatrec x n of
-                   Index i     -> Just i
-                   NamesSeen _ -> Nothing
-
-------------------------------------------------------------
--- Opening binders
-------------------------------------------------------------
-
--- | Unbind (also known as \"open\") is the destructor for
--- bindings. It ensures that the names in the binding are fresh.
-unbind  :: (Fresh m, Alpha p, Alpha t) => Bind p t -> m (p,t)
-unbind (B p t) = do
-      (p', _) <- freshen p
-      return (p', openT p' t)
-
--- | Unbind two terms with the same fresh names, provided the
---   binders have the same number of binding variables.
-unbind2  :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
-            Bind p1 t1 -> Bind p2 t2 -> m (Maybe (p1,t1,p2,t2))
-unbind2 (B p1 t1) (B p2 t2) = do
-      case match (fvAny p1 :: [AnyName]) (fvAny p2) of
-         Just p -> do
-           (p1', p') <- freshen p1
-           return $ Just (p1', openT p1' t1,
-                          swaps (p' <> p) p2, openT p1' t2)
-         Nothing -> return Nothing
-
--- | Unbind three terms with the same fresh names, provided the
---   binders have the same number of binding variables.
-unbind3  :: (Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
-            Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->  m (Maybe (p1,t1,p2,t2,p3,t3))
-unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
-      case ( match (fvAny p1 :: [AnyName]) (fvAny p2)
-           , match (fvAny p1 :: [AnyName]) (fvAny p3) ) of
-         (Just p12, Just p13) -> do
-           (p1', p') <- freshen p1
-           return $ Just (p1', openT p1' t1,
-                          swaps (p' <> p12) p2, openT p1' t2,
-                          swaps (p' <> p13) p3, openT p1' t3)
-         _ -> return Nothing
-
--- | Destruct a binding in an 'LFresh' monad.
-lunbind :: (LFresh m, Alpha p, Alpha t) => Bind p t -> ((p, t) -> m c) -> m c
-lunbind (B p t) g =
-  lfreshen p (\x _ -> g (x, openT x t))
-
-
--- | Unbind two terms with the same fresh names, provided the
---   binders have the same number of binding variables.
-lunbind2  :: (LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
-            Bind p1 t1 -> Bind p2 t2 -> (Maybe (p1,t1,p2,t2) -> m r) -> m r
-lunbind2 (B p1 t1) (B p2 t2) g =
-  case match (fvAny p1 :: [AnyName]) (fvAny p2) of
-    Just pm1 ->
-      lfreshen p1 (\p1' pm2 -> g $ Just (p1', openT p1' t1,
-                                         swaps (pm2 <> pm1) p2, openT p1' t2))
-    Nothing -> g Nothing
-
--- | Unbind three terms with the same fresh names, provided the
---   binders have the same number of binding variables.
-lunbind3 :: (LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
-            Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->
-            (Maybe (p1,t1,p2,t2,p3,t3) -> m r) ->
-            m r
-lunbind3 (B p1 t1) (B p2 t2) (B p3 t3) g =
-  case ( match (fvAny p1 :: [AnyName]) (fvAny p2)
-       , match (fvAny p1 :: [AnyName]) (fvAny p3) ) of
-         (Just pm12, Just pm13) ->
-           lfreshen p1 (\p1' pm' -> g $ Just (p1', openT p1' t1,
-                                              swaps (pm' <> pm12) p2, openT p1' t2,
-                                              swaps (pm' <> pm13) p3, openT p1' t3))
-         _ -> g Nothing

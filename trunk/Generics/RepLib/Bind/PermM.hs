@@ -13,7 +13,7 @@
 ----------------------------------------------------------------------
 
 module Generics.RepLib.Bind.PermM (
-    Perm, single, compose, apply, support, isid, join, empty, restrict
+    Perm, single, compose, apply, support, isid, join, empty, restrict, mkPerm
   ) where
 
 import Data.Monoid
@@ -75,6 +75,11 @@ support (Perm p) = [ x | x <- Map.keys p, Map.findWithDefault x x p /= x]
 
 restrict :: Ord a => Perm a -> [a] -> Perm a
 restrict (Perm p) l = Perm (foldl' (\p' k -> Map.delete k p') p l)
+
+-- | @mkPerm l1 l2@ creates a permutation that sends @l1@ to @l2@.
+--   PRECONDITION: each of @l1@ and @l2@ has no duplicate elements.
+mkPerm :: Ord a => [a] -> [a] -> Maybe (Perm a)
+mkPerm xs ys = foldl' (\mp p -> mp >>= join p) (Just empty) (zipWith single xs ys)
 
 ---------------------------------------------------------------------
 seteq :: Ord a => [a] -> [a] -> Bool
