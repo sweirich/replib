@@ -25,7 +25,7 @@
 
 module Generics.RepLib.Bind.LocallyNameless
   ( -- * Basic types
-    Name, AnyName(..), Bind, Annot(..), Rebind, Rec, Outer(..),
+    Name, AnyName(..), Bind, Annot(..), Rebind, Rec, TRec, Outer(..),
 
     -- ** Utilities
     integer2Name, string2Name, s2n, makeName,
@@ -66,6 +66,7 @@ module Generics.RepLib.Bind.LocallyNameless
 
     -- * Rec operations
     rec, unrec,
+    trec, untrec, luntrec,
 
     -- * Substitution
     Subst(..), SubstName(..),

@@ -9,6 +9,7 @@ module Generics.RepLib.Bind.LocallyNameless.Types
        ( Bind(..)
        , Rebind(..)
        , Rec(..)
+       , TRec(..)
        , Annot(..)
        , Outer(..)
        , module Generics.RepLib.Bind.LocallyNameless.Name
@@ -63,7 +64,20 @@ instance (Show a, Show b) => Show (Rebind a b) where
 data Rec p = Rec p
 
 instance Show a => Show (Rec a) where
-  showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
+  showsPrec _ (Rec a) = showString "[" . showsPrec 0 a . showString "]"
+
+-- TRec
+--------------------------------------------------
+
+-- | 'TRec' is a standalone variant of 'Rec' -- that is, if @p@ is a
+--   pattern type then @TRec p@ is a term type.  It is isomorphic to
+--   @Bind (Rec p) ()@.
+
+newtype TRec p = TRec (Bind (Rec p) ())
+
+instance Show a => Show (TRec a) where
+  showsPrec _ (TRec (B (Rec p) ())) = showString "[" . showsPrec 0 p . showString "]"
+
 
 -- Annot
 --------------------------------------------------
