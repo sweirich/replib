@@ -1,22 +1,10 @@
-{-# LANGUAGE FlexibleInstances,
-             UndecidableInstances,
-             FlexibleContexts,
-             MultiParamTypeClasses,
-             TemplateHaskell,
-             TypeOperators,
-             ScopedTypeVariables,
-             TypeSynonymInstances,
-             RankNTypes,
-             GADTs,
-             EmptyDataDecls,
-             StandaloneDeriving,
-             GeneralizedNewtypeDeriving
+{-# LANGUAGE RankNTypes
+           , FlexibleContexts
   #-}
-{- LANGUAGE  KitchenSink -}
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.LocallyNameless.Internal
+-- Module      :  Generics.RepLib.Bind.LocallyNameless.Alpha
 -- License     :  BSD-like (see LICENSE)
 --
 ----------------------------------------------------------------------
@@ -29,7 +17,6 @@ import Generics.RepLib.Bind.LocallyNameless.Types
 import Generics.RepLib.Bind.LocallyNameless.Fresh
 import Generics.RepLib.Bind.Util
 
-import Data.Maybe
 import qualified Text.Read as R
 import Data.Monoid
 
@@ -277,8 +264,8 @@ data AlphaD a = AlphaD {
   isAnnotD  :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
   fvD       :: Collection f => AlphaCtx -> a -> f AnyName,
-  freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
-  lfreshenD :: forall b m. LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
+  freshenD  :: Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
+  lfreshenD :: LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
   aeqD      :: AlphaCtx -> a -> a -> Bool,
   matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
   closeD    :: Alpha b => AlphaCtx -> b -> a -> a,

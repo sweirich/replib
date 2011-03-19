@@ -52,7 +52,7 @@ instance Collection [] where
 newtype Multiset a = Multiset (M.Map a Int)
 
 instance F.Foldable Multiset where
-  fold (Multiset m) = M.foldWithKey (\a n x -> mconcat (x : replicate n a)) mempty m
+  fold (Multiset m) = M.foldrWithKey (\a n x -> mconcat (x : replicate n a)) mempty m
 
 -- | Multisets are containers which preserve multiplicity but not
 --   ordering.

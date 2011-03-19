@@ -152,3 +152,6 @@ tests_acompare = do
 
 -- properties
 -- if match t1 t2 = Some p then swaps p t1 = t2
+
+main :: IO ()
+main = do_tests
