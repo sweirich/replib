@@ -37,9 +37,12 @@ module Generics.RepLib.Bind.LocallyNameless
     Alpha(..),
     swaps, swapsAnnots, swapsBinders,
     match, matchAnnots, matchBinders,
-    fv, fvAny, patfv, binders,
     aeq, aeqBinders,
     acompare,
+
+    -- * Variable calculations
+    Collection(..), Multiset(..),
+    fv, fvAny, patfv, patfvAny, binders, bindersAny,
 
     -- * Binding operations
     bind, unsafeUnbind,
@@ -80,6 +83,7 @@ import Generics.RepLib.Bind.LocallyNameless.Name
 import Generics.RepLib.Bind.LocallyNameless.Fresh
 import Generics.RepLib.Bind.LocallyNameless.Internal
 import Generics.RepLib.Bind.LocallyNameless.Types
+import Generics.RepLib.Bind.Util
 
 -- $paynoattention
 -- These type representation objects are exported so they can be
