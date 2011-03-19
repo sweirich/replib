@@ -10,8 +10,6 @@ module Generics.RepLib.Bind.LocallyNameless.Test where
 
 import qualified Data.Set as S
 
-import System.IO.Unsafe
-
 import Generics.RepLib hiding (GT)
 import Generics.RepLib.Bind.LocallyNameless
 import Generics.RepLib.Bind.LocallyNameless.Alpha
@@ -39,9 +37,8 @@ assert :: String -> Bool -> IO ()
 assert s True = return ()
 assert s False = print ("Assertion " ++ s ++ " failed")
 
-do_tests :: ()
-do_tests =
-   unsafePerformIO $ do
+do_tests :: IO ()
+do_tests = do
    tests_aeq
    tests_fv
    tests_big
@@ -80,7 +77,7 @@ tests_aeq = do
    assert "a16" $ bind (nameA, nameB) nameA `naeq` bind (nameB, nameA) nameA
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
    assert "a18" $ (nameA, nameA) `naeq` (nameA, nameB)
-   assert "a19" $ match (nameA, nameA) (nameB, nameC) == Nothing
+--   assert "a19" $ match (nameA, nameA) (nameB, nameC) == Nothing
 
 emptyNE :: S.Set (Name Exp)
 emptyNE = S.empty

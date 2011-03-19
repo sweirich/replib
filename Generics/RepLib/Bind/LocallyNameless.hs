@@ -36,7 +36,6 @@ module Generics.RepLib.Bind.LocallyNameless
     -- * The 'Alpha' class
     Alpha(..),
     swaps, swapsAnnots, swapsBinders,
-    match, matchAnnots, matchBinders,
     aeq, aeqBinders,
     acompare,
 
@@ -69,14 +68,11 @@ module Generics.RepLib.Bind.LocallyNameless
     rec, unrec,
 
     -- * Substitution
-    Subst(..),SubstName(..),
+    Subst(..), SubstName(..),
 
-   -- * Advanced
-   AlphaCtx, matchR1,
-
-   -- * Pay no attention to the man behind the curtain
-   -- $paynoattention
-   rName, rBind, rRebind, rAnnot, rRec, rOuter
+    -- * Pay no attention to the man behind the curtain
+    -- $paynoattention
+    rName, rBind, rRebind, rAnnot, rRec, rOuter
 ) where
 
 import Generics.RepLib.Bind.LocallyNameless.Name
@@ -84,6 +80,7 @@ import Generics.RepLib.Bind.LocallyNameless.Fresh
 import Generics.RepLib.Bind.LocallyNameless.Types
 import Generics.RepLib.Bind.LocallyNameless.Alpha
 import Generics.RepLib.Bind.LocallyNameless.Subst
+import Generics.RepLib.Bind.LocallyNameless.Ops
 import Generics.RepLib.Bind.Util
 
 -- $paynoattention
