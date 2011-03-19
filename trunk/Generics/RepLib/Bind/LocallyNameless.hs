@@ -81,8 +81,9 @@ module Generics.RepLib.Bind.LocallyNameless
 
 import Generics.RepLib.Bind.LocallyNameless.Name
 import Generics.RepLib.Bind.LocallyNameless.Fresh
-import Generics.RepLib.Bind.LocallyNameless.Internal
 import Generics.RepLib.Bind.LocallyNameless.Types
+import Generics.RepLib.Bind.LocallyNameless.Alpha
+import Generics.RepLib.Bind.LocallyNameless.Subst
 import Generics.RepLib.Bind.Util
 
 -- $paynoattention
