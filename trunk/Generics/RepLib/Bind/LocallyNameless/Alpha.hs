@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes
            , FlexibleContexts
+           , GADTs
   #-}
 
 ----------------------------------------------------------------------
@@ -16,6 +17,9 @@ import Generics.RepLib.Bind.PermM
 import Generics.RepLib.Bind.LocallyNameless.Types
 import Generics.RepLib.Bind.LocallyNameless.Fresh
 import Generics.RepLib.Bind.Util
+
+import Data.List (intersect)
+import Data.Maybe (isJust)
 
 import Data.Monoid
 
@@ -121,7 +125,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   -- | @isPat x@ dynamically checks whether @x@ can be used as a valid
   --   pattern.  The default instance returns @True@ if at all
   --   possible.
-  isPat :: a -> Bool
+  isPat :: a -> Maybe [AnyName]
   isPat = isPatR1 rep1
 
   -- | @isTerm x@ dynamically checks whether @x@ can be used as a
@@ -277,7 +281,7 @@ closeP = close (pat initial)
 --   definitions for certain classes.  'AlphaD' is essentially a
 --   reified dictionary for the 'Alpha' class.
 data AlphaD a = AlphaD {
-  isPatD    :: a -> Bool,
+  isPatD    :: a -> Maybe [AnyName],
   isTermD   :: a -> Bool,
   isAnnotD  :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
@@ -427,11 +431,17 @@ nthpatL :: MTup AlphaD l -> l -> NthCont
 nthpatL MNil Nil              = mempty
 nthpatL (r :+: rs) (t :*: ts) = nthpatD r t <> nthpatL rs ts
 
-isPatR1 :: R1 AlphaD b -> b -> Bool
+combine :: Maybe [AnyName] -> Maybe [AnyName] -> Maybe [AnyName]
+combine (Just ns1) (Just ns2) | ns1 `intersect` ns2 == [] = 
+                                  Just (ns1 ++ ns2)
+combine _ _ = Nothing
+
+isPatR1 :: R1 AlphaD b -> b -> Maybe [AnyName]
 isPatR1 (Data1 dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> foldl_l (\ c b a -> isPatD c a && b) True rec kids
-isPatR1 _ = \ d -> True
+     Val c rec kids -> 
+       foldl_l (\ c b a -> combine (isPatD c a) b) (Just []) rec kids
+isPatR1 _ = \ d -> Just []
 
 isTermR1 :: R1 AlphaD b -> b -> Bool
 isTermR1 (Data1 dt cons) = \ d ->
@@ -480,8 +490,8 @@ instance Rep a => Alpha (Name a) where
   isTerm _ = True
 
   -- Only free names are valid as patterns, which serve as binders.
-  isPat (Nm {}) = True
-  isPat _       = False
+  isPat n@(Nm _ _) = Just [AnyName n]
+  isPat _          = Nothing
 
   fv' c n@(Nm _ _)  | mode c == Term = singleton (AnyName n)
   fv' _ _                            = emptyC
@@ -547,8 +557,8 @@ instance Alpha AnyName  where
 
   isTerm _ = True
 
-  isPat (AnyName (Nm {})) = True
-  isPat _                 = False
+  isPat n@(AnyName (Nm _ _)) = Just [n]
+  isPat _                    = Nothing
 
   fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
   fv' _ _                                      = emptyC
@@ -608,8 +618,8 @@ instance Alpha AnyName  where
   nthpatrec = nthName
 
 instance (Alpha p, Alpha t) => Alpha (Bind p t) where
-    isPat _ = False
-    isTerm (B p t) = isPat p && isTerm t
+    isPat _ = Nothing
+    isTerm (B p t) = isJust (isPat p) && isTerm t
 
     swaps' c pm (B p t) =
         (B (swaps' (pat c) pm p)
@@ -652,7 +662,7 @@ instance (Alpha p, Alpha t) => Alpha (Bind p t) where
 
 instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
   isTerm _ = False
-  isPat (R p q) = isPat p && isPat q
+  isPat (R p q) = combine (isPat p) (isPat q)
 
   swaps' c pm (R p q) = R (swaps' c pm p) (swaps' (incr c) pm q)
 
@@ -716,9 +726,9 @@ instance Alpha p => Alpha (Rec p) where
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
 instance Alpha t => Alpha (Annot t) where
-   isPat (Annot t)   = isTerm t
+   isPat (Annot t)   = if (isTerm t) then Just [] else Nothing
    isTerm t          = False
-   isAnnot (Annot t) = isPat t
+   isAnnot (Annot t) = isTerm t
 
    swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
    swaps' c pm (Annot t) | mode c == Term = Annot t
@@ -756,7 +766,7 @@ instance Alpha t => Alpha (Annot t) where
 instance Alpha a => Alpha (Outer a) where
 
   -- The contents of Outer may only be an Annot or another Outer.
-  isPat (Outer a)   = isAnnot a
+  isPat (Outer a)   = if (isAnnot a) then Just [] else Nothing
   isTerm a          = False
   isAnnot (Outer a) = isAnnot a
 
