@@ -77,9 +77,15 @@ restrict :: Ord a => Perm a -> [a] -> Perm a
 restrict (Perm p) l = Perm (foldl' (\p' k -> Map.delete k p') p l)
 
 -- | @mkPerm l1 l2@ creates a permutation that sends @l1@ to @l2@.
---   PRECONDITION: each of @l1@ and @l2@ has no duplicate elements.
+--   Fail if there is no such permutation, either because the lists
+--   have different lengths or because they are inconsistent (which
+--   can only happen if @l1@ or @l2@ have repeated elements).
 mkPerm :: Ord a => [a] -> [a] -> Maybe (Perm a)
-mkPerm xs ys = foldl' (\mp p -> mp >>= join p) (Just empty) (zipWith single xs ys)
+mkPerm xs ys
+  | length xs == length ys = foldl' (\mp p -> mp >>= join p)
+                                    (Just empty)
+                                    (zipWith single xs ys)
+  | otherwise = Nothing
 
 ---------------------------------------------------------------------
 seteq :: Ord a => [a] -> [a] -> Bool
