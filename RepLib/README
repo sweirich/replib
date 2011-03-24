@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- 
--- Copyright   :  (c) 2006-2010, RepLib team (see LICENSE)
+-- Copyright   :  (c) 2006-2011, RepLib team (see LICENSE)
 -- License     :  BSD
 -- 
 -- Maintainer  :  sweirich@cis.upenn.edu, byorgey@cis.upenn.edu
@@ -32,14 +32,6 @@ Generics.RepLib.SYB.Aliases - SYB: Port of Data.Generics.Aliases
 Generics.RepLib.SYB.Schemes - SYB: Port of Data.Generics.Schemes
 
 RepLib                      - Top-level module that re-exports all of the above
-
-Generics.RepLib.Bind.LocallyNameless
-                             - Tools for generic programming with
-                               binders (alpha renaming, substitution,
-                               unification, etc.)
-
-Generics.RepLib.Bind.Nominal - Tools for generic programming with
-                               binders (alternate implementation)
 
 To use this library, import RepLib and derive representations of your
 datatypes. The "Lib" module contains a number of type-indexed
