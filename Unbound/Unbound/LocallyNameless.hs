@@ -1,7 +1,7 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.LocallyNameless
+-- Module      :  Unbound.LocallyNameless
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -23,7 +23,7 @@
 -- 'Fresh' and 'LFresh' classes.
 ----------------------------------------------------------------------
 
-module Generics.RepLib.Bind.LocallyNameless
+module Unbound.LocallyNameless
   ( -- * Basic types
     Name, AnyName(..), Bind, Embed(..), Rebind, Rec, TRec, Shift(..),
 
@@ -79,13 +79,13 @@ module Generics.RepLib.Bind.LocallyNameless
     rName, rBind, rRebind, rEmbed, rRec, rShift
 ) where
 
-import Generics.RepLib.Bind.LocallyNameless.Name
-import Generics.RepLib.Bind.LocallyNameless.Fresh
-import Generics.RepLib.Bind.LocallyNameless.Types
-import Generics.RepLib.Bind.LocallyNameless.Alpha
-import Generics.RepLib.Bind.LocallyNameless.Subst
-import Generics.RepLib.Bind.LocallyNameless.Ops
-import Generics.RepLib.Bind.Util
+import Unbound.LocallyNameless.Name
+import Unbound.LocallyNameless.Fresh
+import Unbound.LocallyNameless.Types
+import Unbound.LocallyNameless.Alpha
+import Unbound.LocallyNameless.Subst
+import Unbound.LocallyNameless.Ops
+import Unbound.Util
 
 -- $paynoattention
 -- These type representation objects are exported so they can be

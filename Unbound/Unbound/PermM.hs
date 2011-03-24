@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.Perm
+-- Module      :  Unbound.Perm
 -- Copyright   :  ???
 -- License     :  BSD
 --
@@ -12,7 +12,7 @@
 --
 ----------------------------------------------------------------------
 
-module Generics.RepLib.Bind.PermM (
+module Unbound.PermM (
     Perm, single, compose, apply, support, isid, join, empty, restrict, mkPerm
   ) where
 

@@ -6,7 +6,7 @@
   #-}
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.Nominal.Name
+-- Module      :  Unbound.Nominal.Name
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -16,7 +16,7 @@
 -- XXX write me
 ----------------------------------------------------------------------
 
-module Generics.RepLib.Bind.Nominal.Name where
+module Unbound.Nominal.Name where
 -- XXX todo make explicit export list
 
 import Generics.RepLib

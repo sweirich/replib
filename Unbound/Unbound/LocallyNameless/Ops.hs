@@ -1,12 +1,12 @@
-module Generics.RepLib.Bind.LocallyNameless.Ops where
+module Unbound.LocallyNameless.Ops where
 
 import Generics.RepLib
 
-import Generics.RepLib.Bind.LocallyNameless.Types
-import Generics.RepLib.Bind.LocallyNameless.Alpha
-import Generics.RepLib.Bind.LocallyNameless.Fresh
-import Generics.RepLib.Bind.Util
-import Generics.RepLib.Bind.PermM
+import Unbound.LocallyNameless.Types
+import Unbound.LocallyNameless.Alpha
+import Unbound.LocallyNameless.Fresh
+import Unbound.Util
+import Unbound.PermM
 
 import Control.Monad (liftM)
 import qualified Text.Read as R

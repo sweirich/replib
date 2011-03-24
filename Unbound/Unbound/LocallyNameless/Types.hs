@@ -5,14 +5,14 @@
            , MultiParamTypeClasses
   #-}
 
-module Generics.RepLib.Bind.LocallyNameless.Types
+module Unbound.LocallyNameless.Types
        ( Bind(..)
        , Rebind(..)
        , Rec(..)
        , TRec(..)
        , Embed(..)
        , Shift(..)
-       , module Generics.RepLib.Bind.LocallyNameless.Name
+       , module Unbound.LocallyNameless.Name
 
        -- * Pay no attention to the man behind the curtain
        -- $paynoattention
@@ -20,7 +20,7 @@ module Generics.RepLib.Bind.LocallyNameless.Types
        ) where
 
 import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless.Name
+import Unbound.LocallyNameless.Name
 
 ------------------------------------------------------------
 -- Basic types

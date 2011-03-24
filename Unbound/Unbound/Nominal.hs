@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.Nominal
+-- Module      :  Unbound.Nominal
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -11,7 +11,7 @@
 -- RepLib. This version uses a nominal representation of binding structure.
 --
 -- DISCLAIMER: this module probably contains bugs and may be
--- slower than "Generics.RepLib.Bind.LocallyNameless".  At this point
+-- slower than "Unbound.LocallyNameless".  At this point
 -- we recommend it only for the curious or intrepid.
 --
 -- Datatypes with binding defined using the 'Name' and 'Bind' types.
@@ -22,7 +22,7 @@
 --     'Subst' -- for subtitution functions.
 --
 --------------------------------------------------------------------------
-module Generics.RepLib.Bind.Nominal
+module Unbound.Nominal
   (-- * Basic types
     Name,  AnyName(..), Bind, Embed(..), Rebind, Rec, Shift,
 
@@ -66,5 +66,5 @@ module Generics.RepLib.Bind.Nominal
    -- $paynoattention
    rName, rBind, rRebind, rEmbed, rRec, rShift) where
 
-import Generics.RepLib.Bind.Nominal.Name
-import Generics.RepLib.Bind.Nominal.Internal
+import Unbound.Nominal.Name
+import Unbound.Nominal.Internal
