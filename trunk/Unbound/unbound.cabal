@@ -1,0 +1,43 @@
+name:           unbound
+version:        0.2
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.6
+tested-with:    GHC == 7.0.1
+author:         Stephanie Weirich
+maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
+		Chris Casinghino <ccasin@cis.upenn.edu>
+                Stephanie Weirich <sweirich@cis.upenn.edu>
+homepage:       http://code.google.com/p/replib/
+category:       Language, Generics, Compilers/Interpreters
+extra-source-files: README, 
+                    examples/*.hs,
+                    tutorial/Makefile,
+                    tutorial/Tutorial.lhs,
+                    Generics/RepLib/Bind/LocallyNameless/Test.hs
+synopsis:       Generic support for programming with names and binders
+
+description:    Specify the binding structure of your data type with an
+                expressive set of type combinators, and Unbound
+                handles the rest!  Automatically derives
+                alpha-equivalence, free variable calculation,
+                capture-avoiding substitution, and more.
+Library
+  build-depends: base >= 4.3 && < 5,
+                 RepLib >= 0.4.0,
+                 mtl >= 2.0 && < 2.1, transformers >= 0.2.2.0 && < 0.2.3,
+                 containers >= 0.3 && < 0.5
+  exposed-modules:
+    Unbound.LocallyNameless,
+    Unbound.LocallyNameless.Name,
+    Unbound.LocallyNameless.Fresh,
+    Unbound.LocallyNameless.Types,
+    Unbound.LocallyNameless.Alpha,
+    Unbound.LocallyNameless.Subst,
+    Unbound.LocallyNameless.Ops,
+    Unbound.Nominal,
+    Unbound.Nominal.Name,
+    Unbound.Nominal.Internal,
+    Unbound.PermM,
+    Unbound.Util
