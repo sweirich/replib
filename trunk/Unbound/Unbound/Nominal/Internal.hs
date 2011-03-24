@@ -2,15 +2,15 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.Nominal.Internal
+-- Module      :  Unbound.Nominal.Internal
 -- License     :  BSD-like (see LICENSE)
 --
 --------------------------------------------------------------------------
-module Generics.RepLib.Bind.Nominal.Internal where
+module Unbound.Nominal.Internal where
 
 import Generics.RepLib
-import Generics.RepLib.Bind.Nominal.Name
-import Generics.RepLib.Bind.PermM
+import Unbound.Nominal.Name
+import Unbound.PermM
 
 import qualified Data.List as List
 import qualified Text.Read as R

@@ -1,4 +1,4 @@
-module Generics.RepLib.Bind.Util where
+module Unbound.Util where
 
 import Data.Maybe (catMaybes)
 import Data.Monoid

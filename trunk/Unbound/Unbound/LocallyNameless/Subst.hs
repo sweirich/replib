@@ -6,13 +6,13 @@
            , ScopedTypeVariables
   #-}
 
-module Generics.RepLib.Bind.LocallyNameless.Subst where
+module Unbound.LocallyNameless.Subst where
 
 import Data.List (find)
 
 import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless.Types
-import Generics.RepLib.Bind.LocallyNameless.Alpha
+import Unbound.LocallyNameless.Types
+import Unbound.LocallyNameless.Alpha
 
 ------------------------------------------------------------
 -- Substitution

@@ -5,18 +5,18 @@
 
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.LocallyNameless.Alpha
+-- Module      :  Unbound.LocallyNameless.Alpha
 -- License     :  BSD-like (see LICENSE)
 --
 ----------------------------------------------------------------------
 
-module Generics.RepLib.Bind.LocallyNameless.Alpha where
+module Unbound.LocallyNameless.Alpha where
 
 import Generics.RepLib hiding (GT)
-import Generics.RepLib.Bind.PermM
-import Generics.RepLib.Bind.LocallyNameless.Types
-import Generics.RepLib.Bind.LocallyNameless.Fresh
-import Generics.RepLib.Bind.Util
+import Unbound.PermM
+import Unbound.LocallyNameless.Types
+import Unbound.LocallyNameless.Fresh
+import Unbound.Util
 
 import Data.List (intersect)
 import Data.Maybe (isJust)

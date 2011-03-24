@@ -9,7 +9,7 @@
   #-}
 ----------------------------------------------------------------------
 -- |
--- Module      :  Generics.RepLib.Bind.LocallyNameless.Name
+-- Module      :  Unbound.LocallyNameless.Name
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -19,7 +19,7 @@
 -- XXX write me
 ----------------------------------------------------------------------
 
-module Generics.RepLib.Bind.LocallyNameless.Name where
+module Unbound.LocallyNameless.Name where
 -- XXX todo make explicit export list
 
 import Generics.RepLib
