@@ -24,7 +24,7 @@
 --------------------------------------------------------------------------
 module Generics.RepLib.Bind.Nominal
   (-- * Basic types
-    Name,  AnyName(..), Bind, Annot(..), Rebind, Rec, Outer,
+    Name,  AnyName(..), Bind, Embed(..), Rebind, Rec, Shift,
 
     -- ** Utilities
     integer2Name, string2Name, name2Integer, name2String, makeName,
@@ -64,7 +64,7 @@ module Generics.RepLib.Bind.Nominal
 
    -- * Pay no attention to the man behind the curtain
    -- $paynoattention
-   rName, rBind, rRebind, rAnnot, rRec, rOuter) where
+   rName, rBind, rRebind, rEmbed, rRec, rShift) where
 
 import Generics.RepLib.Bind.Nominal.Name
 import Generics.RepLib.Bind.Nominal.Internal

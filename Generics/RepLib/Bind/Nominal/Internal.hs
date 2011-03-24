@@ -47,10 +47,10 @@ data Bind a b = B a b
 -- type annotations, and those annotations can reference variables
 -- without binding them.
 -- Annotations do nothing special when they appear elsewhere in terms
-newtype Annot a = Annot a deriving (Read, Eq)
+newtype Embed a = Embed a deriving (Read, Eq)
 
--- | An outer can shift an annotation \"hole\" to refer to higher context
-newtype Outer a = Outer a deriving Eq
+-- | Shift the scope of an embedded term one level outwards.
+newtype Shift a = Shift a deriving Eq
 
 -- | Rebinding is for telescopes --- i.e. to support patterns that
 -- also bind variables that appear later
@@ -61,7 +61,7 @@ data Rebind a b = R a (Bind [AnyName] b)
 -- itself.  Useful for lectrec (and Agda's dot notation).
 data Rec a = Rec a
 
-$(derive [''Bind, ''Name, ''Annot, ''Rebind, ''Rec, ''Outer])
+$(derive [''Bind, ''Name, ''Embed, ''Rebind, ''Rec, ''Shift])
 
 ----------------------------------------------------------
 -- Binding operations & instances
@@ -127,10 +127,10 @@ instance Show a => Show (Rec a) where
   showsPrec p (Rec a) = showString "[" . showsPrec 0 a . showString "]"
 
 ----------------------------------------------------------
--- Annot
+-- Embed
 ----------------------------------------------------------
-instance (Show a) => Show (Annot a) where
-  showsPrec p (Annot a) =
+instance (Show a) => Show (Embed a) where
+  showsPrec p (Embed a) =
       (showString "{" . showsPrec 0 a . showString "}")
 
 ----------------------------------------------------------
@@ -162,14 +162,14 @@ swaps :: Alpha a => Perm AnyName -> a -> a
 swaps = swaps' initial
 
 -- | Apply a permutation to the binding variables in a pattern.
--- Annotations are left alone by the permutation.
+--   Embedded terms are left alone by the permutation.
 swapsBinders :: Alpha a => Perm AnyName -> a -> a
 swapsBinders = swaps' initial
 
 -- | Apply a permutation to the annotations in a pattern. Binding
 -- names are left alone by the permutation.
-swapsAnnots :: Alpha a => Perm AnyName -> a -> a
-swapsAnnots = swaps' (pat initial)
+swapsEmbeds :: Alpha a => Perm AnyName -> a -> a
+swapsEmbeds = swaps' (pat initial)
 
 
 -- | "Locally" freshen an object
@@ -195,8 +195,8 @@ match   = match' initial
 -- | Compare two patterns, ignoring the names of binders, and produce
 -- a permutation of their annotations to make them alpha-equivalent
 -- to eachother. Return 'Nothing' if no such renaming is possible.
-matchAnnots :: Alpha a => a -> a -> Maybe (Perm AnyName)
-matchAnnots = match' (pat initial)
+matchEmbeds :: Alpha a => a -> a -> Maybe (Perm AnyName)
+matchEmbeds = match' (pat initial)
 
 -- | Compare two patterns for equality and produce a permutation of
 -- their binding 'Names' to make them alpha-equivalent to each other
@@ -591,25 +591,25 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
       return (R x (B x1 y'), pm1 <> pm2)
 
 
-instance (Eq a, Alpha a) => Alpha (Annot a) where
+instance (Eq a, Alpha a) => Alpha (Embed a) where
 
-   swaps' Pat  pm (Annot t) = Annot (swaps' Term pm t)
-   swaps' Term pm (Annot t) = Annot t
+   swaps' Pat  pm (Embed t) = Embed (swaps' Term pm t)
+   swaps' Term pm (Embed t) = Embed t
 
-   fv' Pat (Annot t)        = fv' Term t
+   fv' Pat (Embed t)        = fv' Term t
    fv' Term _               = S.empty
 
-   binders' Pat (Annot t)   = binders' Term t
+   binders' Pat (Embed t)   = binders' Term t
    binders' Term _          = []
 
 
-   freshen' Pat (Annot t)  = do
+   freshen' Pat (Embed t)  = do
      (t', p) <- freshen' Term t
-     return (Annot t', p)
+     return (Embed t', p)
    freshen' Term a       = return (a, empty)
 
-   match' Pat (Annot x) (Annot y)  = match' Term x y
-   match' Term (Annot x) (Annot y) = if x `aeq` y
+   match' Pat (Embed x) (Embed y)  = match' Term x y
+   match' Term (Embed x) (Embed y) = if x `aeq` y
                                     then Just empty
                                     else Nothing
 
@@ -833,7 +833,7 @@ instance (Subst c a, Alpha a, Subst c b, Alpha b) =>
 
 instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b) where
-instance (Subst c a) => Subst c (Annot a) where
+instance (Subst c a) => Subst c (Embed a) where
 
 
 -------------------- TESTING CODE --------------------------------
@@ -872,38 +872,38 @@ perm = single (AnyName nameA)(AnyName nameB)
 
 naeq x y = not (aeq x y)
 
-a10a = bind (rebind (nameA, Annot nameC) ()) nameA
-a10b = bind (rebind (nameB, Annot nameC) ()) nameB
+a10a = bind (rebind (nameA, Embed nameC) ()) nameA
+a10b = bind (rebind (nameB, Embed nameC) ()) nameB
 
-a10c = bind (rebind (nameA, Annot nameA) ()) nameA
-a10d = bind (rebind (nameB, Annot nameA) ()) nameB
+a10c = bind (rebind (nameA, Embed nameA) ()) nameA
+a10d = bind (rebind (nameB, Embed nameA) ()) nameB
 
 tests_aeq = do
    assert "a1" $ (bind nameA nameA) `naeq` (bind nameA nameB)
    assert "a2" $ (bind nameA nameA) `aeq` (bind nameA nameA)
    assert "a3" $ (bind nameA nameA) `aeq` (bind nameB nameB)
    assert "a4" $ (bind nameA nameB) `naeq` (bind nameB nameA)
-   assert "a5" $ (bind (nameA, Annot nameB) nameA) `naeq`
-                 (bind (nameA, Annot nameC) nameA)
-   assert "a6" $ (bind (nameA, Annot nameB) nameA) `aeq`
-                 (bind (nameA, Annot nameB) nameA)
-   assert "a7" $ (bind (nameA, Annot nameB) nameA) `aeq`
-                 (bind (nameB, Annot nameB) nameB)
+   assert "a5" $ (bind (nameA, Embed nameB) nameA) `naeq`
+                 (bind (nameA, Embed nameC) nameA)
+   assert "a6" $ (bind (nameA, Embed nameB) nameA) `aeq`
+                 (bind (nameA, Embed nameB) nameA)
+   assert "a7" $ (bind (nameA, Embed nameB) nameA) `aeq`
+                 (bind (nameB, Embed nameB) nameB)
    assert "a8" $ rebind nameA nameB `naeq` rebind nameB nameB
    assert "a9" $ rebind nameA nameA `naeq` rebind nameB nameB
-   assert "a9a" $ (bind (rebind nameA (Annot nameA)) nameA) `aeq`
-                  (bind (rebind nameB (Annot nameB)) nameB)
-   assert "a10" $ bind (rebind (nameA, Annot nameA) ()) nameA `aeq`
-                  bind (rebind (nameB, Annot nameA) ()) nameB
+   assert "a9a" $ (bind (rebind nameA (Embed nameA)) nameA) `aeq`
+                  (bind (rebind nameB (Embed nameB)) nameB)
+   assert "a10" $ bind (rebind (nameA, Embed nameA) ()) nameA `aeq`
+                  bind (rebind (nameB, Embed nameA) ()) nameB
    assert "a10a" $ a10a `aeq` a10b
-   assert "a11" $ bind (rebind (nameA, Annot nameA) ()) nameA `naeq`
-                  bind (rebind (nameB, Annot nameB) ()) nameB
-   assert "a12" $ bind (Annot nameA) () `naeq` bind (Annot nameB) ()
-   assert "a13" $ bind (Annot nameA) () `aeq` bind (Annot nameA) ()
-   assert "a14" $ bind (rebind (Annot nameA) ()) () `naeq`
-                  bind (rebind (Annot nameB) ()) ()
-   assert "a15" $ (rebind (nameA, Annot nameA) ()) `naeq`
-                  (rebind (name4, Annot nameC) ())
+   assert "a11" $ bind (rebind (nameA, Embed nameA) ()) nameA `naeq`
+                  bind (rebind (nameB, Embed nameB) ()) nameB
+   assert "a12" $ bind (Embed nameA) () `naeq` bind (Embed nameB) ()
+   assert "a13" $ bind (Embed nameA) () `aeq` bind (Embed nameA) ()
+   assert "a14" $ bind (rebind (Embed nameA) ()) () `naeq`
+                  bind (rebind (Embed nameB) ()) ()
+   assert "a15" $ (rebind (nameA, Embed nameA) ()) `naeq`
+                  (rebind (name4, Embed nameC) ())
    assert "a16" $ bind (nameA, nameB) nameA `naeq`
                   bind (nameB, nameA) nameA
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
@@ -917,25 +917,25 @@ emptyNE = S.empty
 tests_fv = do
    assert "f1" $ fv (bind nameA nameA) == emptyNE
    assert "f2" $ fv' Pat (bind nameA nameA) == S.empty
-   assert "f3" $ fv (bind (rebind nameA (Annot nameA)) nameA) == emptyNE
+   assert "f3" $ fv (bind (rebind nameA (Embed nameA)) nameA) == emptyNE
    assert "f4" $ fv (bind nameA nameB) == S.singleton nameB
-   assert "f5" $ fv (bind (nameA, Annot nameB) nameA) == S.singleton nameB
-   assert "f7" $ fv (bind (nameB, Annot nameB) nameB) == S.singleton nameB
+   assert "f5" $ fv (bind (nameA, Embed nameB) nameA) == S.singleton nameB
+   assert "f7" $ fv (bind (nameB, Embed nameB) nameB) == S.singleton nameB
    assert "f8" $ fv (rebind nameA nameB) == S.fromList [nameA, nameB]
    assert "f9" $ fv' Pat (rebind nameA nameA) == S.empty
-   assert "f9a" $ fv (rebind nameA (Annot nameA)) == S.singleton nameA
-   assert "f9b" $ fv' Pat (rebind nameA (Annot nameA)) == S.empty
-   assert "f10" $ fv (rebind (nameA, Annot nameA) ()) == S.singleton nameA
-   assert "f11" $ fv' Pat (rebind (nameA, Annot nameA) ()) == S.singleton (AnyName nameA)
-   assert "f10a" $ fv (rebind (nameA, Annot nameB) ()) == S.singleton nameA
-   assert "f11a" $ fv' Pat (rebind (nameA, Annot nameB) ()) == S.singleton (AnyName nameB)
+   assert "f9a" $ fv (rebind nameA (Embed nameA)) == S.singleton nameA
+   assert "f9b" $ fv' Pat (rebind nameA (Embed nameA)) == S.empty
+   assert "f10" $ fv (rebind (nameA, Embed nameA) ()) == S.singleton nameA
+   assert "f11" $ fv' Pat (rebind (nameA, Embed nameA) ()) == S.singleton (AnyName nameA)
+   assert "f10a" $ fv (rebind (nameA, Embed nameB) ()) == S.singleton nameA
+   assert "f11a" $ fv' Pat (rebind (nameA, Embed nameB) ()) == S.singleton (AnyName nameB)
 
 
-   assert "f12" $ fv (bind (Annot nameA) ()) == S.singleton nameA
-   assert "f12a" $ fv' Pat (bind (Annot nameA) ()) == S.singleton (AnyName nameA)
+   assert "f12" $ fv (bind (Embed nameA) ()) == S.singleton nameA
+   assert "f12a" $ fv' Pat (bind (Embed nameA) ()) == S.singleton (AnyName nameA)
 
-   assert "f14" $ fv (rebind (Annot nameA) ()) == emptyNE
-   assert "f14a" $ fv' Pat (rebind (Annot nameA) ()) == S.singleton (AnyName nameA)
+   assert "f14" $ fv (rebind (Embed nameA) ()) == emptyNE
+   assert "f14a" $ fv' Pat (rebind (Embed nameA) ()) == S.singleton (AnyName nameA)
 
 tests_subst = do
    assert "s1" $ subst nameA (V nameB) (V nameA) `aeq` (V nameB)

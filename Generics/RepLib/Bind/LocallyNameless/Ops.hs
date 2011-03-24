@@ -134,14 +134,14 @@ swaps :: Alpha a => Perm AnyName -> a -> a
 swaps = swaps' initial
 
 -- | Apply a permutation to the binding variables in a pattern.
--- Annotations are left alone by the permutation.
+-- Embedded terms are left alone by the permutation.
 swapsBinders :: Alpha a => Perm AnyName -> a -> a
 swapsBinders = swaps' initial
 
 -- | Apply a permutation to the annotations in a pattern. Binding
 -- names are left alone by the permutation.
-swapsAnnots :: Alpha a => Perm AnyName -> a -> a
-swapsAnnots = swaps' (pat initial)
+swapsEmbeds :: Alpha a => Perm AnyName -> a -> a
+swapsEmbeds = swaps' (pat initial)
 
 
 -- | \"Locally\" freshen a pattern replacing all binding names with
@@ -168,8 +168,8 @@ match   = match' initial
 -- | Compare two patterns, ignoring the names of binders, and produce
 -- a permutation of their annotations to make them alpha-equivalent
 -- to eachother. Return 'Nothing' if no such renaming is possible.
-matchAnnots :: Alpha a => a -> a -> Maybe (Perm AnyName)
-matchAnnots = match' (pat initial)
+matchEmbeds :: Alpha a => a -> a -> Maybe (Perm AnyName)
+matchEmbeds = match' (pat initial)
 
 -- | Compare two patterns for equality and produce a permutation of
 -- their binding 'Names' to make them alpha-equivalent to each other

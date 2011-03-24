@@ -54,26 +54,26 @@ tests_aeq = do
    assert "a2" $ (bind nameA nameA) `aeq` (bind nameA nameA)
    assert "a3" $ (bind nameA nameA) `aeq` (bind nameB nameB)
    assert "a4" $ (bind nameA nameB) `naeq` (bind nameB nameA)
-   assert "a5" $ (bind (nameA, Annot nameB) nameA) `naeq`
-                 (bind (nameA, Annot nameC) nameA)
-   assert "a6" $ (bind (nameA, Annot nameB) nameA) `aeq`
-                 (bind (nameA, Annot nameB) nameA)
-   assert "a7" $ (bind (nameA, Annot nameB) nameA) `aeq`
-                 (bind (nameB, Annot nameB) nameB)
+   assert "a5" $ (bind (nameA, Embed nameB) nameA) `naeq`
+                 (bind (nameA, Embed nameC) nameA)
+   assert "a6" $ (bind (nameA, Embed nameB) nameA) `aeq`
+                 (bind (nameA, Embed nameB) nameA)
+   assert "a7" $ (bind (nameA, Embed nameB) nameA) `aeq`
+                 (bind (nameB, Embed nameB) nameB)
    assert "a8" $ rebind nameA nameB `naeq` rebind nameB nameB
    assert "a9" $ rebind nameA nameA `naeq` rebind nameB nameB
-   assert "a9" $ (bind (rebind nameA (Annot nameA)) nameA) `aeq`
-                 (bind (rebind nameB (Annot nameB)) nameB)
-   assert "a10" $ bind (rebind (nameA, Annot nameA) ()) nameA `aeq`
-                  bind (rebind (nameB, Annot nameA) ()) nameB
-   assert "a11" $ bind (rebind (nameA, Annot nameA) ()) nameA `naeq`
-                  bind (rebind (nameB, Annot nameB) ()) nameB
-   assert "a12" $ bind (Annot nameA) () `naeq` bind (Annot nameB) ()
-   assert "a13" $ bind (Annot nameA) () `aeq` bind (Annot nameA) ()
-   assert "a14" $ bind (rebind (Annot nameA) ()) () `naeq`
-                  bind (rebind (Annot nameB) ()) ()
-   assert "a15" $ (rebind (nameA, Annot nameA) ()) `naeq`
-                  (rebind (name4, Annot nameC) ())
+   assert "a9" $ (bind (rebind nameA (Embed nameA)) nameA) `aeq`
+                 (bind (rebind nameB (Embed nameB)) nameB)
+   assert "a10" $ bind (rebind (nameA, Embed nameA) ()) nameA `aeq`
+                  bind (rebind (nameB, Embed nameA) ()) nameB
+   assert "a11" $ bind (rebind (nameA, Embed nameA) ()) nameA `naeq`
+                  bind (rebind (nameB, Embed nameB) ()) nameB
+   assert "a12" $ bind (Embed nameA) () `naeq` bind (Embed nameB) ()
+   assert "a13" $ bind (Embed nameA) () `aeq` bind (Embed nameA) ()
+   assert "a14" $ bind (rebind (Embed nameA) ()) () `naeq`
+                  bind (rebind (Embed nameB) ()) ()
+   assert "a15" $ (rebind (nameA, Embed nameA) ()) `naeq`
+                  (rebind (name4, Embed nameC) ())
    assert "a16" $ bind (nameA, nameB) nameA `naeq` bind (nameB, nameA) nameA
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
    assert "a18" $ (nameA, nameA) `naeq` (nameA, nameB)
@@ -86,15 +86,15 @@ tests_fv = do
    assert "f1" $ fv (bind nameA nameA) == emptyNE
    assert "f2" $ fv' (pat initial) (bind nameA nameA) == S.empty
    assert "f4" $ fv (bind nameA nameB) == S.singleton nameB
-   assert "f5" $ fv (bind (nameA, Annot nameB) nameA) == S.singleton nameB
-   assert "f7" $ fv (bind (nameB, Annot nameB) nameB) == S.singleton nameB
+   assert "f5" $ fv (bind (nameA, Embed nameB) nameA) == S.singleton nameB
+   assert "f7" $ fv (bind (nameB, Embed nameB) nameB) == S.singleton nameB
    assert "f8" $ fv (rebind nameA nameB) == S.fromList [nameA, nameB]
    assert "f9" $ fv' (pat initial) (rebind nameA nameA) == S.empty
-   assert "f3" $ fv (bind (rebind nameA (Annot nameA)) nameA) == emptyNE
-   assert "f10" $ fv (rebind (nameA, Annot nameA) ()) == S.singleton nameA
-   assert "f11" $ fv' (pat initial) (rebind (nameA, Annot nameA) ()) == S.singleton (AnyName nameA)
-   assert "f12" $ fv (bind (Annot nameA) ()) == S.singleton nameA
-   assert "f14" $ fv (rebind (Annot nameA) ()) == emptyNE
+   assert "f3" $ fv (bind (rebind nameA (Embed nameA)) nameA) == emptyNE
+   assert "f10" $ fv (rebind (nameA, Embed nameA) ()) == S.singleton nameA
+   assert "f11" $ fv' (pat initial) (rebind (nameA, Embed nameA) ()) == S.singleton (AnyName nameA)
+   assert "f12" $ fv (bind (Embed nameA) ()) == S.singleton nameA
+   assert "f14" $ fv (rebind (Embed nameA) ()) == emptyNE
 
 mkbig :: [Name Exp] -> Exp -> Exp
 mkbig (n : names) body =
@@ -140,11 +140,11 @@ tests_acompare = do
    assert "ac14" $ acompare (bind [nameA,nameB] nameA) (bind [nameA] nameA)
                  ==  acompare (bind [nameC,nameB] nameC) (bind [nameA] nameA)
    -- non-binding stuff in patterns gets compared
-   assert "ac15" $ acompare (Annot nameA) (Annot nameB) == LT
-   assert "ac16" $ acompare (bind (nameC, Annot nameA) (A (V nameC) (V nameC)))
-                            (bind (nameC, Annot nameB) (A (V nameC) (V nameC))) == LT
-   assert "ac17" $ acompare (bind (nameC, Annot nameA) (A (V nameB) (V nameB)))
-                          (bind (nameC, Annot nameB) (A (V nameA) (V nameA))) == LT
+   assert "ac15" $ acompare (Embed nameA) (Embed nameB) == LT
+   assert "ac16" $ acompare (bind (nameC, Embed nameA) (A (V nameC) (V nameC)))
+                            (bind (nameC, Embed nameB) (A (V nameC) (V nameC))) == LT
+   assert "ac17" $ acompare (bind (nameC, Embed nameA) (A (V nameB) (V nameB)))
+                          (bind (nameC, Embed nameB) (A (V nameA) (V nameA))) == LT
    -- TODO: do we need anything special for rebind? For AnyName?
 
 -- properties

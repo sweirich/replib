@@ -11,7 +11,7 @@
 -- A generic implementation of name binding functions using a locally
 -- nameless representation.  Datatypes with binding can be defined
 -- using the 'Name' and 'Bind' types.  Expressive patterns for binding
--- come from the 'Annot' and 'Rebind' types.
+-- come from the 'Embed' and 'Rebind' types.
 --
 -- Important classes are:
 --
@@ -25,7 +25,7 @@
 
 module Generics.RepLib.Bind.LocallyNameless
   ( -- * Basic types
-    Name, AnyName(..), Bind, Annot(..), Rebind, Rec, TRec, Outer(..),
+    Name, AnyName(..), Bind, Embed(..), Rebind, Rec, TRec, Shift(..),
 
     -- ** Utilities
     integer2Name, string2Name, s2n, makeName,
@@ -35,7 +35,7 @@ module Generics.RepLib.Bind.LocallyNameless
 
     -- * The 'Alpha' class
     Alpha(..),
-    swaps, swapsAnnots, swapsBinders,
+    swaps, swapsEmbeds, swapsBinders,
     aeq, aeqBinders,
     acompare,
 
@@ -68,12 +68,15 @@ module Generics.RepLib.Bind.LocallyNameless
     rec, unrec,
     trec, untrec, luntrec,
 
+    -- XXX export embed, unembed, shift, unshift.
+    -- XXX should embed/unembed work for Shifts as well?
+
     -- * Substitution
     Subst(..), SubstName(..),
 
     -- * Pay no attention to the man behind the curtain
     -- $paynoattention
-    rName, rBind, rRebind, rAnnot, rRec, rOuter
+    rName, rBind, rRebind, rEmbed, rRec, rShift
 ) where
 
 import Generics.RepLib.Bind.LocallyNameless.Name

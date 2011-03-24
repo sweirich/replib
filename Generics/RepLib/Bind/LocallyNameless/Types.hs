@@ -10,13 +10,13 @@ module Generics.RepLib.Bind.LocallyNameless.Types
        , Rebind(..)
        , Rec(..)
        , TRec(..)
-       , Annot(..)
-       , Outer(..)
+       , Embed(..)
+       , Shift(..)
        , module Generics.RepLib.Bind.LocallyNameless.Name
 
        -- * Pay no attention to the man behind the curtain
        -- $paynoattention
-       , rBind, rRebind, rAnnot, rRec, rOuter
+       , rBind, rRebind, rEmbed, rRec, rShift
        ) where
 
 import Generics.RepLib
@@ -79,32 +79,33 @@ instance Show a => Show (TRec a) where
   showsPrec _ (TRec (B (Rec p) ())) = showString "[" . showsPrec 0 p . showString "]"
 
 
--- Annot
+-- Embed
 --------------------------------------------------
 
+-- XXX improve this doc
 -- | An annotation is a \"hole\" in a pattern where variables can be
 --   used, but not bound. For example, patterns may include type
 --   annotations, and those annotations can reference variables
 --   without binding them.  Annotations do nothing special when they
 --   appear elsewhere in terms.
-newtype Annot t = Annot t deriving Eq
+newtype Embed t = Embed t deriving Eq
 
-instance Show a => Show (Annot a) where
-  showsPrec p (Annot a) = showString "{" . showsPrec 0 a . showString "}"
+instance Show a => Show (Embed a) where
+  showsPrec p (Embed a) = showString "{" . showsPrec 0 a . showString "}"
 
--- Outer
+-- Shift
 --------------------------------------------------
 
--- | An outer can shift an annotation \"hole\" to refer to higher context.
-newtype Outer p = Outer p deriving Eq
+-- | Shift the scope of an embedded term one level outwards.
+newtype Shift p = Shift p deriving Eq
 
-instance Show a => Show (Outer a) where
-  showsPrec p (Outer a) = showString "{" . showsPrec 0 a . showString "}"
+instance Show a => Show (Shift a) where
+  showsPrec p (Shift a) = showString "{" . showsPrec 0 a . showString "}"
 
 -- $paynoattention
 -- These type representation objects are exported so they can be
 -- referenced by auto-generated code.  Please pretend they do not
 -- exist.
 
-$(derive [''Bind, ''Annot, ''Rebind, ''Rec, ''Outer])
+$(derive [''Bind, ''Embed, ''Rebind, ''Rec, ''Shift])
 

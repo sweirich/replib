@@ -110,5 +110,5 @@ instance (Subst c b, Subst c a, Alpha a,Alpha b) =>
 instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b)
 
-instance (Subst c a) => Subst c (Annot a)
+instance (Subst c a) => Subst c (Embed a)
 instance (Alpha a, Subst c a) => Subst c (Rec a)
