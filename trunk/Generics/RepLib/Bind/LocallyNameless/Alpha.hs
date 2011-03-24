@@ -37,10 +37,10 @@ import Data.Monoid
 --
 -- Patterns include
 --    Names
---    Annot t when t is a Term
+--    Embed t when t is a Term
 --    Rebind p q when p and q are both Patterns
 --    Rec p when p is a pattern
---    Outer a when a is an Annot or some number of Outers wrapped around Annot
+--    Shift a when a is an Embed or some number of Shifts wrapped around Embed
 --    Standard type constructors (Unit, (,), Maybe, [], etc)
 --
 -- Terms support a number of operations, including alpha-equivalence,
@@ -134,12 +134,12 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   isTerm :: a -> Bool
   isTerm = isTermR1 rep1
 
-  -- | @isAnnot@ is needed internally for the implementation of
-  --   @isPat@.  @isAnnot@ is true for terms wrapped in @Annot@ and zero
-  --   or more occurrences of @Outer@.  The default implementation
+  -- | @isEmbed@ is needed internally for the implementation of
+  --   @isPat@.  @isEmbed@ is true for terms wrapped in @Embed@ and zero
+  --   or more occurrences of @Shift@.  The default implementation
   --   simply returns @False@.
-  isAnnot :: a -> Bool
-  isAnnot _ = False
+  isEmbed :: a -> Bool
+  isEmbed _ = False
   ---------------- PATTERN OPERATIONS ----------------------------
 
   -- | @'nthpatrec' p n@ looks up the @n@th name in the pattern @p@
@@ -283,7 +283,7 @@ closeP = close (pat initial)
 data AlphaD a = AlphaD {
   isPatD    :: a -> Maybe [AnyName],
   isTermD   :: a -> Bool,
-  isAnnotD  :: a -> Bool,
+  isEmbedD  :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
   fvD       :: Collection f => AlphaCtx -> a -> f AnyName,
   freshenD  :: Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
@@ -298,7 +298,7 @@ data AlphaD a = AlphaD {
   }
 
 instance Alpha a => Sat (AlphaD a) where
-  dict = AlphaD isPat isTerm isAnnot swaps' fv' freshen' lfreshen' aeq' -- match'
+  dict = AlphaD isPat isTerm isEmbed swaps' fv' freshen' lfreshen' aeq' -- match'
            close open findpatrec nthpatrec acompare'
 
 ----------------------------------------------------------------------
@@ -432,14 +432,14 @@ nthpatL MNil Nil              = mempty
 nthpatL (r :+: rs) (t :*: ts) = nthpatD r t <> nthpatL rs ts
 
 combine :: Maybe [AnyName] -> Maybe [AnyName] -> Maybe [AnyName]
-combine (Just ns1) (Just ns2) | ns1 `intersect` ns2 == [] = 
+combine (Just ns1) (Just ns2) | ns1 `intersect` ns2 == [] =
                                   Just (ns1 ++ ns2)
 combine _ _ = Nothing
 
 isPatR1 :: R1 AlphaD b -> b -> Maybe [AnyName]
 isPatR1 (Data1 dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> 
+     Val c rec kids ->
        foldl_l (\ c b a -> combine (isPatD c a) b) (Just []) rec kids
 isPatR1 _ = \ d -> Just []
 
@@ -478,7 +478,7 @@ compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
 
 ------------------------------------------------------------
 -- Specific Alpha instances for the binding combinators:
---      Name, Bind, Annot, Rebind, Rec, Outer
+--      Name, Bind, Embed, Rebind, Rec, Shift
 -----------------------------------------------------------
 
 -- In the Name instance, if the mode is Term then the operation
@@ -722,18 +722,18 @@ instance Alpha p => Alpha (Rec p) where
    close c a (Rec p) = Rec (close (incr c) a p)
 
 
--- note: for Annots, when the mode is "term" then we are
+-- note: for Embeds, when the mode is "term" then we are
 -- implementing the "binding" version of the function
 -- and we generally should treat the annots as constants
-instance Alpha t => Alpha (Annot t) where
-   isPat (Annot t)   = if (isTerm t) then Just [] else Nothing
+instance Alpha t => Alpha (Embed t) where
+   isPat (Embed t)   = if (isTerm t) then Just [] else Nothing
    isTerm t          = False
-   isAnnot (Annot t) = isTerm t
+   isEmbed (Embed t) = isTerm t
 
-   swaps' c pm (Annot t) | mode c == Pat  = Annot (swaps' (term c) pm t)
-   swaps' c pm (Annot t) | mode c == Term = Annot t
+   swaps' c pm (Embed t) | mode c == Pat  = Embed (swaps' (term c) pm t)
+   swaps' c pm (Embed t) | mode c == Term = Embed t
 
-   fv' c (Annot t) | mode c == Pat  = fv' (term c) t
+   fv' c (Embed t) | mode c == Pat  = fv' (term c) t
    fv' c _         | mode c == Term = emptyC
 
    freshen' c p | mode c == Term = error "freshen' called on a term"
@@ -742,36 +742,36 @@ instance Alpha t => Alpha (Annot t) where
    lfreshen' c p f         | mode c == Term = error "lfreshen' called on a term"
                            | otherwise      = f p empty
 
-   aeq' c (Annot x) (Annot y) = aeq' (term c) x y
+   aeq' c (Embed x) (Embed y) = aeq' (term c) x y
 
-   acompare' c (Annot x) (Annot y) = acompare' (term c) x y
+   acompare' c (Embed x) (Embed y) = acompare' (term c) x y
 
 {-
-   match' c (Annot x) (Annot y) | mode c == Pat  = match' (term c) x y
-   match' c (Annot x) (Annot y) | mode c == Term =
+   match' c (Embed x) (Embed y) | mode c == Pat  = match' (term c) x y
+   match' c (Embed x) (Embed y) | mode c == Term =
                                     if x `aeq` y
                                     then Just empty
                                     else Nothing
 -}
 
-   close c b (Annot x) | mode c == Pat  = Annot (close (term c) b x)
-                       | mode c == Term = error "close on Annot"
+   close c b (Embed x) | mode c == Pat  = Embed (close (term c) b x)
+                       | mode c == Term = error "close on Embed"
 
-   open c b (Annot x) | mode c == Pat  = Annot (open (term c) b x)
-                      | mode c == Term = error "open on Annot"
+   open c b (Embed x) | mode c == Pat  = Embed (open (term c) b x)
+                      | mode c == Term = error "open on Embed"
 
    findpatrec _ _ = mempty
    nthpatrec _    = mempty
 
-instance Alpha a => Alpha (Outer a) where
+instance Alpha a => Alpha (Shift a) where
 
-  -- The contents of Outer may only be an Annot or another Outer.
-  isPat (Outer a)   = if (isAnnot a) then Just [] else Nothing
+  -- The contents of Shift may only be an Embed or another Shift.
+  isPat (Shift a)   = if (isEmbed a) then Just [] else Nothing
   isTerm a          = False
-  isAnnot (Outer a) = isAnnot a
+  isEmbed (Shift a) = isEmbed a
 
-  close c b (Outer x) = Outer (close (decr c) b x)
-  open  c b (Outer x) = Outer (open  (decr c) b x)
+  close c b (Shift x) = Shift (close (decr c) b x)
+  open  c b (Shift x) = Shift (open  (decr c) b x)
 
 
 -- Instances for other types use the default definitions.
