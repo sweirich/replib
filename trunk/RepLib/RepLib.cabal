@@ -16,7 +16,7 @@ extra-source-files: README,
                     Generics/RepLib/Bind/LocallyNameless/Test.hs
 synopsis:       Generic programming library with representation types
 description:    Generic programming library providing structural
-                polymorphism, simple programming with binders, and other features.
+                polymorphism and other features.
 
 Library
   build-depends: base >= 4.3 && < 5, 
@@ -34,17 +34,5 @@ Library
     Generics.RepLib.Derive,
     Generics.RepLib.SYB.Aliases,
     Generics.RepLib.SYB.Schemes,
-    Generics.RepLib.Unify,
-    Generics.RepLib.Bind.LocallyNameless,
-    Generics.RepLib.Bind.LocallyNameless.Name,
-    Generics.RepLib.Bind.LocallyNameless.Fresh,
-    Generics.RepLib.Bind.LocallyNameless.Types,
-    Generics.RepLib.Bind.LocallyNameless.Alpha,
-    Generics.RepLib.Bind.LocallyNameless.Subst,
-    Generics.RepLib.Bind.LocallyNameless.Ops,
-    Generics.RepLib.Bind.Nominal,
-    Generics.RepLib.Bind.Nominal.Name,
-    Generics.RepLib.Bind.Nominal.Internal,
-    Generics.RepLib.Bind.PermM,
-    Generics.RepLib.Bind.Util
+    Generics.RepLib.Unify
   extensions: GADTs
