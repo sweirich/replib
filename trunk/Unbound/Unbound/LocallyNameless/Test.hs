@@ -6,15 +6,15 @@
            , UndecidableInstances
   #-}
 
-module Generics.RepLib.Bind.LocallyNameless.Test where
+module Unbound.LocallyNameless.Test where
 
 import qualified Data.Set as S
 
 import Generics.RepLib hiding (GT)
-import Generics.RepLib.Bind.LocallyNameless
-import Generics.RepLib.Bind.LocallyNameless.Alpha
-import Generics.RepLib.Bind.LocallyNameless.Name
-import Generics.RepLib.Bind.PermM
+import Unbound.LocallyNameless
+import Unbound.LocallyNameless.Alpha
+import Unbound.LocallyNameless.Name
+import Unbound.PermM
 
 -------------------- TESTING CODE --------------------------------
 data Exp = V (Name Exp)
@@ -73,7 +73,7 @@ tests_aeq = do
    assert "a14" $ bind (rebind (Embed nameA) ()) () `naeq`
                   bind (rebind (Embed nameB) ()) ()
    assert "a15" $ (rebind (nameA, Embed nameA) ()) `naeq`
-                  (rebind (name4, Embed nameC) ())
+                  (rebind (nameA, Embed nameC) ())
    assert "a16" $ bind (nameA, nameB) nameA `naeq` bind (nameB, nameA) nameA
    assert "a17" $ bind (nameA, nameB) nameA `naeq` bind (nameA, nameB) nameB
    assert "a18" $ (nameA, nameA) `naeq` (nameA, nameB)
@@ -101,8 +101,8 @@ mkbig (n : names) body =
     L (bind n (mkbig names (A (V n) body)))
 mkbig [] body = body
 
-big1 = mkbig (map integer2Name (take 100 [1 ..])) (V name11)
-big2 = mkbig (map integer2Name (take 101 [1 ..])) (V name11)
+big1 = mkbig (map integer2Name (take 100 [1 ..])) (V nameA)
+big2 = mkbig (map integer2Name (take 101 [1 ..])) (V nameA)
 
 
 tests_nth = do
@@ -116,7 +116,7 @@ tests_nth = do
 tests_big = do
    assert "b1" $ big1 `naeq` big2
    assert "b2" $ fv big1 == emptyNE
-   assert "b3" $ big1 `aeq` subst name11 (V name11) big1
+   assert "b3" $ big1 `aeq` subst nameA (V nameA) big1
 
 tests_acompare = do
    -- Names compare in the obvious way.

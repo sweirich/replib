@@ -12,15 +12,41 @@
 -- Module      :  Unbound.LocallyNameless.Name
 -- License     :  BSD-like (see LICENSE)
 --
--- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
 -- Stability   :  experimental
--- Portability :  XXX
+-- Portability :  GHC only
 --
--- XXX write me
+-- An implementation of names in a locally nameless representation.
 ----------------------------------------------------------------------
 
-module Unbound.LocallyNameless.Name where
--- XXX todo make explicit export list
+module Unbound.LocallyNameless.Name
+       ( -- * Name types
+
+         Name(..)
+       , AnyName(..)
+
+         -- * Constructing and destructing free names
+
+       , integer2Name, string2Name, s2n, makeName
+
+       , name2Integer, name2String
+       , anyName2Integer, anyName2String
+
+         -- * Sorts
+
+       , toSortedName, translate, getR
+
+         -- * Utility
+
+       , isBound, isFree
+
+         -- * Representations
+         -- | Automatically generated representation objects.
+
+       , rR, rR1
+       , rName, rName1
+       , rAnyName, rAnyName1
+       ) where
 
 import Generics.RepLib
 
@@ -29,9 +55,12 @@ $(derive_abstract [''R])
 
 -- | 'Name's are things that get bound.  This type is intentionally
 --   abstract; to create a 'Name' you can use 'string2Name' or
---   'integer2Name'. The type parameter is a tag, or /sort/, which tells
---   us what sorts of things this name may stand for. The sort must
---   be an instance of the 'Rep' type class.
+--   'integer2Name'. The type parameter is a tag, or /sort/, which
+--   tells us what sorts of things this name may stand for. The sort
+--   must be a /representable/ type, /i.e./ an instance of the 'Rep'
+--   type class from the @RepLib@ generic programming framework.
+--
+--   To hide the sort of a name, use 'AnyName'.
 data Name a
   = Nm (R a) (String, Integer)   -- free names
   | Bn (R a) Integer Integer     -- bound names / binding level + pattern index
@@ -39,13 +68,24 @@ data Name a
 
 $(derive [''Name])
 
--- | A name with a hidden (existentially quantified) sort.
+-- | A name with a hidden (existentially quantified) sort.  To hide
+--   the sort of a name, use the 'AnyName' constructor directly; to
+--   extract a name with a hidden sort, use 'toSortedName'.
 data AnyName = forall a. Rep a => AnyName (Name a)
 
+-- | Test whether a name is a bound variable (i.e. a reference to some
+--   binding site, represented as a de Bruijn index).  Normal users of
+--   the library should not need this function, as it is impossible to
+--   encounter a bound name when using the abstract interface provided
+--   by "Unbound.LocallyNameless".
 isBound :: Name a -> Bool
 isBound (Nm _ _) = False
 isBound (Bn _ _ _) = True
 
+-- | Test whether a name is a free variable. Normal users of the
+--   library should not need this function, as all the names
+--   encountered will be free variables when using the abstract
+--   interface provided by "Unbound.LocallyNameless".
 isFree :: Name a -> Bool
 isFree (Nm _ _) = True
 isFree (Bn _ _ _) = False
@@ -76,21 +116,6 @@ instance Ord AnyName where
 -- Utilities
 ------------------------------------------------------------
 
--- some convenient names for testing
-name1, name2, name3, name4, name5, name6, name7, name8, name9, name10, name11
-  :: Rep a => Name a
-name1 = integer2Name 1
-name2 = integer2Name 2
-name3 = integer2Name 3
-name4 = integer2Name 4
-name5 = integer2Name 5
-name6 = integer2Name 6
-name7 = integer2Name 7
-name8 = integer2Name 8
-name9 = integer2Name 9
-name10 = integer2Name 10
-name11 = integer2Name 11
-
 --instance Read Name where
 --  read s = error "FIXME"
 
@@ -118,14 +143,16 @@ anyName2Integer (AnyName nm) = name2Integer nm
 anyName2String :: AnyName -> String
 anyName2String (AnyName nm) = name2String nm
 
+-- | Cast a name with an existentially hidden sort to an explicitly
+--   sorted name.
 toSortedName :: Rep a => AnyName -> Maybe (Name a)
 toSortedName (AnyName n) = gcastR (getR n) rep n
 
--- | Create a 'Name' from an 'Integer'.
+-- | Create a free 'Name' from an 'Integer'.
 integer2Name :: Rep a => Integer -> Name a
 integer2Name n = makeName "" n
 
--- | Create a 'Name' from a 'String'.
+-- | Create a free 'Name' from a 'String'.
 string2Name :: Rep a => String -> Name a
 string2Name s = makeName s 0
 
@@ -133,7 +160,7 @@ string2Name s = makeName s 0
 s2n :: Rep a => String -> Name a
 s2n = string2Name
 
--- | Create a 'Name' from a @String@ and an @Integer@ index.
+-- | Create a free 'Name' from a @String@ and an @Integer@ index.
 makeName :: Rep a => String -> Integer -> Name a
 makeName s i = Nm rep (s,i)
 
@@ -142,7 +169,7 @@ getR :: Name a -> R a
 getR (Nm r _)   = r
 getR (Bn r _ _) = r
 
--- | Change the sort of a name
+-- | Change the sort of a name.
 translate :: (Rep b) => Name a -> Name b
 translate (Nm _ x) = Nm rep x
 translate (Bn _ x y) = Bn rep x y
