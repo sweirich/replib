@@ -4,34 +4,46 @@
 -- Module      :  Unbound.LocallyNameless
 -- License     :  BSD-like (see LICENSE)
 --
--- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
 -- Stability   :  experimental
--- Portability :  non-portable (-XKitchenSink)
+-- Portability :  GHC only (-XKitchenSink)
 --
--- A generic implementation of name binding functions using a locally
--- nameless representation.  Datatypes with binding can be defined
--- using the 'Name' and 'Bind' types.  Expressive patterns for binding
--- come from the 'Embed' and 'Rebind' types.
+-- A generic implementation of standard functions dealing with names
+-- and binding structure (alpha equivalence, free variable
+-- calculation, capture-avoiding substitution, name permutation, ...)
+-- using a locally nameless representation. (See "Unbound.Nominal" for
+-- a nominal implementation of the same interface.)
 --
--- Important classes are:
+-- Ten-second tutorial: use the type combinators 'Bind', 'Embed',
+-- 'Rebind', 'Rec', 'TRec', and 'Shift' to specify the binding
+-- structure of your data types.  Then use Template Haskell to derive
+-- generic representations for your types:
 --
---   * 'Alpha' -- the class of types and patterns that include binders,
+-- > $(derive [''Your, ''Types, ''Here])
 --
---   * 'Subst' -- for subtitution functions.
+-- Finally, declare 'Alpha' and 'Subst' instances for your types.
+-- Then you can go to town using all the generically-derived
+-- operations like 'aeq', 'fv', 'subst', and so on.
 --
--- Name generation is controlled via monads which implement the
--- 'Fresh' and 'LFresh' classes.
+-- For more information, see the more in-depth literate Haskell
+-- tutorial in the @tutorial@ directory (which can be obtained as part
+-- of the library source package: @cabal unpack unbound@).
+--
+-- See also: Stephanie Weirich, Brent Yorgey, and Tim Sheard.
+-- /Binders Unbound/. Submitted to ICFP
+-- 2011. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
 ----------------------------------------------------------------------
 
 module Unbound.LocallyNameless
-  ( -- * Basic types
-    Name, AnyName(..), Bind, Embed(..), Rebind, Rec, TRec, Shift(..),
+  ( -- * Names
+    Name, AnyName(..),
 
-    -- ** Utilities
     integer2Name, string2Name, s2n, makeName,
     name2Integer, name2String, anyName2Integer, anyName2String,
-    name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
     translate,
+
+    -- * Type combinators for specifying binding structure
+    Bind, Embed(..), Rebind, Rec, TRec, Shift(..),
 
     -- * The 'Alpha' class
     Alpha(..),
