@@ -47,7 +47,41 @@ module Unbound.LocallyNameless
 
     -- * Type combinators for specifying binding structure
     -- | XXX write me
-    Bind, Embed(..), Rebind, Rec, TRec, Shift(..),
+
+    -- ** Bind
+    Bind,
+
+    -- *** Constructing
+    bind,
+
+    -- *** Destructing
+    unbind,
+    unbind2, unbind3,
+
+    lunbind, lunbind2, lunbind3,
+
+    unsafeUnbind,
+
+    -- ** Embed
+
+    Embed(..),
+
+    -- ** Rebind
+
+    Rebind,
+
+    rebind, unrebind,
+
+    -- ** Rec
+    Rec,
+    rec, unrec,
+
+    -- ** TRec
+    TRec,
+    trec, untrec, luntrec,
+
+    -- ** Shift
+    Shift(..),
 
     -- * The 'Alpha' class
     Alpha(..),
@@ -59,12 +93,8 @@ module Unbound.LocallyNameless
     Collection(..), Multiset(..),
     fv, fvAny, patfv, patfvAny, binders, bindersAny,
 
-    -- * Binding operations
-    bind, unsafeUnbind,
-
     -- * The 'Fresh' class
     Fresh(..), freshen,
-    unbind, unbind2, unbind3,
 
     FreshM, runFreshM,
     FreshMT, runFreshMT,
@@ -72,17 +102,9 @@ module Unbound.LocallyNameless
     -- * The 'LFresh' class
     LFresh(..),
     lfreshen,
-    lunbind, lunbind2, lunbind3,
 
     LFreshM, runLFreshM, getAvoids,
     LFreshMT, runLFreshMT,
-
-    -- * Rebinding operations
-    rebind, unrebind,
-
-    -- * Rec operations
-    rec, unrec,
-    trec, untrec, luntrec,
 
     -- XXX export embed, unembed, shift, unshift.
     -- XXX should embed/unembed work for Shifts as well?
