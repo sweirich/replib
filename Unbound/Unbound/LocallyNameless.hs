@@ -27,7 +27,8 @@
 --
 -- For more information, see the more in-depth literate Haskell
 -- tutorial in the @tutorial@ directory (which can be obtained as part
--- of the library source package: @cabal unpack unbound@).
+-- of the library source package: @cabal unpack unbound@) and the
+-- examples in the @example@ directory.
 --
 -- See also: Stephanie Weirich, Brent Yorgey, and Tim Sheard.
 -- /Binders Unbound/. Submitted to ICFP
@@ -38,11 +39,14 @@ module Unbound.LocallyNameless
   ( -- * Names
     Name, AnyName(..),
 
+    -- ** Constructing and destructing free names
     integer2Name, string2Name, s2n, makeName,
     name2Integer, name2String, anyName2Integer, anyName2String,
-    translate,
+    -- ** Dealing with name sorts
+    translate, toSortedName,
 
     -- * Type combinators for specifying binding structure
+    -- | XXX write me
     Bind, Embed(..), Rebind, Rec, TRec, Shift(..),
 
     -- * The 'Alpha' class
