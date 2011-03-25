@@ -14,6 +14,14 @@
 -- using a locally nameless representation. (See "Unbound.Nominal" for
 -- a nominal implementation of the same interface.)
 --
+-- Normal users of this library should only need to import this module
+-- (or "Unbound.Nominal").  In particular, this module is careful to
+-- export only an abstract interface with various safety guarantees.
+-- Power users who wish to have access to the internals of the library
+-- (at the risk of shooting oneself in the foot) can directly import
+-- the various implementation modules such as
+-- "Unbound.LocallyNameless.Name" and so on.
+--
 -- Ten-second tutorial: use the type combinators 'Bind', 'Embed',
 -- 'Rebind', 'Rec', 'TRec', and 'Shift' to specify the binding
 -- structure of your data types.  Then use Template Haskell to derive

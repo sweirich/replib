@@ -22,7 +22,8 @@ description:    Specify the binding structure of your data type with an
                 expressive set of type combinators, and Unbound
                 handles the rest!  Automatically derives
                 alpha-equivalence, free variable calculation,
-                capture-avoiding substitution, and more.
+                capture-avoiding substitution, and more. See
+                "Unbound.LocallyNameless" to get started.
 Library
   build-depends: base >= 4.3 && < 5,
                  RepLib >= 0.4.0,

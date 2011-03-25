@@ -41,13 +41,13 @@ import Unbound.LocallyNameless.Name
 -- Bind
 --------------------------------------------------
 
--- | The type of a binding.  We can 'Bind' an @a@ object in a @b@
---   object if we can create \"fresh\" @a@ objects, and @a@ objects
---   can occur unbound in @b@ objects. Often @a@ is 'Name' but that
---   need not be the case.
+-- | The most fundamental combinator for expressing binding structure
+--   is 'Bind'.  The type @Bind p t@ represents a pattern @p@ paired
+--   with a term @t@, where names in @p@ are bound within @t@.
 --
 --   Like 'Name', 'Bind' is also abstract. You can create bindings
---   using 'bind' and take them apart with 'unbind' and friends.
+--   using 'Unbound.LocallyNameless.bind' and take them apart with
+--   'unbind' and friends.
 data Bind p t = B p t
 
 instance (Show a, Show b) => Show (Bind a b) where
