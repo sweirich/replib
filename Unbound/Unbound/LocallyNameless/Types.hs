@@ -5,6 +5,18 @@
            , MultiParamTypeClasses
   #-}
 
+----------------------------------------------------------------------
+-- |
+-- Module      :  Unbound.LocallyNameless.Types
+-- License     :  BSD-like (see LICENSE)
+--
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Stability   :  experimental
+-- Portability :  GHC only
+--
+-- Special type combinators for specifying binding structure.
+----------------------------------------------------------------------
+
 module Unbound.LocallyNameless.Types
        ( Bind(..)
        , Rebind(..)

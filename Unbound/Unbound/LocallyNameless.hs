@@ -46,15 +46,57 @@ module Unbound.LocallyNameless
     translate, toSortedName,
 
     -- * Type combinators for specifying binding structure
-    -- | XXX write me
+    --
+    -- | 'Bind', 'Embed', 'Rebind', 'Rec', 'TRec', and 'Shift' are
+    --   special types provided by Unbound for use in specifying the
+    --   binding structure of your data types.
+    --
+    --   An important distinction to keep in mind is the difference
+    --   between /term types/ and /pattern types/.
+    --
+    --   * /Term types/ are normal types whose values represent data in
+    --     your program.  Any 'Name's occurring in term types are
+    --     either free variables, or /references/ to binders.
+    --
+    --   * /Pattern types/ are types which may be used on the left
+    --     hand side of a 'Bind'.  They /bind/ names, that is, any
+    --     'Name's occurring in pattern types are /binding sites/ to
+    --     which other names may refer.
+    --
+    --   'Name' may be used as both a term type (where it represents a
+    --   free variable/reference) and a pattern type (where it
+    --   represents a binding site).
+    --
+    --   Any first-order algebraic data type (/i.e./ one containing no
+    --   functions) which contains only term types may be used as a
+    --   term type, and likewise for algebraic data types containing
+    --   only pattern types. For example,
+    --
+    --   > (Name, [Name])
+    --
+    --   may be used as either a term type or a pattern type. On the other hand,
+    --
+    --   > (Bind Name Name, Name)
+    --
+    --   may only be used as a term type, since @Bind Name Name@ is a
+    --   term type and not a pattern type.
+    --
+    --   We adopt the convention that the type variable @t@ stands for
+    --   term types, and the type variable @p@ stands for pattern
+    --   types.  It would be nicer if we could actually use Haskell's
+    --   type system to enforce the distinction, but for various
+    --   technical reasons (involving the RepLib generic programming
+    --   framework which is used in the implementation), we cannot.
+    --   Or at least, we are not sufficiently clever to see how.
 
     -- ** Bind
+
     Bind,
 
-    -- *** Constructing
+    -- *** Bind constructor
     bind,
 
-    -- *** Destructing
+    -- *** Bind destructors
     unbind,
     unbind2, unbind3,
 
