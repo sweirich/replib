@@ -42,41 +42,49 @@ instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
 -- Rebinding operations
 ----------------------------------------------------------
 
--- | Constructor for binding in patterns.
-rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
-rebind a b = R a (closeP a b)
+-- | Constructor for rebinding patterns.
+rebind :: (Alpha p1, Alpha p2) => p1 -> p2 -> Rebind p1 p2
+rebind p1 p2 = R p1 (closeP p1 p2)
 
 -- | Compare for alpha-equality.
-instance (Alpha a, Alpha b, Eq b) => Eq (Rebind a b) where
+instance (Alpha p1, Alpha p2, Eq p2) => Eq (Rebind p1 p2) where
    b1 == b2 = b1 `aeqBinders` b2
 
--- | Destructor for `Rebind`.  It does not need a monadic context for
---   generating fresh names, since `Rebind` can only occur in the
---   pattern of a `Bind`; hence a previous call to `open` must have
---   already freshened the names at this point.
-unrebind :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-unrebind (R a b) = (a, openP a b)
+-- | Destructor for rebinding patterns.  It does not need a monadic
+--   context for generating fresh names, since @Rebind@ can only occur
+--   in the pattern of a 'Bind'; hence a previous call to 'unbind' (or
+--   something similar) must have already freshened the names at this
+--   point.
+unrebind :: (Alpha p1, Alpha p2) => Rebind p1 p2 -> (p1, p2)
+unrebind (R p1 p2) = (p1, openP p1 p2)
 
 ----------------------------------------------------------
 -- Rec operations
 ----------------------------------------------------------
 
-rec :: (Alpha a) => a -> Rec a
-rec a = Rec (closeP a a) where
+-- | Constructor for recursive patterns.
+rec :: (Alpha p) => p -> Rec p
+rec p = Rec (closeP p p) where
 
-unrec :: (Alpha a) => Rec a -> a
-unrec (Rec a) = openP a a
+-- | Destructor for recursive patterns.
+unrec :: (Alpha p) => Rec p -> p
+unrec (Rec p) = openP p p
 
 ----------------------------------------------------------
 -- TRec operations
 ----------------------------------------------------------
 
+-- | Constructor for recursive abstractions.
 trec :: Alpha p => p -> TRec p
 trec p = TRec $ bind (rec p) ()
 
+-- | Destructor for recursive abstractions which picks globally fresh
+--   names for the binders.
 untrec :: (Fresh m, Alpha p) => TRec p -> m p
 untrec (TRec b) = (unrec . fst) `liftM` unbind b
 
+-- | Destructor for recursive abstractions which picks /locally/ fresh
+--   names for binders (see 'LFresh').
 luntrec :: (LFresh m, Alpha p) => TRec p -> m p
 luntrec (TRec b) = lunbind b $ return . unrec . fst
 

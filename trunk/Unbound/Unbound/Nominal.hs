@@ -63,7 +63,10 @@ module Unbound.Nominal
    AlphaCtx, matchR1,
 
    -- * Pay no attention to the man behind the curtain
-   -- $paynoattention
+
+   -- | These type representation objects are exported so they can be
+   --   referenced by auto-generated code.  Please pretend they do not
+   --   exist.
    rName, rBind, rRebind, rEmbed, rRec, rShift) where
 
 import Unbound.Nominal.Name

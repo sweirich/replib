@@ -22,7 +22,7 @@
 -- the various implementation modules such as
 -- "Unbound.LocallyNameless.Name" and so on.
 --
--- *Ten-second tutorial*: use the type combinators 'Bind', 'Embed',
+-- /Ten-second tutorial/: use the type combinators 'Bind', 'Embed',
 -- 'Rebind', 'Rec', 'TRec', and 'Shift' to specify the binding
 -- structure of your data types.  Then use Template Haskell to derive
 -- generic representations for your types:
@@ -138,6 +138,8 @@ module Unbound.LocallyNameless
 
     Embed(..),
 
+    embed, unembed,
+
     -- ** Rebind
 
     Rebind,
@@ -154,39 +156,52 @@ module Unbound.LocallyNameless
 
     -- ** Shift
     Shift(..),
-    IsEmbed(..),
 
-    -- * The 'Alpha' class
-    Alpha(..),
-    swaps, swapsEmbeds, swapsBinders,
+    -- * Generically derived operations
+
+    -- | This section lists a number of operations which are derived
+    --   generically for any types whose binding structure is
+    --   specified via the type combinators described in the previous
+    --   section.
+
+    -- ** Alpha-equivalence
     aeq, aeqBinders,
     acompare,
 
-    -- * Variable calculations
-    Collection(..), Multiset(..),
+    -- ** Variable calculations
     fv, fvAny, patfv, patfvAny, binders, bindersAny,
 
-    -- * The 'Fresh' class
+    -- *** Collections
+    Collection(..), Multiset(..),
+
+    -- ** Substitution
+    Subst(..), SubstName(..),
+
+    -- ** Permutations
+    Perm, swaps, swapsEmbeds, swapsBinders,
+
+    -- * The 'Alpha' class
+    Alpha(..),
+
+    -- * Freshness
+    -- ** 'Fresh' and global freshness
     Fresh(..), freshen,
 
     FreshM, runFreshM,
     FreshMT, runFreshMT,
 
-    -- * The 'LFresh' class
+    -- ** 'LFresh' and local freshness
     LFresh(..),
     lfreshen,
 
     LFreshM, runLFreshM, getAvoids,
     LFreshMT, runLFreshMT,
 
-    -- XXX export embed, unembed, shift, unshift.
-    -- XXX should embed/unembed work for Shifts as well?
-
-    -- * Substitution
-    Subst(..), SubstName(..),
-
     -- * Pay no attention to the man behind the curtain
-    -- $paynoattention
+
+    -- | These type representation objects are exported so they can be
+    --   referenced by auto-generated code.  Please pretend they do not
+    --   exist.
     rName, rBind, rRebind, rEmbed, rRec, rShift
 ) where
 
@@ -197,8 +212,4 @@ import Unbound.LocallyNameless.Alpha
 import Unbound.LocallyNameless.Subst
 import Unbound.LocallyNameless.Ops
 import Unbound.Util
-
--- $paynoattention
--- These type representation objects are exported so they can be
--- referenced by auto-generated code.  Please pretend they do not
--- exist.
+import Unbound.PermM
