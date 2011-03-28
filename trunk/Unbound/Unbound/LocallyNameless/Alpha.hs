@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes
            , FlexibleContexts
            , GADTs
+           , TypeFamilies
   #-}
 
 ----------------------------------------------------------------------
@@ -153,6 +154,13 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   --   instead.
   findpatrec :: a -> AnyName -> FindResult
   findpatrec = findpatR1 rep1
+
+-- XXX comment me
+class IsEmbed e where
+  type Embedded e :: *
+
+  embed   :: Embedded e -> e
+  unembed :: e -> Embedded e
 
 ------------------------------------------------------------
 --  Pattern operation internals
@@ -763,6 +771,12 @@ instance Alpha t => Alpha (Embed t) where
    findpatrec _ _ = mempty
    nthpatrec _    = mempty
 
+instance IsEmbed (Embed t) where
+  type Embedded (Embed t) = t
+
+  embed             = Embed
+  unembed (Embed t) = t
+
 instance Alpha a => Alpha (Shift a) where
 
   -- The contents of Shift may only be an Embed or another Shift.
@@ -773,6 +787,11 @@ instance Alpha a => Alpha (Shift a) where
   close c b (Shift x) = Shift (close (decr c) b x)
   open  c b (Shift x) = Shift (open  (decr c) b x)
 
+instance IsEmbed e => IsEmbed (Shift e) where
+  type Embedded (Shift e) = Embedded e
+
+  embed             = Shift . embed
+  unembed (Shift e) = unembed e
 
 -- Instances for other types use the default definitions.
 instance Alpha Bool

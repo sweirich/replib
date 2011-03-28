@@ -22,7 +22,7 @@
 -- the various implementation modules such as
 -- "Unbound.LocallyNameless.Name" and so on.
 --
--- Ten-second tutorial: use the type combinators 'Bind', 'Embed',
+-- *Ten-second tutorial*: use the type combinators 'Bind', 'Embed',
 -- 'Rebind', 'Rec', 'TRec', and 'Shift' to specify the binding
 -- structure of your data types.  Then use Template Haskell to derive
 -- generic representations for your types:
@@ -154,6 +154,7 @@ module Unbound.LocallyNameless
 
     -- ** Shift
     Shift(..),
+    IsEmbed(..),
 
     -- * The 'Alpha' class
     Alpha(..),

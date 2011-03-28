@@ -42,8 +42,8 @@ import Unbound.LocallyNameless.Name
 --------------------------------------------------
 
 -- | The most fundamental combinator for expressing binding structure
---   is 'Bind'.  The type @Bind p t@ represents a pattern @p@ paired
---   with a term @t@, where names in @p@ are bound within @t@.
+--   is 'Bind'.  The /term type/ @Bind p t@ represents a pattern @p@
+--   paired with a term @t@, where names in @p@ are bound within @t@.
 --
 --   Like 'Name', 'Bind' is also abstract. You can create bindings
 --   using 'bind' and take them apart with 'unbind' and friends.
@@ -93,12 +93,11 @@ instance Show a => Show (TRec a) where
 -- Embed
 --------------------------------------------------
 
--- XXX improve this doc
--- | An annotation is a \"hole\" in a pattern where variables can be
---   used, but not bound. For example, patterns may include type
---   annotations, and those annotations can reference variables
---   without binding them.  Annotations do nothing special when they
---   appear elsewhere in terms.
+-- | @Embed@ allows for terms to be /embedded/ within patterns.  Such
+--   embedded terms do not bind names along with the rest of the
+--   pattern.  For examples, see the tutorial or examples directories.
+--
+--   If @t@ is a term type, then @Embed t@ is a pattern type.
 newtype Embed t = Embed t deriving Eq
 
 instance Show a => Show (Embed a) where
