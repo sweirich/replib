@@ -27,7 +27,11 @@ module Unbound.LocallyNameless.Types
        , module Unbound.LocallyNameless.Name
 
        -- * Pay no attention to the man behind the curtain
-       -- $paynoattention
+
+       -- | These type representation objects are exported so they can be
+       --   referenced by auto-generated code.  Please pretend they do not
+       --   exist.
+
        , rBind, rRebind, rEmbed, rRec, rShift
        ) where
 
@@ -58,8 +62,11 @@ instance (Show a, Show b) => Show (Bind a b) where
 -- Rebind
 --------------------------------------------------
 
--- | 'Rebind' supports \"telescopes\" --- that is, patterns where
---   bound variables appear in multiple subterms.
+-- | @Rebind@ allows for /nested/ bindings.  If @p1@ and @p2@ are
+--   pattern types, then @Rebind p1 p2@ is also a pattern type,
+--   similar to the pattern type @(p1,p2)@ except that @p1@
+--   /scopes over/ @p2@.  That is, names within terms embedded in @p2@
+--   may refer to binders in @p1@.
 data Rebind p1 p2 = R p1 p2
 
 instance (Show a, Show b) => Show (Rebind a b) where
@@ -69,9 +76,10 @@ instance (Show a, Show b) => Show (Rebind a b) where
 -- Rec
 --------------------------------------------------
 
--- | 'Rec' supports recursive patterns --- that is, patterns where
--- any variables anywhere in the pattern are bound in the pattern
--- itself.  Useful for lectrec (and Agda's dot notation).
+-- | If @p@ is a pattern type, then @Rec p@ is also a pattern type,
+-- which is /recursive/ in the sense that @p@ may bind names in terms
+-- embedded within itself.  Useful for encoding e.g. lectrec and
+-- Agda's dot notation.
 data Rec p = Rec p
 
 instance Show a => Show (Rec a) where
@@ -80,10 +88,14 @@ instance Show a => Show (Rec a) where
 -- TRec
 --------------------------------------------------
 
--- | 'TRec' is a standalone variant of 'Rec' -- that is, if @p@ is a
---   pattern type then @TRec p@ is a term type.  It is isomorphic to
---   @Bind (Rec p) ()@.
-
+-- | @TRec@ is a standalone variant of 'Rec': the only difference is
+--   that whereas @'Rec' p@ is a pattern type, @TRec p@
+--   is a /term type/.  It is isomorphic to @'Bind' ('Rec' p) ()@.
+--
+--   Note that @TRec@ corresponds to Pottier's /abstraction/ construct
+--   from alpha-Caml.  In this context, @'Embed' t@ corresponds to
+--   alpha-Caml's @inner t@, and @'Shift' ('Embed' t)@ corresponds to
+--   alpha-Caml's @outer t@.
 newtype TRec p = TRec (Bind (Rec p) ())
 
 instance Show a => Show (TRec a) where
@@ -97,7 +109,14 @@ instance Show a => Show (TRec a) where
 --   embedded terms do not bind names along with the rest of the
 --   pattern.  For examples, see the tutorial or examples directories.
 --
---   If @t@ is a term type, then @Embed t@ is a pattern type.
+--   If @t@ is a /term type/, then @Embed t@ is a /pattern type/.
+--
+--   @Embed@ is not abstract since it involves no binding, and hence
+--   it is safe to manipulate directly.  To create and destruct
+--   @Embed@ terms, you may use the @Embed@ constructor directly.
+--   (You may also use the functions 'embed' and 'unembed', which
+--   additionally can construct or destruct any number of enclosing
+--   'Shift's at the same time.)
 newtype Embed t = Embed t deriving Eq
 
 instance Show a => Show (Embed a) where
@@ -112,10 +131,7 @@ newtype Shift p = Shift p deriving Eq
 instance Show a => Show (Shift a) where
   showsPrec p (Shift a) = showString "{" . showsPrec 0 a . showString "}"
 
--- $paynoattention
--- These type representation objects are exported so they can be
--- referenced by auto-generated code.  Please pretend they do not
--- exist.
+-- Pay no attention...
 
 $(derive [''Bind, ''Embed, ''Rebind, ''Rec, ''Shift])
 

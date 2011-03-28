@@ -159,7 +159,26 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
 class IsEmbed e where
   type Embedded e :: *
 
+  -- | Construct an embedded term, which is an instance of 'Embed'
+  --   with any number of enclosing 'Shift's.  That is, @embed@ can have
+  --   any of the types
+  --
+  -- * @t -> Embed t@
+  --
+  -- * @t -> Shift (Embed t)@
+  --
+  -- * @t -> Shift (Shift (Embed t))@
+  --
+  -- and so on.
   embed   :: Embedded e -> e
+
+  -- | Destruct an embedded term.  @unembed@ can have any of the types
+  --
+  -- * @Embed t -> t@
+  --
+  -- * @Shift (Embed t) -> t@
+  --
+  -- and so on.
   unembed :: e -> Embedded e
 
 ------------------------------------------------------------
