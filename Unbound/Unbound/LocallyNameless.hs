@@ -169,12 +169,19 @@ module Unbound.LocallyNameless
     acompare,
 
     -- ** Variable calculations
+
+    -- | Functions for computing the free variables or binding
+    --   variables of a term or pattern.  Note that all these
+    --   functions may return an arbitrary /collection/, which
+    --   includes lists, sets, and multisets.
     fv, fvAny, patfv, patfvAny, binders, bindersAny,
 
     -- *** Collections
     Collection(..), Multiset(..),
 
     -- ** Substitution
+
+    -- | Capture-avoiding substitution.
     Subst(..), SubstName(..),
 
     -- ** Permutations
