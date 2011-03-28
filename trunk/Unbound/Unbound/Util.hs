@@ -21,12 +21,23 @@ import qualified Data.Map as M
 -- | Collections are foldable types that support empty, singleton,
 --   union, and map operations.  The result of a free variable
 --   calculation may be any collection.  Instances are provided for
---   lists and sets.
+--   lists, sets, and multisets.
 class F.Foldable f => Collection f where
+
+  -- | An empty collection. Must be the identity for @union@.
   emptyC    :: f a
+
+  -- | Create a singleton collection.
   singleton :: a -> f a
+
+  -- | An associative combining operation.  The @Ord@ constraint is in
+  --   order to accommodate sets.
   union     :: Ord a => f a -> f a -> f a
+
+  -- | Collections must be functorial.  The normal @Functor@ class
+  --   won't do because of the @Ord@ constraint on sets.
   cmap      :: (Ord a, Ord b) => (a -> b) -> f a -> f b
+
 
 -- | Combine a list of containers into one.
 unions :: (Ord a, Collection f) => [f a] -> f a

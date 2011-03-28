@@ -92,12 +92,13 @@ luntrec (TRec b) = lunbind b $ return . unrec . fst
 -- Wrappers for operations in the Alpha class
 ----------------------------------------------------------
 
--- | Determine alpha-equivalence of terms.
+-- | Determine the alpha-equivalence of two terms.
 aeq :: Alpha t => t -> t -> Bool
 aeq t1 t2 = aeq' initial t1 t2
 
 -- | Determine (alpha-)equivalence of patterns.  Do they bind the same
---   variables and have alpha-equal annotations?
+--   variables in the same patterns and have alpha-equivalent
+--   annotations in matching positions?
 aeqBinders :: Alpha p => p -> p -> Bool
 aeqBinders p1 p2 = aeq' initial p1 p2
 
@@ -117,13 +118,13 @@ fv = filterC
    . cmap toSortedName
    . fvAny
 
--- | Calculate the variables (of any sort) that occur freely within
---   pattern annotations (but are not bound by the pattern).
+-- | Calculate the variables (of any sort) that occur freely in terms
+--   embedded within a pattern (but are not bound by the pattern).
 patfvAny :: (Alpha p, Collection f) => p -> f AnyName
 patfvAny = fv' (pat initial)
 
 -- | Calculate the variables of a particular sort that occur freely in
---   pattern annotations (but are not bound by the pattern).
+--   terms embedded within a pattern (but are not bound by the pattern).
 patfv :: (Rep a, Alpha p, Collection f) => p -> f (Name a)
 patfv = filterC
       . cmap toSortedName

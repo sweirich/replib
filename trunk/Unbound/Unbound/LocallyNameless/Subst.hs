@@ -22,19 +22,21 @@ import Unbound.LocallyNameless.Alpha
 data SubstName a b where
   SubstName :: (a ~ b) => Name a -> SubstName a b
 
--- | The 'Subst' class governs capture-avoiding substitution.  To
+-- | The @Subst@ class governs capture-avoiding substitution.  To
 --   derive this class, you only need to indicate where the variables
 --   are in the data type, by overriding the method 'isvar'.
 class (Rep1 (SubstD b) a) => Subst b a where
 
-  -- | If the argument is a variable, return its name wrapped in the
-  --   'SubstName' constructor.  Return 'Nothing' for non-variable
-  --   arguments.  The default implementation always returns
-  --   'Nothing'.
+  -- | This is the only method which normally needs to be implemented
+  --   explicitly.  If the argument is a variable, return its name
+  --   wrapped in the 'SubstName' constructor.  Return 'Nothing' for
+  --   non-variable arguments.  The default implementation always
+  --   returns 'Nothing'.
   isvar :: a -> Maybe (SubstName a b)
   isvar x = Nothing
 
-  -- | @'subst' nm sub tm@ substitutes @sub@ for @nm@ in @tm@.
+  -- | @'subst' nm sub tm@ substitutes @sub@ for @nm@ in @tm@.  It has
+  --   a default generic implementation in terms of @isvar@.
   subst :: Name b -> b -> a -> a
   subst n u x | isFree n =
      case (isvar x :: Maybe (SubstName a b)) of
@@ -42,7 +44,8 @@ class (Rep1 (SubstD b) a) => Subst b a where
         Nothing -> substR1 rep1 n u x
   subst m u x = error $ "Cannot substitute for bound variable " ++ show m
 
-  -- | Perform several simultaneous substitutions.
+  -- | Perform several simultaneous substitutions.  This method also
+  --   has a default generic implementation in terms of @isvar@.
   substs :: [(Name b, b)] -> a -> a
   substs ss x
     | all (isFree . fst) ss =
