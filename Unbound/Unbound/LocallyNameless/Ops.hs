@@ -15,10 +15,12 @@ import qualified Text.Read as R
 -- Binding operations
 ----------------------------------------------------------
 
--- | A smart constructor for binders, also sometimes known as
--- \"close\".
-bind :: (Alpha c, Alpha b) => b -> c -> Bind b c
-bind b c = B b (closeT b c)
+-- | A smart constructor for binders, also sometimes referred to as
+--   \"close\".  Free variables in the term are taken to be references
+--   to matching binders in the pattern.  (Free variables with no
+--   matching binders will remain free.)
+bind :: (Alpha p, Alpha t) => p -> t -> Bind p t
+bind p t = B p (closeT p t)
 
 -- | A destructor for binders that does /not/ guarantee fresh
 --   names for the binders.
@@ -183,16 +185,21 @@ matchBinders = match' initial
 -- Opening binders
 ------------------------------------------------------------
 
--- | Unbind (also known as \"open\") is the destructor for
--- bindings. It ensures that the names in the binding are fresh.
-unbind  :: (Fresh m, Alpha p, Alpha t) => Bind p t -> m (p,t)
+-- | Unbind (also known as \"open\") is the simplest destructor for
+--   bindings. It ensures that the names in the binding are globally
+--   fresh, using a monad which is an instance of the 'Fresh' type
+--   class.
+unbind :: (Fresh m, Alpha p, Alpha t) => Bind p t -> m (p,t)
 unbind (B p t) = do
       (p', _) <- freshen p
       return (p', openT p' t)
 
--- | Unbind two terms with the same fresh names, provided the
---   binders have the same number of binding variables.
-unbind2  :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
+-- | Unbind two terms with the /same/ fresh names, provided the
+--   binders have the same number of binding variables.  If the
+--   patterns have different numbers of binding variables, return
+--   @Nothing@.  Otherwise, return the renamed patterns and the
+--   associated terms.
+unbind2 :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
             Bind p1 t1 -> Bind p2 t2 -> m (Maybe (p1,t1,p2,t2))
 unbind2 (B p1 t1) (B p2 t2) = do
       case mkPerm (fvAny p1) (fvAny p2) of
@@ -203,8 +210,9 @@ unbind2 (B p1 t1) (B p2 t2) = do
          Nothing -> return Nothing
 
 -- | Unbind three terms with the same fresh names, provided the
---   binders have the same number of binding variables.
-unbind3  :: (Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
+--   binders have the same number of binding variables.  See the
+--   documentation for 'unbind2' for more details.
+unbind3 :: (Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
             Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->  m (Maybe (p1,t1,p2,t2,p3,t3))
 unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
       case ( mkPerm (fvAny p1) (fvAny p2)
@@ -216,14 +224,22 @@ unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
                           swaps (p' <> pm13) p3, openT p1' t3)
          _ -> return Nothing
 
--- | Destruct a binding in an 'LFresh' monad.
+-- | @lunbind@ opens a binding in an 'LFresh' monad, ensuring that the
+--   names chosen for the binders are /locally/ fresh.  The components
+--   of the binding are passed to a /continuation/, and the resulting
+--   monadic action is run in a context extended to avoid choosing new
+--   names which are the same as the ones chosen for this binding.
+--
+--   For more information, see the documentation for the 'LFresh' type
+--   class.
 lunbind :: (LFresh m, Alpha p, Alpha t) => Bind p t -> ((p, t) -> m c) -> m c
 lunbind (B p t) g =
   lfreshen p (\x _ -> g (x, openT x t))
 
 
--- | Unbind two terms with the same fresh names, provided the
---   binders have the same number of binding variables.
+-- | Unbind two terms with the same locally fresh names, provided the
+--   patterns have the same number of binding variables.  See the
+--   documentation for 'unbind2' and 'lunbind' for more details.
 lunbind2  :: (LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
             Bind p1 t1 -> Bind p2 t2 -> (Maybe (p1,t1,p2,t2) -> m r) -> m r
 lunbind2 (B p1 t1) (B p2 t2) g =
@@ -233,8 +249,9 @@ lunbind2 (B p1 t1) (B p2 t2) g =
                                          swaps (pm2 <> pm1) p2, openT p1' t2))
     Nothing -> g Nothing
 
--- | Unbind three terms with the same fresh names, provided the
---   binders have the same number of binding variables.
+-- | Unbind three terms with the same locally fresh names, provided
+--   the binders have the same number of binding variables.  See the
+--   documentation for 'unbind2' and 'lunbind' for more details.
 lunbind3 :: (LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
             Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->
             (Maybe (p1,t1,p2,t2,p3,t3) -> m r) ->

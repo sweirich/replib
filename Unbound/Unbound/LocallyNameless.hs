@@ -82,7 +82,8 @@ module Unbound.LocallyNameless
     --
     --   > (Name, [Name])
     --
-    --   may be used as either a term type or a pattern type. On the other hand,
+    --   may be used as either a term type or a pattern type. On the
+    --   other hand,
     --
     --   > (Bind Name Name, Name)
     --
@@ -105,12 +106,33 @@ module Unbound.LocallyNameless
     bind,
 
     -- *** Bind destructors
+
+    -- | Directly pattern-matching on 'Bind' values is not allowed,
+    --   but there are quite a few different ways to safely \"open\" a
+    --   binding.  (If you want direct, unsafe access to the
+    --   components of a binding --- e.g. to write a function to
+    --   compute the size of terms that ignores all names --- you can
+    --   directly import "Unbound.LocallyNameless.Ops" and use the
+    --   'unsafeUnbind' function.)
     unbind,
+    lunbind,
+
+    -- *** Simultaneous unbinding
+
+    -- | Sometimes one may wish to open several bindings using /same/
+    --   names for their binding variables --- for example, when
+    --   checking equality of terms involving binders, so that the
+    --   free variables in the bodies will match appropriately during
+    --   recursive calls.  Opening two bindings simultaneously is
+    --   accomplished with 'unbind2' (which picks globally fresh
+    --   names) and 'lunbind2' (which picks /locally/ fresh names, see
+    --   the 'LFresh' documentation for more information).  'unbind3'
+    --   and 'lunbind3' open three bindings simultaneously.  In
+    --   principle, of course, @unbindN@ and @lunbindN@ can be easily
+    --   implemented for any @N@; please let the maintainers know if
+    --   for some reason you would like an N > 3.
     unbind2, unbind3,
-
-    lunbind, lunbind2, lunbind3,
-
-    unsafeUnbind,
+    lunbind2, lunbind3,
 
     -- ** Embed
 
