@@ -46,8 +46,7 @@ import Unbound.LocallyNameless.Name
 --   with a term @t@, where names in @p@ are bound within @t@.
 --
 --   Like 'Name', 'Bind' is also abstract. You can create bindings
---   using 'Unbound.LocallyNameless.bind' and take them apart with
---   'unbind' and friends.
+--   using 'bind' and take them apart with 'unbind' and friends.
 data Bind p t = B p t
 
 instance (Show a, Show b) => Show (Bind a b) where
