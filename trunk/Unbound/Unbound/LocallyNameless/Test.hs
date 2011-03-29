@@ -10,8 +10,7 @@ module Unbound.LocallyNameless.Test where
 
 import qualified Data.Set as S
 
-import Generics.RepLib hiding (GT)
-import Unbound.LocallyNameless
+import Unbound.LocallyNameless hiding (GT)
 import Unbound.LocallyNameless.Alpha
 import Unbound.LocallyNameless.Name
 import Unbound.PermM

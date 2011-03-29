@@ -1,11 +1,8 @@
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Unbound.Perm
--- Copyright   :  ???
--- License     :  BSD
---
+-- License     :  BSD-like (see LICENSE)
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
--- Stability   :  experimental
 -- Portability :  portable
 --
 -- A slow, but hopefully correct implementation of permutations.
