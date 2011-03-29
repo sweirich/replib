@@ -141,17 +141,17 @@ binders = fv
 
 
 -- | Apply a permutation to a term.
-swaps :: Alpha a => Perm AnyName -> a -> a
+swaps :: Alpha t => Perm AnyName -> t -> t
 swaps = swaps' initial
 
 -- | Apply a permutation to the binding variables in a pattern.
--- Embedded terms are left alone by the permutation.
-swapsBinders :: Alpha a => Perm AnyName -> a -> a
+--   Embedded terms are left alone by the permutation.
+swapsBinders :: Alpha p => Perm AnyName -> p -> p
 swapsBinders = swaps' initial
 
--- | Apply a permutation to the annotations in a pattern. Binding
--- names are left alone by the permutation.
-swapsEmbeds :: Alpha a => Perm AnyName -> a -> a
+-- | Apply a permutation to the embedded terms in a pattern. Binding
+--   names are left alone by the permutation.
+swapsEmbeds :: Alpha p => Perm AnyName -> p -> p
 swapsEmbeds = swaps' (pat initial)
 
 

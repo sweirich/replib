@@ -7,19 +7,17 @@
 -- Stability   :  experimental
 -- Portability :  non-portable (-XKitchenSink)
 --
--- Generic implementation of name binding functions, based on the library
--- RepLib. This version uses a nominal representation of binding structure.
+-- A generic implementation of standard functions dealing with names
+-- and binding structure (alpha equivalence, free variable
+-- calculation, capture-avoiding substitution, name permutation, ...)
+-- using a nominal representation.
 --
--- DISCLAIMER: this module probably contains bugs and may be
--- slower than "Unbound.LocallyNameless".  At this point
--- we recommend it only for the curious or intrepid.
---
--- Datatypes with binding defined using the 'Name' and 'Bind' types.
--- Important classes are
---     'Alpha' -- the class of types that include binders.
--- These classes are generic, and default implementations exist for all
--- representable types. This file also defines a third generic class,
---     'Subst' -- for subtitution functions.
+-- DISCLAIMER: this module almost certainly contains bugs and may be
+-- slower than "Unbound.LocallyNameless".  The documentation is also
+-- sparse and likely out of date.  At this point we recommend it only
+-- for the curious or intrepid.  We are actively working on bringing
+-- it up to speed as a viable alternative to
+-- "Unbound.LocallyNameless".
 --
 --------------------------------------------------------------------------
 module Unbound.Nominal

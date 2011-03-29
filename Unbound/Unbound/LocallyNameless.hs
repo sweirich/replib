@@ -185,7 +185,14 @@ module Unbound.LocallyNameless
     Subst(..), SubstName(..),
 
     -- ** Permutations
-    Perm, swaps, swapsEmbeds, swapsBinders,
+
+    Perm,
+
+    -- *** Working with permutations
+    single, compose, apply, support, isid, join, empty, restrict, mkPerm,
+
+    -- *** Permuting terms
+    swaps, swapsEmbeds, swapsBinders,
 
     -- * The 'Alpha' class
     Alpha(..),
@@ -204,6 +211,10 @@ module Unbound.LocallyNameless
     LFreshM, runLFreshM, getAvoids,
     LFreshMT, runLFreshMT,
 
+    -- * Re-export RepLib API for convenience
+
+    module Generics.RepLib,
+
     -- * Pay no attention to the man behind the curtain
 
     -- | These type representation objects are exported so they can be
@@ -220,3 +231,5 @@ import Unbound.LocallyNameless.Subst
 import Unbound.LocallyNameless.Ops
 import Unbound.Util
 import Unbound.PermM
+
+import Generics.RepLib

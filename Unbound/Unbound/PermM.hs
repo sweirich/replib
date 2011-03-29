@@ -25,6 +25,10 @@ import System.IO.Unsafe
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
 
+-- | A /permutation/ is a bijective function from names to names
+--   which is the identity on all but a finite set of names.  They
+--   form the basis for nominal approaches to binding, but can
+--   also be useful in general.
 newtype Perm a = Perm (Map a a)
 
 instance Ord a => Eq (Perm a) where
@@ -35,13 +39,16 @@ instance Ord a => Eq (Perm a) where
 instance Show a => Show (Perm a) where
   show (Perm p) = show p
 
+-- | Apply a permutation to an element of the domain.
 apply :: Ord a => Perm a -> a -> a
 apply (Perm p) x = Map.findWithDefault x x p
 
+-- | Create a permutation which swaps two elements.
 single :: Ord a => a -> a -> Perm a
 single x y = if x == y then Perm Map.empty else
     Perm (Map.insert x y (Map.insert y x Map.empty))
 
+-- | The empty (identity) permutation.
 empty :: Perm a
 empty = Perm Map.empty
 
@@ -52,17 +59,19 @@ compose (Perm b) (Perm a) =
   Perm (Map.fromList ([ (x,Map.findWithDefault y y b) | (x,y) <- Map.toList a]
          ++ [ (x, Map.findWithDefault x x b) | x <- Map.keys b, Map.notMember x a]))
 
+-- | Permutations form a monoid under composition.
 instance Ord a => Monoid (Perm a) where
   mempty  = empty
   mappend = compose
 
--- | isid -- do all keys map to themselves?
+-- | Is this the identity permutation?
 isid :: Ord a => Perm a -> Bool
 isid (Perm p) =
      Map.foldrWithKey (\ a b r -> r && a == b) True p
 
--- | Join two permutation. Fail if the two permutations map the same
--- name to two different variables.
+-- | /Join/ two permutations by taking the union of their relation
+--   graphs. Fail if they are inconsistent, i.e. map the same element
+--   to two different elements.
 join :: Ord a => Perm a -> Perm a -> Maybe (Perm a)
 join (Perm p1) (Perm p2) =
      let overlap = Map.intersectionWith (==) p1 p2 in
@@ -70,9 +79,12 @@ join (Perm p1) (Perm p2) =
        Just (Perm (Map.union p1 p2))
        else Nothing
 
+-- | The /support/ of a permutation is the set of elements which are
+--   not fixed.
 support :: Ord a => Perm a -> [a]
 support (Perm p) = [ x | x <- Map.keys p, Map.findWithDefault x x p /= x]
 
+-- | Restrict a permutation to a certain domain.
 restrict :: Ord a => Perm a -> [a] -> Perm a
 restrict (Perm p) l = Perm (foldl' (\p' k -> Map.delete k p') p l)
 
