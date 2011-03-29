@@ -7,6 +7,17 @@
 -- Stability   :  experimental
 -- Portability :  non-portable
 --
--- See http://code.google.com/p/replib/ for more information.
 -----------------------------------------------------------------------------
 
+Specify the binding structure of your data type with an expressive set
+of type combinators, and Unbound handles the rest!  Automatically
+derives alpha-equivalence, free variable calculation, capture-avoiding
+substitution, and more.
+
+To install (requires GHC 7), just 
+
+  cabal install unbound
+
+To get started using the library, see the tutorial in the tutorial/
+directory and the extensive Haddock documentation (start with the
+Unbound.LocallyNameless module).
