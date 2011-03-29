@@ -8,6 +8,8 @@
 -- |
 -- Module      :  Unbound.LocallyNameless.Alpha
 -- License     :  BSD-like (see LICENSE)
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Portability :  GHC only (-XKitchenSink)
 --
 ----------------------------------------------------------------------
 
@@ -66,22 +68,43 @@ import Data.Monoid
 -- The Alpha class
 ------------------------------------------------------------
 
--- | The 'Alpha' type class is for types which may contain names.  The
+-- | The @Alpha@ type class is for types which may contain names.  The
 --   'Rep1' constraint means that we can only make instances of this
 --   class for types that have generic representations (which can be
 --   automatically derived by RepLib.)
 --
---   Note that the methods of 'Alpha' should never be called directly!
---   Instead, use other methods provided by this module which are
---   defined in terms of 'Alpha' methods. (The only reason they are
---   exported is to make them available to automatically-generated
---   code.)
+--   Note that the methods of @Alpha@ should almost never be called
+--   directly.  Instead, use other methods provided by this module
+--   which are defined in terms of @Alpha@ methods.
 --
 --   Most of the time, the default definitions of these methods will
 --   suffice, so you can make an instance for your data type by simply
 --   declaring
 --
 --   > instance Alpha MyType
+--
+--   Occasionally, however, it may be useful to override the default
+--   implementations of one or more @Alpha@ methods for a particular
+--   type.  For example, consider a type like
+--
+--   > data Term = ...
+--   >           | Annotation Stuff Term
+--
+--   where the @Annotation@ constructor of @Term@ associates some sort
+--   of annotation with a term --- say, information obtained from a
+--   parser about where in an input file the term came from.  This
+--   information is needed to produce good error messages, but should
+--   not be taken into consideration when, say, comparing two @Term@s
+--   for alpha-equivalence.  In order to make 'aeq' ignore
+--   annotations, you can override the implementation of @aeq'@ like
+--   so:
+--
+--   > instance Alpha Term where
+--   >   aeq' c (Annotation _ t1) t2 = aeq' c t1 t2
+--   >   aeq' c t1 (Annotation _ t2) = aeq' c t1 t2
+--   >   aeq' c t1 t2 = aeqR1 rep1 t1 t2
+--
+--   Note how the call to 'aeqR1' handles all the other cases generically.
 --
 class (Show a, Rep1 AlphaD a) => Alpha a where
 
@@ -105,6 +128,10 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   aeq' :: AlphaCtx -> a -> a -> Bool
   aeq' = aeqR1 rep1
 
+  -- | See 'acompare'.
+  acompare' :: AlphaCtx -> a -> a -> Ordering
+  acompare' = acompareR1 rep1
+
 {-
   -- | See 'match'.
   match'   :: AlphaCtx -> a -> a -> Maybe (Perm AnyName)
@@ -119,13 +146,10 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   open :: Alpha b => AlphaCtx -> b -> a -> a
   open = openR1 rep1
 
-  -- | See 'acompare'.
-  acompare' :: AlphaCtx -> a -> a -> Ordering
-  acompare' = acompareR1 rep1
-
   -- | @isPat x@ dynamically checks whether @x@ can be used as a valid
-  --   pattern.  The default instance returns @True@ if at all
-  --   possible.
+  --   pattern.  The default instance returns @Just@ if at all
+  --   possible.  If successful, returns a list of names bound by the
+  --   pattern.
   isPat :: a -> Maybe [AnyName]
   isPat = isPatR1 rep1
 
@@ -155,7 +179,7 @@ class (Show a, Rep1 AlphaD a) => Alpha a where
   findpatrec :: a -> AnyName -> FindResult
   findpatrec = findpatR1 rep1
 
--- XXX comment me
+-- | Type class for embedded terms (either @Embed@ or @Shift@).
 class IsEmbed e where
   type Embedded e :: *
 
