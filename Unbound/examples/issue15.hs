@@ -6,7 +6,7 @@
 module Issue15 where
 
 import Generics.RepLib
-import qualified Generics.RepLib.Bind.LocallyNameless as LN
+import qualified Unbound.LocallyNameless as LN
 
 data Foo = Foo (LN.Name Foo)
 

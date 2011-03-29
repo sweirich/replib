@@ -25,9 +25,9 @@ module Main where
 
 import Prelude hiding (lookup)
 
-import Generics.RepLib.Bind.LocallyNameless
-import Generics.RepLib.Bind.Fresh (contLFreshM)
-import Generics.RepLib
+import Unbound.LocallyNameless
+import Unbound.LocallyNameless.Fresh (contLFreshM)
+import Unbound.LocallyNameless.Ops (unsafeUnbind)
 
 import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as P
@@ -56,18 +56,18 @@ import System.Environment
 ------------------------------
 
 -- Kinds
-data Kind = KPi (Bind (Name Tm, Annot Ty) Kind) -- {x:ty} k
+data Kind = KPi (Bind (Name Tm, Embed Ty) Kind) -- {x:ty} k
           | Type                                -- type
   deriving Show
 
 -- Types, also called "Families"
-data Ty   = TyPi (Bind (Name Tm, Annot Ty) Ty)  -- {x:ty} ty
+data Ty   = TyPi (Bind (Name Tm, Embed Ty) Ty)  -- {x:ty} ty
           | TyApp Ty Tm                         -- ty tm
           | TyConst (Name Ty)                   -- a
   deriving Show
 
 -- Terms, also called "Objects"
-data Tm   = Lam (Bind (Name Tm, Annot Ty) Tm)   -- [x:ty] tm
+data Tm   = Lam (Bind (Name Tm, Embed Ty) Tm)   -- [x:ty] tm
           | TmApp Tm Tm                         -- tm tm
           | TmVar (Name Tm)                     -- x
   deriving Show
@@ -135,14 +135,14 @@ instance Erasable Kind where
   type Erased Kind = SKind
   erase Type = SKType
   erase (KPi b) = SKArr (erase ty) (erase k)
-    where ((_, Annot ty), k) = unsafeUnbind b
+    where ((_, Embed ty), k) = unsafeUnbind b
           -- this is actually safe since we ignore the name
           -- and promise to erase it from k.
 
 instance Erasable Ty where
   type Erased Ty = STy
   erase (TyPi b)      = STyArr (erase t1) (erase t2)
-    where ((_, Annot t1), t2) = unsafeUnbind b
+    where ((_, Embed t1), t2) = unsafeUnbind b
   erase (TyApp ty _)  = erase ty
   erase (TyConst c)   = STyConst c
 
@@ -377,7 +377,7 @@ tyEq :: Ty -> Ty -> SKind -> TcM SCtx ()
 tyEq ty1 ty2 k = whileChecking (TyEq ty1 ty2 k) $ tyEq' ty1 ty2 k
 
 tyEq' (TyPi bnd1) (TyPi bnd2) SKType =  -- XXX
-  lunbind2 bnd1 bnd2 $ \(Just ((x, Annot a1), a2, (_, Annot b1), b2)) -> do
+  lunbind2 bnd1 bnd2 $ \(Just ((x, Embed a1), a2, (_, Embed b1), b2)) -> do
     tyEq a1 b1 SKType
     withTmBinding x (erase a1) $ tyEq a2 b2 SKType
 
@@ -415,8 +415,8 @@ kEq :: Kind -> Kind -> TcM SCtx ()
 kEq Type Type = return ()
 
 kEq k1@(KPi bnd1) k2@(KPi bnd2) = whileChecking (KEq k1 k2) $
-  lunbind bnd1 $ \((x, Annot a), k) ->
-  lunbind bnd2 $ \((_, Annot b), l) -> do
+  lunbind bnd1 $ \((x, Embed a), k) ->
+  lunbind bnd2 $ \((_, Embed b), l) -> do
     tyEq a b SKType
     withTmBinding x (erase a) $ kEq k l
 
@@ -438,14 +438,14 @@ tyCheck' t@(TmVar x)     = liftM fst $ lookupTm x
 tyCheck' t@(TmApp m1 m2) = do
   bnd <- unTyPi =<< tyCheck m1
   a2  <- tyCheck m2
-  lunbind bnd $ \((x, Annot a2'), a1) -> do
+  lunbind bnd $ \((x, Embed a2'), a1) -> do
     withErasedCtx $ tyEq a2' a2 SKType
     return $ subst x m2 a1
 tyCheck' t@(Lam bnd) =
-  lunbind bnd $ \((x, Annot a1), m2) -> do
+  lunbind bnd $ \((x, Embed a1), m2) -> do
     isType =<< kCheck a1
     a2   <- withTmBinding x a1 $ tyCheck m2
-    return $ TyPi (bind (x, Annot a1) a2)
+    return $ TyPi (bind (x, Embed a1) a2)
 
 -- Compute the kind of a type.
 kCheck :: Ty -> TcM Ctx Kind
@@ -456,11 +456,11 @@ kCheck' (TyConst a) = lookupTy a
 kCheck' (TyApp a m) = do
   bnd <- unKPi =<< kCheck a
   b   <- tyCheck m
-  lunbind bnd $ \((x, Annot b'), k) -> do
+  lunbind bnd $ \((x, Embed b'), k) -> do
     withErasedCtx $ tyEq b' b SKType
     return $ subst x m k
 kCheck' (TyPi bnd) =
-  lunbind bnd $ \((x, Annot a1), a2) -> do
+  lunbind bnd $ \((x, Embed a1), a2) -> do
     isType =<< kCheck a1
     isType =<< (withTmBinding x a1 $ kCheck a2)
     return Type
@@ -472,7 +472,7 @@ sortCheck k = whileChecking (SCheck k) $ sortCheck' k
 sortCheck' :: Kind -> TcM Ctx ()
 sortCheck' Type      = return ()
 sortCheck' (KPi bnd) =
-  lunbind bnd $ \((x, Annot a), k) -> do
+  lunbind bnd $ \((x, Embed a), k) -> do
     isType =<< kCheck a
     withTmBinding x a $ sortCheck k
 
@@ -546,7 +546,7 @@ parseAtom = parens parseTm
         <|> Lam <$> (
               bind
                 <$> brackets ((,) <$> var
-                                  <*> (Annot <$> (sym ":" *> parseTy))
+                                  <*> (Embed <$> (sym ":" *> parseTy))
                              )
                 <*> parseTm
               )
@@ -562,13 +562,13 @@ parseTy  =
       -- [x:ty] ty
       TyPi <$> (bind
          <$> braces ((,) <$> var
-                         <*> (Annot <$> (sym ":" *> parseTy))
+                         <*> (Embed <$> (sym ":" *> parseTy))
                     )
          <*> parseTy)
 
       -- te -> ty
   <|> try (TyPi <$> (bind
-             <$> ((,) (string2Name "_") . Annot <$> parseTyExpr)
+             <$> ((,) (string2Name "_") . Embed <$> parseTyExpr)
              <*> (op "->" *> parseTy)
           ))
 
@@ -601,13 +601,13 @@ parseKind =
       -- {x:ty} k
       KPi <$> (bind
        <$> braces ((,) <$> var
-                       <*> (Annot <$> (sym ":" *> parseTy))
+                       <*> (Embed <$> (sym ":" *> parseTy))
                   )
        <*> parseKind)
 
       -- ka -> k
   <|> try (KPi <$> (bind
-             <$> ((,) (string2Name "_") . Annot <$> parseTyExpr)
+             <$> ((,) (string2Name "_") . Embed <$> parseTyExpr)
              <*> (op "->" *> parseKind)
           ))
 
@@ -707,7 +707,7 @@ instance Pretty Op where
 
 instance Pretty Kind where
   ppr Type = return $ text "type"
-  ppr (KPi bnd) = lunbind bnd $ \((x, Annot ty), k) -> do
+  ppr (KPi bnd) = lunbind bnd $ \((x, Embed ty), k) -> do
     x'  <- ppr x
     ty' <- ppr ty
     k'  <- ppr k
@@ -721,7 +721,7 @@ instance Pretty Ty where
     tm' <- ppr tm
     return $ ty' <+> PP.parens tm'
   ppr (TyConst c) = ppr c
-  ppr (TyPi bnd) = lunbind bnd $ \((x, Annot ty1), ty2) -> do
+  ppr (TyPi bnd) = lunbind bnd $ \((x, Embed ty1), ty2) -> do
     x' <- ppr x
     ty1' <- ppr ty1
     ty2' <- ppr ty2
@@ -733,10 +733,10 @@ instance Pretty STy where
   ppr sty = ppr (uneraseTy sty)
 
 uneraseTy (STyConst c) = TyConst c
-uneraseTy (STyArr t1 t2) = TyPi (bind (string2Name "_", Annot (uneraseTy t1)) (uneraseTy t2))
+uneraseTy (STyArr t1 t2) = TyPi (bind (string2Name "_", Embed (uneraseTy t1)) (uneraseTy t2))
 
 uneraseK SKType = Type
-uneraseK (SKArr sty sk) = KPi (bind (string2Name "_", Annot (uneraseTy sty)) (uneraseK sk))
+uneraseK (SKArr sty sk) = KPi (bind (string2Name "_", Embed (uneraseTy sty)) (uneraseK sk))
 
 instance Pretty SKind where
   ppr sk = ppr (uneraseK sk)
@@ -747,7 +747,7 @@ instance Pretty Tm where
     tm1' <- ppr tm1
     tm2' <- ppr tm2
     return $ tm1' <+> PP.parens tm2'
-  ppr (Lam bnd) = lunbind bnd $ \((x, Annot ty), tm) -> do
+  ppr (Lam bnd) = lunbind bnd $ \((x, Embed ty), tm) -> do
     x' <- ppr x
     ty' <- ppr ty
     tm' <- ppr tm

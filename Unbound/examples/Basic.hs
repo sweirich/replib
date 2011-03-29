@@ -1,4 +1,3 @@
--- OPTIONS -fglasgow-exts -fth -fallow-undecidable-instances
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ScopedTypeVariables, FlexibleInstances, MultiParamTypeClasses  #-}
 -----------------------------------------------------------------------------
 -- |

@@ -1,25 +1,24 @@
-{-# LANGUAGE TemplateHaskell, 
+{-# LANGUAGE TemplateHaskell,
              ScopedTypeVariables,
              FlexibleInstances,
              MultiParamTypeClasses,
              FlexibleContexts,
-             UndecidableInstances, 
+             UndecidableInstances,
              GADTs #-}
 
 module Functor where
 
-import Generics.RepLib hiding (Int)
-import Generics.RepLib.Bind.LocallyNameless
+import Unbound.LocallyNameless hiding (Int)
 import Control.Monad
 import Control.Monad.Trans.Error
 import Data.List as List
 
-{- So we can't actually do modules like I was thinking of. 
+{- So we can't actually do modules like I was thinking of.
    Substitution in modules only "delays" capture not avoids it.
  -}
 
 type TyName = Name Type
-type ModName = Name Module 
+type ModName = Name Module
 
 data Type = TyVar TyName
           | Int
@@ -27,13 +26,13 @@ data Type = TyVar TyName
           | Path Module TyName
    deriving Show
 
-data ModDef =  TyDef TyName (Maybe (Annot Type))
-            |  ModDef ModName Module 
-                 -- here is the question. For submodules should 
-                 -- it be Annot Module or just Module?  For the 
+data ModDef =  TyDef TyName (Maybe (Embed Type))
+            |  ModDef ModName Module
+                 -- here is the question. For submodules should
+                 -- it be Embed Module or just Module?  For the
                  -- former, then the "binding" names of the submodule
                  -- could be bound by the outer module. For the latter
-                 -- a submodule can't use the same name as the outer 
+                 -- a submodule can't use the same name as the outer
                  -- module.
    deriving Show
 data Module =  Struct  (Rec [ModDef])
@@ -44,8 +43,8 @@ data Module =  Struct  (Rec [ModDef])
 
 $(derive [''Type, ''ModDef, ''Module])
 
-------------------------------------------------------  
-instance Alpha Type where   
+------------------------------------------------------
+instance Alpha Type where
 instance Alpha Module where
 instance Alpha ModDef where
 
@@ -75,38 +74,37 @@ g :: ModName
 g = string2Name "G"
 
 f :: Module
-f = Functor (bind x  
-             (Struct (rec [TyDef t (Just (Annot Bool)), 
-             TyDef u (Just (Annot (TyVar x)))])))
+f = Functor (bind x
+             (Struct (rec [TyDef t (Just (Embed Bool)),
+             TyDef u (Just (Embed (TyVar x)))])))
 
 m :: Module
-m = Struct (rec [TyDef t (Just (Annot Int)), 
+m = Struct (rec [TyDef t (Just (Embed Int)),
                  ModDef g (ModApp f (TyVar t))])
 
 
-red :: Fresh m => Module -> m Module 
-red (ModApp m1 t) = do 
+red :: Fresh m => Module -> m Module
+red (ModApp m1 t) = do
   m1' <- red m1
-  case m1' of 
-    Functor bnd -> do 
+  case m1' of
+    Functor bnd -> do
        (x, m1'') <- unbind bnd
        red (subst x t m1'')
     _ -> return (ModApp m1 t)
-red (Struct s) = do 
+red (Struct s) = do
     defs <- mapM redDef (unrec s)
-    return (Struct (rec defs))  
+    return (Struct (rec defs))
 red m = return m
 
 redDef :: Fresh m => ModDef -> m ModDef
-redDef (ModDef f m) = do 
+redDef (ModDef f m) = do
   m' <- red m
   return (ModDef f m')
 redDef d = return d
 
-m3 = Struct (rec [TyDef t Nothing, 
-                  TyDef u (Just (Annot (TyVar t)))])
+m3 = Struct (rec [TyDef t Nothing,
+                  TyDef u (Just (Embed (TyVar t)))])
 
 m2 :: Module
 m2 = runFreshM (red m)
-       
-         
+

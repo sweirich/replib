@@ -20,8 +20,7 @@
 -- based on the untyped lambda calculus.
 module LC where
 
-import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless
+import Unbound.LocallyNameless
 import Control.Monad.Reader (Reader, runReader)
 import Data.Set as S
 
@@ -47,7 +46,7 @@ instance Subst Exp Exp where
 
 
 -- | All new functions should be defined in a monad that can generate
--- locally fresh names. 
+-- locally fresh names.
 
 type M a = FreshM a
 

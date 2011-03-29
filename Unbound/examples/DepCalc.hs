@@ -91,9 +91,7 @@ typing rules:
 
 -}
 
-
-import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless
+import Unbound.LocallyNameless
 
 import Data.Monoid
 import Control.Monad
@@ -125,7 +123,7 @@ data Exp = EVar (Name Exp)
   deriving Show
 
 data Tele = Empty
-          | Cons (Rebind (Name Exp, Annot Exp) Tele)
+          | Cons (Rebind (Name Exp, Embed Exp) Tele)
   deriving Show
 
 type Ctx  = [ (Name Exp, Exp) ]
@@ -162,7 +160,7 @@ eapp a b = EApp a [b]
 
 mkTele :: [(String, Exp)] -> Tele
 mkTele []          = Empty
-mkTele ((x,e) : t) = Cons (rebind (string2Name x, Annot e) (mkTele t))
+mkTele ((x,e) : t) = Cons (rebind (string2Name x, Embed e) (mkTele t))
 
 {- Polymorphic identity function -}
 
@@ -218,7 +216,7 @@ unTApp _ e = throwError $ "Expected datatype, got " ++ show e++ " instead"
 checkTele :: Ctx -> Tele -> M Ctx
 checkTele g Empty = return g
 checkTele g (Cons rb) = do
-  let ((x,Annot t), tele) = unrebind rb
+  let ((x,Embed t), tele) = unrebind rb
   a <- infer g t
   check g a EStar
   checkTele ((x,t) : g) tele
@@ -279,7 +277,7 @@ check g m a = do
 checks :: Ctx -> [Exp] -> Tele -> M ()
 checks _ [] Empty = ok
 checks g (e:es) (Cons rb) = do
-  let ((x, Annot a), t') = unrebind rb
+  let ((x, Embed a), t') = unrebind rb
   check g e a
   checks (subst x e g) (subst x e es) (subst x e t')
 checks _ _ _ = throwError $ "Unequal number of parameters and arguments"

@@ -20,8 +20,7 @@
 -- based on the untyped lambda calculus.
 module LCRec where
 
-import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless
+import Unbound.LocallyNameless
 import Control.Monad.Reader (Reader, runReader)
 import Data.Set as S
 import Data.List as L
@@ -30,7 +29,7 @@ import Data.List as L
 data Exp = Var (Name Exp)
          | Lam (Bind (Name Exp) Exp)
          | App Exp Exp
-         | Letrec (Bind (Rec [(Name Exp, Annot Exp)]) Exp)
+         | Letrec (Bind (Rec [(Name Exp, Embed Exp)]) Exp)
   deriving Show
 
 -- Use RepLib to derive representation types
@@ -49,7 +48,7 @@ instance Subst Exp Exp where
 
 
 -- | All new functions should be defined in a monad that can generate
--- locally fresh names. 
+-- locally fresh names.
 
 type M a = FreshM a
 
@@ -88,12 +87,12 @@ red (Lam bnd) = do
      App e1 (Var y) | y == x && x `S.notMember` fv e1 -> return e1
      otherwise -> return (Lam (bind x e'))
 red (Var x) = return $ (Var x)
-red (Letrec bnd) = do 
+red (Letrec bnd) = do
   (r, body) <- unbind bnd
   -- get the variable definitions
   let vars = unrec r
   -- substitute them all (once) throughout the body, iteratively
-  let newbody = foldr (\ (x,Annot rhs) body -> subst x rhs body) body vars
+  let newbody = foldr (\ (x,Embed rhs) body -> subst x rhs body) body vars
   let fvs = fv newbody
   -- garbage collect, if possible
   if (L.any (\ (x,_) -> x `S.member` fvs) vars) then
@@ -138,7 +137,7 @@ true = lam x (lam y (Var x))
 false = lam x (lam y (Var y))
 if_ x y z = (App (App x y) z)
 
-e = Letrec (bind (rec [(y, Annot(Var x)), (x, Annot (Var z))]) (Var y))
+e = Letrec (bind (rec [(y, Embed(Var x)), (x, Embed (Var z))]) (Var y))
 
 main :: IO ()
 main = do
