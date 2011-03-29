@@ -18,14 +18,18 @@
 
 module STLC where
 
-import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless
+import Unbound.LocallyNameless
 import Control.Monad.Reader
 import Data.Set as S
 
 data Ty = TInt | TUnit | Arr Ty Ty
   deriving (Show, Eq)
-data Exp = Lit Int | Var Name | Lam (Bind Name Exp) | App Exp Ty Exp | EUnit
+
+data Exp = Lit Int
+         | Var (Name Exp)
+         | Lam (Bind (Name Exp) Exp)
+         | App Exp Ty Exp
+         | EUnit
   deriving Show
 
 -- Use RepLib to derive representation types
@@ -41,11 +45,7 @@ instance Subst Exp Exp where
    isvar (Var x) = Just (SubstName x)
    isvar _       = Nothing
 
--- Equivalence for expressions is alpha equivalence. So we can't derive Eq
--- until we've made it a member of the Alpha class
-deriving instance Eq Exp
-
-type Ctx = [(Name, Ty)]
+type Ctx = [(Name Exp, Ty)]
 
 -- A monad that can generate locally fresh names
 type M a = Reader Integer a
@@ -77,7 +77,7 @@ algeq e1 e2 TInt  = do
   patheq e1' e2'
 algeq e1 e2 TUnit = return True
 algeq e1 e2 (Arr t1 t2) = do
-  x <- lfresh name1
+  x <- lfresh (s2n "x")
   algeq (App e1 t1 (Var x)) (App e2 t1 (Var x)) t2
 
 -- path equivalence (for terms in weak-head normal form)
@@ -126,10 +126,10 @@ red e = return $ e
 
 -- Reduce both sides until you find a match.
 redcomp :: Exp -> Exp -> M Bool
-redcomp e1 e2 = if e1 == e2 then return True                                         else do
+redcomp e1 e2 = if e1 `aeq` e2 then return True                                         else do
     e1' <- red e1
     e2' <- red e2
-    if e1' == e1 && e2' == e2
+    if e1' `aeq` e1 && e2' `aeq` e2
       then return False
       else redcomp e1' e2'
 
@@ -168,13 +168,16 @@ assertM f s c =
   if f (runReader c (0 :: Integer)) then return ()
   else print ("Assertion " ++ s ++ " failed")
 
+name1, name2 :: Name Exp
+name1 = s2n "x"
+name2 = s2n "y"
 
 main :: IO ()
 main = do
-  -- \x.x == \x.y
-  assert "a1" $ Lam (bind name1 (Var name1)) == Lam (bind name2 (Var name2))
+  -- \x.x === \x.y
+  assert "a1" $ Lam (bind name1 (Var name1)) `aeq` Lam (bind name2 (Var name2))
   -- \x.x /= \x.y
-  assert "a2" $ Lam (bind name1 (Var name2)) /= Lam (bind name1 (Var name1))
+  assert "a2" . not $ Lam (bind name1 (Var name2)) `aeq` Lam (bind name1 (Var name1))
   -- [] |- \x. x : () -> ()
   assertM id "tc1" $ tc [] (Lam (bind name1 (Var name1))) (Arr TUnit TUnit)
   -- [] |- \x. x ()  : (Unit -> Int) -> Int

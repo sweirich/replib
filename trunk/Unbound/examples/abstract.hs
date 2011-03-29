@@ -24,8 +24,8 @@
 module Abstract where
 
 import Generics.RepLib
-import Generics.RepLib.Bind.LocallyNameless
-import Generics.RepLib.Bind.PermM
+import Unbound.LocallyNameless
+
 import qualified Data.Set as S
 
 import Control.Monad.Reader (Reader, runReader)
@@ -62,8 +62,8 @@ $(derive [''Exp])
 -- (2) match all source positions together
 --      aeq' c s1 s2 = True
 -- (3) only match equal source positions together
---      aeq' c s1 s2 = s1 == s2 
---      
+--      aeq' c s1 s2 = s1 == s2
+--
 --
 -- Below, we choose option (2) because we would like
 -- (alpha-)equivalence for Exp to ignore the source position
@@ -74,7 +74,6 @@ $(derive [''Exp])
 instance Alpha SourcePos where
    aeq' c s1 s2 = True
    acompare' c s1 s2 = EQ
-   match' c s1 s2 = Just empty
 
 instance Alpha Exp where
 

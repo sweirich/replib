@@ -18,8 +18,7 @@ import Text.Parsec hiding ((<|>))
 import qualified Text.Parsec.Token as P
 import Text.Parsec.Language (haskellDef)
 
-import Generics.RepLib.Bind.LocallyNameless
-import Generics.RepLib
+import Unbound.LocallyNameless
 
 data Term = Var (Name Term)
           | App Term Term
