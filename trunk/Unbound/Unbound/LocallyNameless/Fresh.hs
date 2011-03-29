@@ -71,9 +71,11 @@ import qualified Control.Monad.IO.Class as IC
 -- Fresh
 ------------------------------------------------------------
 
--- | Type class for monads which can generate new globally unique
---   'Name's based on a given 'Name'.
+-- | The @Fresh@ type class governs monads which can generate new
+--   globally unique 'Name's based on a given 'Name'.
 class Monad m => Fresh m where
+
+  -- | Generate a new globally unique name based on the given one.
   fresh :: Name a -> m (Name a)
 
 -- | The @FreshM@ monad transformer.  Keeps track of the lowest index
@@ -82,7 +84,7 @@ class Monad m => Fresh m where
 newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT Integer m a }
   deriving (Functor, Applicative, Monad, St.MonadState Integer, MonadPlus, MonadIO)
 
--- | Run a 'FreshMT' computation starting in an empty context.
+-- | Run a 'FreshMT' computation (with the global index starting at zero).
 runFreshMT :: Monad m => FreshMT m a -> m a
 runFreshMT m = contFreshMT m 0
 
@@ -102,7 +104,7 @@ instance Monad m => Fresh (FreshMT m) where
 --   incremented every time 'fresh' is called.
 type FreshM = FreshMT Identity
 
--- | Run a FreshM computation in an empty context.
+-- | Run a FreshM computation (with the global index starting at zero).
 runFreshM :: FreshM a -> a
 runFreshM = runIdentity . runFreshMT
 
@@ -166,27 +168,19 @@ instance RC.MonadReader r m => RC.MonadReader r (FreshMT m) where
 -- LFresh
 ---------------------------------------------------
 
--- XXX todo: generalize 'avoid' to take an arbitrary term/pattern?
--- would make the modules recursive though...
 -- | This is the class of monads that support freshness in an
 --   (implicit) local scope.  Generated names are fresh for the current
---   local scope, but not globally fresh.
+--   local scope, not necessarily globally fresh.
 class Monad m => LFresh m where
   -- | Pick a new name that is fresh for the current (implicit) scope.
   lfresh  :: Rep a => Name a -> m (Name a)
-  -- | Avoid the given names when freshening in the subcomputation.
+  -- | Avoid the given names when freshening in the subcomputation,
+  --   that is, add the given names to the in-scope set.
   avoid   :: [AnyName] -> m a -> m a
 
--- | A simple reader monad instance for 'LFresh'.
-instance LFresh (Reader Integer) where
-  lfresh (Nm r (s,j)) = do { n <- ask; return (Nm r (s, max j (n+1))) }
-  avoid []          = id
-  avoid names       = local (max k)
-    where k = maximum (map anyName2Integer names)
-
 -- | The LFresh monad transformer.  Keeps track of a set of names to
--- avoid, and when asked for a fresh one will choose the first unused
--- numerical name.
+-- avoid, and when asked for a fresh one will choose the first numeric
+-- prefix of the given name which is currently unused.
 newtype LFreshMT m a = LFreshMT { unLFreshMT :: ReaderT (Set AnyName) m a }
   deriving (Functor, Applicative, Monad, MonadReader (Set AnyName), MonadIO, MonadPlus)
 

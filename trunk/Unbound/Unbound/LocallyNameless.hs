@@ -194,24 +194,56 @@ module Unbound.LocallyNameless
     -- *** Permuting terms
     swaps, swapsEmbeds, swapsBinders,
 
-    -- * The 'Alpha' class
-    Alpha(..),
-
     -- * Freshness
-    -- ** 'Fresh' and global freshness
-    Fresh(..), freshen,
+
+    -- | When opening a term-level binding ('Bind' or 'TRec'), fresh
+    --   names must be generated for the binders of its pattern.
+    --   Fresh names can be generated according to one of two
+    --   strategies: names can be /globally/ fresh (not conflicting
+    --   with any other generated names, ever; see 'Fresh') or
+    --   /locally/ fresh (not conflicting only with a specific set of
+    --   \"currently in-scope\" names; see 'LFresh').  Generating
+    --   globally fresh names is simpler and suffices for many
+    --   applications.  Generating locally fresh names tends to be
+    --   useful when the names are for human consumption, e.g. when
+    --   implementing a pretty-printer.
+
+    -- ** Global freshness
+    freshen,
+
+    -- *** The @Fresh@ class
+    Fresh(..),
+
+    -- *** The @FreshM@ monad
+
+    -- | The @FreshM@ monad provides a concrete implementation of the
+    --   'Fresh' type class.  The @FreshMT@ monad transformer variant
+    --   can be freely combined with other standard monads and monad
+    --   transformers from the @transformers@ library.
 
     FreshM, runFreshM,
     FreshMT, runFreshMT,
 
-    -- ** 'LFresh' and local freshness
-    LFresh(..),
+    -- ** Local freshness
     lfreshen,
+
+    -- *** The @LFresh@ class
+    LFresh(..),
+
+    -- *** The @LFreshM@ monad
+
+    -- | The @LFreshM@ monad provides a concrete implementation of the
+    --   'LFresh' type class.  The @LFreshMT@ monad transformer variant
+    --   can be freely combined with other standard monads and monad
+    --   transformers from the @transformers@ library.
 
     LFreshM, runLFreshM, getAvoids,
     LFreshMT, runLFreshMT,
 
-    -- * Re-export RepLib API for convenience
+    -- * The @Alpha@ class
+    Alpha(..),
+
+    -- * Re-exported RepLib API for convenience
 
     module Generics.RepLib,
 
