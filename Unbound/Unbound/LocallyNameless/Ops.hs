@@ -154,17 +154,18 @@ swapsBinders = swaps' initial
 swapsEmbeds :: Alpha p => Perm AnyName -> p -> p
 swapsEmbeds = swaps' (pat initial)
 
-
--- | \"Locally\" freshen a pattern replacing all binding names with
---  new names that have not already been used. The second argument is
--- a continuation, which takes the renamed term and a permutation that
--- specifies how the pattern has been renamed.
+-- | \"Locally\" freshen a pattern, replacing all binding names with
+--   new names that are not already \"in scope\". The second argument
+--   is a continuation, which takes the renamed term and a permutation
+--   that specifies how the pattern has been renamed.  The resulting
+--   computation will be run with the in-scope set extended by the
+--   names just generated.
 lfreshen :: (Alpha p, LFresh m) => p -> (p -> Perm AnyName -> m b) -> m b
 lfreshen = lfreshen' (pat initial)
 
--- | Freshen a pattern by replacing all old /binding/ 'Name's with new
--- fresh 'Name's, returning a new pattern and a @'Perm' 'Name'@
--- specifying how 'Name's were replaced.
+-- | Freshen a pattern by replacing all old binding 'Name's with new
+--   fresh 'Name's, returning a new pattern and a @'Perm' 'Name'@
+--   specifying how 'Name's were replaced.
 freshen :: (Alpha p, Fresh m) => p -> m (p, Perm AnyName)
 freshen = freshen' (pat initial)
 
