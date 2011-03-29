@@ -38,8 +38,7 @@
 -- examples in the @example@ directory.
 --
 -- See also: Stephanie Weirich, Brent Yorgey, and Tim Sheard.
--- /Binders Unbound/. Submitted to ICFP
--- 2011. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
+-- /Binders Unbound/. Submitted, March 2011. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
 ----------------------------------------------------------------------
 
 module Unbound.LocallyNameless
