@@ -1,3 +1,14 @@
+
+----------------------------------------------------------------------
+-- |
+-- Module      :  Unbound.LocallyNameless.Ops
+-- License     :  BSD-like (see LICENSE)
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Portability :  GHC only (-XKitchenSink)
+--
+-- Generic operations defined in terms of the RepLib framework and the
+-- 'Alpha' type class.
+----------------------------------------------------------------------
 module Unbound.LocallyNameless.Ops where
 
 import Generics.RepLib

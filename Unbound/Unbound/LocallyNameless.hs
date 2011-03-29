@@ -3,7 +3,6 @@
 -- |
 -- Module      :  Unbound.LocallyNameless
 -- License     :  BSD-like (see LICENSE)
---
 -- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
 -- Stability   :  experimental
 -- Portability :  GHC only (-XKitchenSink)

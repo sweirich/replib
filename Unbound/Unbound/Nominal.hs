@@ -2,7 +2,6 @@
 -- |
 -- Module      :  Unbound.Nominal
 -- License     :  BSD-like (see LICENSE)
---
 -- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
 -- Stability   :  experimental
 -- Portability :  non-portable (-XKitchenSink)

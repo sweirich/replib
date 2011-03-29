@@ -1,3 +1,13 @@
+----------------------------------------------------------------------
+-- |
+-- Module      :  Unbound.Util
+-- License     :  BSD-like (see LICENSE)
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Portability :  GHC only (-XKitchenSink)
+--
+-- Various utilities for the Unbound library.
+----------------------------------------------------------------------
+
 module Unbound.Util where
 
 import Data.Maybe (catMaybes)

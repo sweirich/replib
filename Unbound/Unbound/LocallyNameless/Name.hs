@@ -11,9 +11,7 @@
 -- |
 -- Module      :  Unbound.LocallyNameless.Name
 -- License     :  BSD-like (see LICENSE)
---
 -- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
--- Stability   :  experimental
 -- Portability :  GHC only
 --
 -- An implementation of names in a locally nameless representation.

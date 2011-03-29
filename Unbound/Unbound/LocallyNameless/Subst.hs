@@ -6,6 +6,15 @@
            , ScopedTypeVariables
   #-}
 
+----------------------------------------------------------------------
+-- |
+-- Module      :  Unbound.LocallyNameless.Subst
+-- License     :  BSD-like (see LICENSE)
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Portability :  GHC only (-XKitchenSink)
+--
+-- The @Subst@ type class for generic capture-avoiding substitution.
+----------------------------------------------------------------------
 module Unbound.LocallyNameless.Subst where
 
 import Data.List (find)
