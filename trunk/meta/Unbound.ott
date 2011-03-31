@@ -1,0 +1,21 @@
+metavar name, x, y, z ::= {{ repr-locally-nameless }}
+metavar datacon, K ::= {{ coq nat }}
+grammar
+
+term, t, p :: '' ::=
+  | x             ::   :: var
+  | Bind p x t    ::   :: bind     (+ bind x in t +)
+  | K             ::   :: data
+  | t1 t2         ::   :: app
+  | Rebind p x t  ::   :: rebind   (+ bind x in t +)
+  | Rec x p       ::   :: rec      (+ bind x in p +)
+  | Emb t         ::   :: emb 
+  | Shift p       ::   :: shift
+  | ( t )         :: S :: paren {{ coq ([[t]]) }}
+  | { t2 / x } t1 :: M :: subst {{ coq (open_exp_wrt_exp [[x t1]] [[t2]]) }}
+
+substitutions
+  single t x :: subst
+
+freevars
+  t x :: fv
