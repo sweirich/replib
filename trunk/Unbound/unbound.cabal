@@ -11,6 +11,7 @@ maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
 homepage:       http://code.google.com/p/replib/
 category:       Language, Generics, Compilers/Interpreters
 extra-source-files: README, 
+                    CHANGES,
                     examples/*.hs,
                     tutorial/Makefile,
                     tutorial/Tutorial.lhs,
