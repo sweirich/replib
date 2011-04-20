@@ -36,8 +36,5 @@ Library
     Unbound.LocallyNameless.Alpha,
     Unbound.LocallyNameless.Subst,
     Unbound.LocallyNameless.Ops,
-    Unbound.Nominal,
-    Unbound.Nominal.Name,
-    Unbound.Nominal.Internal,
     Unbound.PermM,
     Unbound.Util
