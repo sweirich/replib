@@ -1,0 +1,12 @@
+Version 0.2: 24 March 2011
+
+  * Initial release to go along with submission of "Binders Unbound".
+
+Version 0.2.1: 28 March 2011
+
+  * Massive update to documentation.
+
+Version 0.2.2: 29 March 2011
+
+  * Add MonadFix instances for FreshM and LFreshM.  Thanks to Job
+    Vranish for the suggestion.
