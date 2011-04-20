@@ -19,6 +19,9 @@ module Generics.RepLib.R where
 
 import Data.List
 
+data Equal a b where
+  Refl :: Equal a a
+
 -- | A value of type @R a@ is a representation of a type @a@.
 data R a where
    Int      :: R Int
@@ -32,12 +35,13 @@ data R a where
    Arrow    :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
    Data     :: DT -> [Con R a] -> R a
    Abstract :: DT -> R a
-
+   Equal    :: (Rep a, Rep b) => R a -> R b -> R (Equal a b)
+   Exists   :: (RepC f) => R (Ex f)
 -- | Representation of a data constructor includes an
 -- embedding between the datatype and a list of other types
 -- as well as the representation of that list of other types.
-data Con r a  = forall l. Con (Emb l a) (MTup r l)
-
+data Con r a  where
+   Con2 :: forall b c . (RepC2 f, l ~ f b c) => (Emb l a) (MTup r l) -> Con r a
 -- | An embedding between a list of types @l@ and
 -- a datatype @a@, based on a particular data constructor.
 -- The to function is a wrapper for the constructor, the
@@ -65,7 +69,8 @@ data Nil = Nil
 -- | Cons for a list of types
 data a :*: l = a :*: l
 
-data Ex f = forall a. Rep a => Ex (f a)
+data Ex1 f = forall a. Rep a => Ex1 (f a)
+data Ex2 f = forall a b. (Rep a, Rep b) => Ex2 (f a b)
 
 infixr 7 :*:
 
@@ -73,12 +78,16 @@ infixr 7 :*:
 data MTup r l where
     MNil   :: MTup r Nil
     (:+:)  :: (Rep a) => r a -> MTup r l -> MTup r (a :*: l)
-    MEx    :: (Rep a) => MTup r (f a) -> MTup r (Ex f)
+--    MEx    :: (Repc f) => (forall a. Rep a => MTup r (f a)) -> MTup r (Ex f)
+    MEx2   :: (RepC f) => (forall a b. (Rep a, Rep b) => MTup r (f a b :*: Nil)) -> MTup r (Ex2 f)
 
 infixr 7 :+:
 
 -- | A Class of representatble types
 class Rep a where rep :: R a
+
+class RepC f where repc :: (forall a. Rep a => R (f a))
+class RepC2 f where repc2 :: (forall a b. (Rep a, Rep b) => R (f a b))
 
 ------ Showing representations  (rewrite this with showsPrec?)
 
@@ -97,6 +106,8 @@ instance Show (R a) where
      "(Data" ++ show dt ++ ")"
   show (Abstract dt) =
      "(Abstract" ++ show dt ++ ")"
+  show (Equal r1 r2) =
+     "(Equal" ++ show r1 ++ " " ++ show r2 ++ ")"
 
 instance Show DT where
   show (DT str reps) = str ++ show reps
@@ -123,6 +134,8 @@ instance Rep Integer where rep = Integer
 instance Rep a => Rep (IO a) where rep = IO rep
 instance Rep IOError where rep = IOError
 instance (Rep a, Rep b) => Rep (a -> b) where rep = Arrow rep rep
+
+instance (Rep a, Rep b) => Rep (Equal a b) where rep = Equal rep rep
 
 -- Unit
 

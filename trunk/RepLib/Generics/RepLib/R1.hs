@@ -34,6 +34,7 @@ data R1 ctx a where
     Arrow1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a -> b)
     Data1     :: DT -> [Con ctx a] -> R1 ctx a
     Abstract1 :: DT -> R1 ctx a
+    Equal1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (Equal a b)
 class Sat a where dict :: a
 
 class Rep a => Rep1 ctx a where rep1 :: R1 ctx a
@@ -50,6 +51,7 @@ instance Show (R1 c a) where
     show (Arrow1 cb cc) = "(Arrow1 " ++ show (getRepC cb) ++ " " ++ show (getRepC cc) ++ ")"
     show (Data1 dt _)   = "(Data1 " ++ show dt ++ ")"
     show (Abstract1 dt) = "(Abstract1 " ++ show dt ++ ")"
+    show (Equal1 ca cb) = "(Equal1 " ++ show (getRepC ca) ++ " " ++ show (getRepC cb) ++ ")"
 
 -- | Access a representation, given a proxy
 getRepC :: Rep b => c b -> R b
@@ -72,6 +74,7 @@ toR (Data1 dt cons) = (Data dt (map toCon cons))
         toRs MNil      = MNil
         toRs (c :+: l) = (getRepC c :+: toRs l)
 toR (Abstract1 dt) = Abstract dt
+toR (Equal1 ca cb) = Equal (getRepC ca) (getRepC cb)
 
 ---------------  Representations of Prelude types
 
@@ -87,6 +90,8 @@ instance (Rep a, Sat (ctx a)) =>
 instance (Rep a, Rep b, Sat (ctx a), Sat (ctx b)) =>
          Rep1 ctx (a -> b) where rep1 = Arrow1 dict dict
 
+instance (Rep a, Rep b, Sat (ctx a), Sat (ctx b)) =>
+         Rep1 ctx (Equal a b) where rep1 = Equal1 dict dict
 
 -- Data structures
 
