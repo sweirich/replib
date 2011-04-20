@@ -581,7 +581,7 @@ result (`multiSubst`).
 >   checkEq b a
 > 
 > checkList :: Tele -> [Exp] -> Tele -> M ()
-> checkList _ [] Empty = ok
+> checkList _ [] Empty = return ()
 > checkList g (e:es) (Cons rb) = do
 >   let ((x, Embed a), t') = unrebind rb
 >   check g e a
