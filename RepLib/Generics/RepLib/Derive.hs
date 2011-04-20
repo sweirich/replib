@@ -229,7 +229,7 @@ repr1 :: Flag -> Name -> Q [Dec]
 repr1 f n = do info' <- reify n
                case info' of
                 TyConI d -> do
-                  (name, param, ca, terms) <- typeInfo ((return d) :: Q Dec)
+                  (name, param, _, terms) <- typeInfo ((return d) :: Q Dec)
                   let paramNames = map tyVarBndrName param
                   -- the type that we are defining, applied to its parameters.
                   let ty = foldl (\x p -> x `AppT` (VarT p)) (ConT name) paramNames
@@ -308,7 +308,7 @@ stringName n = return (LitE (StringL (nameBase n)))
 
 ---  from SYB III code....
 
-typeInfo :: DecQ -> Q (Name, [TyVarBndr], [(Name, Int)], [(Name, [(Maybe Name, Type)])])
+typeInfo :: DecQ -> Q (Name, [TyVarBndr], [([TyVarBndr], Cxt, Name, Int)], [(Name, [(Maybe Name, Type)])])
 typeInfo m =
      do d <- m
         case d of
@@ -333,9 +333,11 @@ typeInfo m =
         termA (InfixC t1 c t2)      = (c, [(Nothing, snd t1), (Nothing, snd t2)])
         termA (ForallC _ _ n)       = termA n
 
-        conA (NormalC c xs)         = (simpleName c, length xs)
-        conA (RecC c xs)            = (simpleName c, length xs)
-        conA (InfixC _ c _)         = (simpleName c, 2)
+        conA (NormalC c xs)         = ([], [], simpleName c, length xs)
+        conA (RecC c xs)            = ([], [], simpleName c, length xs)
+        conA (InfixC _ c _)         = ([], [], simpleName c, 2)
+        conA (ForallC bdrs cxt con) = let (bdrs', cxt', n, l) = conA con
+                                      in  (bdrs ++ bdrs', cxt ++ cxt', n, l)
 
         name (DataD _ n _ _ _)      = n
         name (NewtypeD _ n _ _ _)   = n
