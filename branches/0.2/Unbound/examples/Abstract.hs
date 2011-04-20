@@ -28,8 +28,6 @@ import Unbound.LocallyNameless
 
 import qualified Data.Set as S
 
-import Control.Monad.Reader (Reader, runReader)
-
 
 -- We import the type SourcePos, but it is an abstract data type
 -- all we know about it is that it is an instance of the Eq, Show and Ord classes.
@@ -82,7 +80,7 @@ instance Subst Exp Exp where
    isvar (Var _ x) = Just (SubstName x)
    isvar _       = Nothing
 
-type M a = Reader Integer a
+type M a = LFreshM a
 
 -- | Beta-Eta equivalence for lambda calculus terms.
 (=~) :: Exp -> Exp -> M Bool
@@ -127,7 +125,7 @@ assert s False = print ("Assertion " ++ s ++ " failed")
 
 assertM :: String -> M Bool -> IO ()
 assertM s c =
-  if (runReader c (0 :: Integer)) then return ()
+  if (runLFreshM c) then return ()
   else print ("Assertion " ++ s ++ " failed")
 
 x :: Name Exp

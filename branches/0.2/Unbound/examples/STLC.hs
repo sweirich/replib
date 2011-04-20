@@ -19,7 +19,6 @@
 module STLC where
 
 import Unbound.LocallyNameless
-import Control.Monad.Reader
 import Data.Set as S
 
 data Ty = TInt | TUnit | Arr Ty Ty
@@ -47,8 +46,7 @@ instance Subst Exp Exp where
 
 type Ctx = [(Name Exp, Ty)]
 
--- A monad that can generate locally fresh names
-type M a = Reader Integer a
+type M a = LFreshM a
 
 -- A type checker for STLC terms
 tc :: Ctx -> Exp -> Ty -> M Bool
@@ -165,7 +163,7 @@ assert s False = print ("Assertion " ++ s ++ " failed")
 
 assertM :: (a -> Bool) -> String -> M a -> IO ()
 assertM f s c =
-  if f (runReader c (0 :: Integer)) then return ()
+  if f (runLFreshM c) then return ()
   else print ("Assertion " ++ s ++ " failed")
 
 name1, name2 :: Name Exp
