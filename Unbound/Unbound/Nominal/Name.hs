@@ -3,9 +3,6 @@
            , GADTs
            , FlexibleInstances
            , MultiParamTypeClasses
-           , ScopedTypeVariables
-           , FlexibleContexts
-           , UndecidableInstances
   #-}
 ----------------------------------------------------------------------
 -- |
@@ -23,7 +20,6 @@ module Unbound.Nominal.Name where
 -- XXX todo make explicit export list
 
 import Generics.RepLib
-import Unbound.Name 
 
 -- | 'Name's are things that get bound.  This type is intentionally
 --   abstract; to create a 'Name' you can use 'string2Name' or
@@ -34,25 +30,30 @@ data Name a
   = Nm (R a) (String, Integer)   -- free names
    deriving (Eq, Ord)
 
-$(derive [''Name])
+-- | A name with a hidden (existentially quantified) sort.
+data AnyName = forall a. Rep a => AnyName (Name a)
 
-instance Rep a => AName (Name a) where
-    name2Integer = nomName2Integer
-    name2String  = nomName2String
-    renumber j (Nm r (s,i)) = (Nm r (s,j))
+-- AnyName has an existential in it, so we cannot create a complete
+-- representation for it, unfortunately.
 
--- | Create a free 'Name' from an 'Integer'.
-integer2Name :: Rep a => Integer -> Name a
-integer2Name n = makeName "" n
+$(derive_abstract [''AnyName])
 
--- | Create a free 'Name' from a 'String'.
-string2Name :: Rep a => String -> Name a
-string2Name s = makeName s 0
+instance Show AnyName where
+  show (AnyName n1) = show n1
 
--- | Convenient synonym for 'string2Name'.
-s2n :: Rep a => String -> Name a
-s2n = string2Name
+instance Eq AnyName where
+   (AnyName n1) == (AnyName n2) =
+      case gcastR (getR n1) (getR n2) n1 of
+           Just n1' -> n1' == n2
+           Nothing  -> False
 
+instance Ord AnyName where
+   compare (AnyName n1) (AnyName n2) =
+       case compareR (getR n1) (getR n2) of
+         EQ  -> case gcastR (getR n1) (getR n2) n1 of
+           Just n1' -> compare n1' n2
+           Nothing  -> error "Panic: equal types are not equal in Ord AnyName instance!"
+         ord -> ord
 
 ------------------------------------------------------------
 -- Utilities
@@ -82,17 +83,46 @@ instance Show (Name a) where
   show (Nm _ (x,n))  = x ++ (show n)
 
 -- | Get the integer index of a 'Name'.
-nomName2Integer :: Name a -> Integer
-nomName2Integer (Nm _ (_,x)) = x
+name2Integer :: Name a -> Integer
+name2Integer (Nm _ (_,x)) = x
+
 
 -- | Get the string part of a 'Name'.
-nomName2String :: Name a -> String
-nomName2String (Nm _ (s,_)) = s
+name2String :: Name a -> String
+name2String (Nm _ (s,_)) = s
 
+
+-- | Get the integer index of an 'AnyName'.
+anyName2Integer :: AnyName -> Integer
+anyName2Integer (AnyName nm) = name2Integer nm
+
+-- | Get the string part of an 'AnyName'.
+anyName2String :: AnyName -> String
+anyName2String (AnyName nm) = name2String nm
+
+toSortedName :: Rep a => AnyName -> Maybe (Name a)
+toSortedName (AnyName n) = gcastR (getR n) rep n
+
+-- | Create a 'Name' from an 'Integer'.
+integer2Name :: Rep a => Integer -> Name a
+integer2Name n = makeName "" n
+
+-- | Create a 'Name' from a 'String'.
+string2Name :: Rep a => String -> Name a
+string2Name s = makeName s 0
+
+-- | Convenient synonym for 'string2Name'.
+s2n :: Rep a => String -> Name a
+s2n = string2Name
 
 -- | Create a 'Name' from a @String@ and an @Integer@ index.
 makeName :: Rep a => String -> Integer -> Name a
 makeName s i = Nm rep (s,i)
+
+-- | Determine the sort of a 'Name'.
+getR :: Name a -> R a
+getR (Nm r _)   = r
+
 
 -- | Change the sort of a name
 translate :: (Rep b) => Name a -> Name b
