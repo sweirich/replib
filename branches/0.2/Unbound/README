@@ -1,0 +1,23 @@
+-----------------------------------------------------------------------------
+-- 
+-- Copyright   :  (c) 2010-2011, Unbound team (see LICENSE)
+-- License     :  BSD3
+-- 
+-- Maintainer  :  sweirich@cis.upenn.edu, byorgey@cis.upenn.edu
+-- Stability   :  experimental
+-- Portability :  non-portable
+--
+-----------------------------------------------------------------------------
+
+Specify the binding structure of your data type with an expressive set
+of type combinators, and Unbound handles the rest!  Automatically
+derives alpha-equivalence, free variable calculation, capture-avoiding
+substitution, and more.
+
+To install (requires GHC 7), just 
+
+  cabal install unbound
+
+To get started using the library, see the tutorial in the tutorial/
+directory and the extensive Haddock documentation (start with the
+Unbound.LocallyNameless module).
