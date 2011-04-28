@@ -36,12 +36,12 @@ data R a where
    Data     :: DT -> [Con R a] -> R a
    Abstract :: DT -> R a
    Equal    :: (Rep a, Rep b) => R a -> R b -> R (Equal a b)
-   Exists   :: (RepC f) => R (Ex f)
+
 -- | Representation of a data constructor includes an
 -- embedding between the datatype and a list of other types
 -- as well as the representation of that list of other types.
-data Con r a  where
-   Con2 :: forall b c . (RepC2 f, l ~ f b c) => (Emb l a) (MTup r l) -> Con r a
+data Con r a = forall l. Con (Emb l a) (MTup r l)
+
 -- | An embedding between a list of types @l@ and
 -- a datatype @a@, based on a particular data constructor.
 -- The to function is a wrapper for the constructor, the
@@ -69,25 +69,17 @@ data Nil = Nil
 -- | Cons for a list of types
 data a :*: l = a :*: l
 
-data Ex1 f = forall a. Rep a => Ex1 (f a)
-data Ex2 f = forall a b. (Rep a, Rep b) => Ex2 (f a b)
-
 infixr 7 :*:
 
 -- | A heterogeneous list
 data MTup r l where
     MNil   :: MTup r Nil
     (:+:)  :: (Rep a) => r a -> MTup r l -> MTup r (a :*: l)
---    MEx    :: (Repc f) => (forall a. Rep a => MTup r (f a)) -> MTup r (Ex f)
-    MEx2   :: (RepC f) => (forall a b. (Rep a, Rep b) => MTup r (f a b :*: Nil)) -> MTup r (Ex2 f)
 
 infixr 7 :+:
 
 -- | A Class of representatble types
 class Rep a where rep :: R a
-
-class RepC f where repc :: (forall a. Rep a => R (f a))
-class RepC2 f where repc2 :: (forall a b. (Rep a, Rep b) => R (f a b))
 
 ------ Showing representations  (rewrite this with showsPrec?)
 
