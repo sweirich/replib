@@ -17,8 +17,6 @@
 
 module Generics.RepLib.R where
 
-import Data.List
-
 data Equal a b where
   Refl :: Equal a a
 
@@ -110,10 +108,10 @@ instance Show (MTup R l) where
   show (r :+: rs)   = " " ++ show r ++ show rs
 
 instance Eq (R a) where
-	 r1 == r2 = True
+  _ == _ = True
 
 instance Ord (R a) where
-  compare r1 r2 = EQ  -- R a is a singleton
+  compare _ _ = EQ  -- R a is a singleton
 
 --- Representations for (some) Haskell Prelude types
 
@@ -170,8 +168,8 @@ rList = Data (DT "[]" ((rep :: R a) :+: MNil))
 rNilEmb :: Emb Nil [a]
 rNilEmb = Emb {   to   = \Nil -> [],
                   from  = \x -> case x of
-                           (x:xs) -> Nothing
-                           []     ->  Just Nil,
+                           (_:_) -> Nothing
+                           []    -> Just Nil,
                   labels = Nothing,
                   name = "[]",
 		  fixity = Nonfix

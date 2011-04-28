@@ -2,6 +2,7 @@
     ExistentialQuantification, ScopedTypeVariables, EmptyDataDecls,
     MultiParamTypeClasses, FlexibleInstances, FlexibleContexts
   #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
 -----------------------------------------------------------------------------
 --
@@ -88,7 +89,7 @@ unifyStepR1 (Data1 _ cons) dum =
 		 (Nothing, Nothing) -> loop rest
 		 (_,_) -> throwError (strMsg $ "constructor mismatch when trying to match " ++ show x ++ " = " ++ show y)
 	   in loop cons
-unifyStepR1 r1 _ = \_ _ -> throwError (strMsg ("unifyStepR1 unhandled generic type constructor"))
+unifyStepR1 _ _ = \_ _ -> throwError (strMsg ("unifyStepR1 unhandled generic type constructor"))
 
 
 
@@ -98,7 +99,7 @@ addConstraintsRL1 (r :+: rl) (dum :: Proxy (n, a)) (p1 :*: t1) (p2 :*: t2) =
   do queueConstraint $ UC r p1 p2
      addConstraintsRL1 rl dum t1 t2
 
-
+unifyStepEq :: (Eq b, Show b) => b -> b -> UM n a ()
 unifyStepEq x y = if x == y
 		    then return ()
 		    else throwError $ strMsg ("unify failed when testing equality for " ++ show x ++ " = " ++ show y)    -- " show x ++ " /= " ++ show y)
@@ -169,7 +170,7 @@ solveUnification (eqs :: [(a, a)]) =
     cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
     rwConstraints :: UM n a ()
     rwConstraints = do c <- dequeueConstraint
-		       case c of Just (UC d a1 a2) -> do result <- unifyStepD d (undefined :: Proxy (n, a)) a1 a2
+		       case c of Just (UC d a1 a2) -> do _ <- unifyStepD d (undefined :: Proxy (n, a)) a1 a2
 							 rwConstraints
 				 Nothing -> return ()
 
@@ -189,7 +190,7 @@ solveUnification' (dum :: Proxy (n, a)) (eqs :: [(b, b)]) =
     cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
     rwConstraints :: UM n a ()
     rwConstraints = do c <- dequeueConstraint
-		       case c of Just (UC d a1 a2) -> do result <- unifyStepD d dum a1 a2
+		       case c of Just (UC d a1 a2) -> do _ <- unifyStepD d dum a1 a2
 							 rwConstraints
 				 Nothing -> return ()
 
@@ -213,7 +214,7 @@ instance Rep1 (UnifySubD a t) t' => Subst a t t' where
 
 -- generic subst.
 substR1 :: Rep1 (UnifySubD a t) t' => R1 (UnifySubD a t) t' -> a -> t -> t' -> t'
-substR1 r (a::a) (t::t) t' = gmapT1 (\cb b -> substD cb a t b) t'
+substR1 _ (a::a) (t::t) t' = gmapT1 (\cb b -> substD cb a t b) t'
 
 -- a a instance
 instance (Eq a, HasVar a t, Rep1 (UnifySubD a t) t) => Subst a t t where
@@ -232,7 +233,7 @@ instance Rep1 (UnifySubD n a) b => Occurs n a b where
 
 -- generic subst.
 occursCheckR1 :: Rep1 (UnifySubD n a) b => R1 (UnifySubD n a) b -> n -> Proxy a -> b -> Bool
-occursCheckR1 r (n::n) pa b = or $ gmapQ1 (\cb b -> occursCheckD cb n pa b) b
+occursCheckR1 _ (n::n) pa b = or $ gmapQ1 (\cb b' -> occursCheckD cb n pa b') b
 
 -- a a instance.
 instance (Eq n, HasVar n a, Rep1 (UnifySubD n a) a) => Occurs n a a where

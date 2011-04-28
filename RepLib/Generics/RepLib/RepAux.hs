@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, MagicHash,
     ScopedTypeVariables, GADTs, Rank2Types
   #-}
+{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-incomplete-patterns #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepAux
@@ -69,7 +70,7 @@ eqRTup (r1 :+: rt1) (r2 :+: rt2) = eqR r1 r2 && eqRTup rt1 rt2
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
 castR (ra::R a) (rb::R b) =
-    if eqR ra rb then \(x::a) -> Just (unsafeCoerce# x::b) else \x -> Nothing
+    if eqR ra rb then \(x::a) -> Just (unsafeCoerce# x::b) else const Nothing
 
 -- | The type-safe cast operation, implicit arguments
 cast :: forall a b. (Rep a, Rep b) => a -> Maybe b
@@ -79,7 +80,7 @@ cast x = castR (rep :: R a) (rep :: R b) x
 gcastR :: forall a b c. R a -> R b -> c a -> Maybe (c b)
 gcastR ra rb = if eqR ra rb
         then \(x :: c a) -> Just (unsafeCoerce# x :: c b)
-        else \x -> Nothing
+        else const Nothing
 
 -- | Leibniz equality between types, implicit representations
 gcast :: forall a b c. (Rep a, Rep b) => c a -> Maybe (c b)
@@ -158,29 +159,29 @@ findCon (Con rcd rec : rest) x = case (from rcd x) of
 -- expecting a type type representation across each element of the list.
 foldr_l :: (forall a. Rep a => ctx a -> a -> b -> b) -> b
             -> (MTup ctx l) -> l -> b
-foldr_l f b MNil Nil = b
+foldr_l _ b MNil Nil = b
 foldr_l f b (ca :+: cl) (a :*: l) = f ca a (foldr_l f b cl l )
 
 -- | A fold left for heterogeneous lists
 foldl_l :: (forall a. Rep a => ctx a -> b -> a -> b) -> b
             -> (MTup ctx l) ->  l -> b
-foldl_l f b MNil Nil = b
+foldl_l _ b MNil Nil = b
 foldl_l f b (ca :+: cl) (a :*: l) = foldl_l f (f ca b a) cl l
 
 -- | A map for heterogeneous lists
 map_l :: (forall a. Rep a => ctx a -> a -> a)
            -> (MTup ctx l) ->  l ->  l
-map_l f MNil Nil = Nil
+map_l _ MNil Nil = Nil
 map_l f (ca :+: cl) (a :*: l) = (f ca a) :*: (map_l f cl l)
 
 -- | Transform a heterogeneous list in to a standard list
 mapQ_l :: (forall a. Rep a => ctx a -> a -> r) -> MTup ctx l -> l -> [r]
-mapQ_l q MNil Nil = []
+mapQ_l _ MNil Nil = []
 mapQ_l q (r :+: rs) (a :*: l) = q r a : mapQ_l q rs l
 
 -- | mapM for heterogeneous lists
 mapM_l :: (Monad m) => (forall a. Rep a => ctx a -> a -> m a) -> MTup ctx l -> l -> m l
-mapM_l f MNil Nil = return Nil
+mapM_l _ MNil Nil = return Nil
 mapM_l f (ca :+: cl) (a :*: l) = do
   x1 <- f ca a
   x2 <- mapM_l f cl l
@@ -188,19 +189,19 @@ mapM_l f (ca :+: cl) (a :*: l) = do
 
 -- | Generate a heterogeneous list from metadata
 fromTup :: (forall a. Rep a => ctx a -> a) -> MTup ctx l -> l
-fromTup f MNil = Nil
+fromTup _ MNil = Nil
 fromTup f (b :+: l) = (f b) :*: (fromTup f l)
 
 -- | Generate a heterogeneous list from metadata, in a monad
 fromTupM :: (Monad m) => (forall a. Rep a => ctx a -> m a) -> MTup ctx l -> m l
-fromTupM f MNil = return Nil
+fromTupM _ MNil = return Nil
 fromTupM f (b :+: l) = do hd <- f b
                           tl <- fromTupM f l
                           return (hd :*: tl)
 
 -- | Generate a normal lists from metadata
 toList :: (forall a. Rep a => ctx a -> b) -> MTup ctx l -> [b]
-toList f MNil = []
+toList _ MNil = []
 toList f (b :+: l) = f b : toList f l
 
 ---------------------  SYB style operations --------------------------
@@ -212,7 +213,7 @@ type Traversal = forall a. Rep a => a -> a
 gmapT :: forall a. Rep a => Traversal -> a -> a
 gmapT t =
   case (rep :: R a) of
-   (Data dt cons) -> \x ->
+   (Data _ cons) -> \x ->
      case (findCon cons x) of
       Val emb reps ys -> to emb (map_l (const t) reps ys)
    _ -> id
@@ -224,8 +225,8 @@ type Query r = forall a. Rep a => a -> r
 gmapQ :: forall a r. Rep a => Query r -> a -> [r]
 gmapQ q =
   case (rep :: R a) of
-    (Data dt cons) -> \x -> case (findCon cons x) of
-		Val emb reps ys -> mapQ_l (const q) reps ys
+    (Data _ cons) -> \x -> case (findCon cons x) of
+		Val _ reps ys -> mapQ_l (const q) reps ys
     _ -> const []
 
 
@@ -234,7 +235,7 @@ type MapM m = forall a. Rep a => a -> m a
 
 gmapM   :: forall a m. (Rep a, Monad m) => MapM m -> a -> m a
 gmapM m = case (rep :: R a) of
-   (Data dt cons) -> \x -> case (findCon cons x) of
+   (Data _ cons) -> \x -> case (findCon cons x) of
      Val emb reps ys -> do l <- mapM_l (const m) reps ys
                            return (to emb l)
    _ -> return
@@ -246,7 +247,7 @@ type Traversal1 ctx = forall a. Rep a => ctx a -> a -> a
 gmapT1 :: forall a ctx. (Rep1 ctx a) => Traversal1 ctx -> a -> a
 gmapT1 t =
   case (rep1 :: R1 ctx a) of
-   (Data1 dt cons) -> \x ->
+   (Data1 _ cons) -> \x ->
      case (findCon cons x) of
       Val emb recs kids -> to emb (map_l t recs kids)
    _ -> id
@@ -255,14 +256,14 @@ type Query1 ctx r = forall a. Rep a => ctx a -> a -> r
 gmapQ1 :: forall a ctx r. (Rep1 ctx a) => Query1 ctx r -> a -> [r]
 gmapQ1 q  =
   case (rep1 :: R1 ctx a) of
-    (Data1 dt cons) -> \x -> case (findCon cons x) of
-		Val emb recs kids -> mapQ_l q recs kids
+    (Data1 _ cons) -> \x -> case (findCon cons x) of
+		Val _ recs kids -> mapQ_l q recs kids
     _ -> const []
 
 type MapM1 ctx m = forall a. Rep a => ctx a -> a -> m a
 gmapM1  :: forall a ctx m. (Rep1 ctx a, Monad m) => MapM1 ctx m -> a -> m a
 gmapM1 m = case (rep1 :: R1 ctx a) of
-   (Data1 dt cons) -> \x -> case (findCon cons x) of
+   (Data1 _ cons) -> \x -> case (findCon cons x) of
      Val emb rec ys -> do l <- mapM_l m rec ys
                           return (to emb l)
    _ -> return

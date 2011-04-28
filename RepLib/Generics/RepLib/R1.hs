@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, GADTs, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleInstances, TypeSynonymInstances
  #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -18,7 +19,6 @@
 module Generics.RepLib.R1 where
 
 import Generics.RepLib.R
-import Data.List
 
 ---------- Basic infrastructure
 
@@ -55,7 +55,7 @@ instance Show (R1 c a) where
 
 -- | Access a representation, given a proxy
 getRepC :: Rep b => c b -> R b
-getRepC cb = rep
+getRepC _ = rep
 
 -- | Transform a parameterized rep to a vanilla rep
 toR :: R1 c a -> R a
@@ -115,12 +115,12 @@ instance (Rep a, Sat (ctx a), Rep b, Sat (ctx b)) => Rep1 ctx (a,b) where
 rList1 :: forall a ctx.
   Rep a => ctx a -> ctx [a] -> R1 ctx [a]
 rList1 ca cl = Data1 (DT "[]" ((rep :: R a) :+: MNil))
-                  [ rCons1 ca cl, rNil1 ] where
+                  [ rCons1, rNil1 ] where
    rNil1  :: Con ctx [a]
    rNil1  = Con rNilEmb MNil
 
-   rCons1 :: ctx a -> ctx [a] -> Con ctx [a]
-   rCons1 ca cl = Con rConsEmb (ca :+: cl :+: MNil)
+   rCons1 :: Con ctx [a]
+   rCons1 = Con rConsEmb (ca :+: cl :+: MNil)
 
 instance (Rep a, Sat (ctx a), Sat (ctx [a])) => Rep1 ctx [a] where
   rep1 = rList1 dict dict

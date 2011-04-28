@@ -1,5 +1,6 @@
 -- OPTIONS -fglasgow-exts -fallow-undecidable-instances
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, GADTs #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
 -----------------------------------------------------------------------------
 --
@@ -99,20 +100,20 @@ instance Ord a => Sat (OrdD a) where
     dict = OrdD { compareD = compare }
 
 lexord         :: Ordering -> Ordering -> Ordering
-lexord LT ord  =  LT
+lexord LT _    =  LT
 lexord EQ ord  =  ord
-lexord GT ord  =  GT
+lexord GT _    =  GT
 
 -- | Minimal completion of the Ord class
 compareR1 :: R1 OrdD a -> a -> a -> Ordering
 compareR1 Int1  = compare
 compareR1 Char1 = compare
-compareR1 (Data1 str cons) = \ x y ->
+compareR1 (Data1 _ cons) = \ x y ->
              let loop (Con emb rec : rest) =
                      case (from emb x, from emb y) of
                         (Just t1, Just t2) -> compareTup rec t1 t2
-                        (Just t1, Nothing) -> LT
-                        (Nothing, Just t2) -> GT
+                        (Just _ , Nothing) -> LT
+                        (Nothing, Just _ ) -> GT
                         (Nothing, Nothing) -> loop rest
              in loop cons
 compareR1 r1 = error ("compareR1 not supported for " ++ show r1)
@@ -133,14 +134,14 @@ instance Bounded a => Sat (BoundedD a) where
 minBoundR1 :: R1 BoundedD a -> a
 minBoundR1 Int1  = minBound
 minBoundR1 Char1 = minBound
-minBoundR1 (Data1 dt (Con emb rec:rest)) = to emb (fromTup minBoundD rec)
+minBoundR1 (Data1 _ (Con emb rec:_)) = to emb (fromTup minBoundD rec)
 minBoundR1 r1     = error ("minBoundR1 not supported for " ++ show r1)
 
 -- | To generate the Bounded class
 maxBoundR1 :: R1 BoundedD a -> a
 maxBoundR1 Int1  = maxBound
 maxBoundR1 Char1 = maxBound
-maxBoundR1 (Data1 dt cons) =
+maxBoundR1 (Data1 _ cons) =
    case last cons of (Con emb rec) -> to emb (fromTup maxBoundD rec)
 maxBoundR1 r1     = error ("maxBoundR1 not supported for " ++ show r1)
 
@@ -165,8 +166,8 @@ showsPrecR1 :: R1 ShowD a ->
                Int  -> -- precendence level
                a    -> -- value to be shown
                ShowS
-showsPrecR1 (Data1 (DT str _) cons) = \p a ->
-	case (findCon cons a) of
+showsPrecR1 (Data1 (DT _ _) cons) = \p v ->
+	case (findCon cons v) of
       Val c rec kids ->
           case (labels c) of
             Just labs -> par $ showString (name c) .
@@ -178,14 +179,14 @@ showsPrecR1 (Data1 (DT str _) cons) = \p a ->
                                showKids rec kids
           where par        = showParen (p > p' && conArity > 0)
                 p'         = getFixity c
-                maybespace = if conArity == 0 then id else (' ':)
+                maybespace = if conArity == (0::Int) then id else (' ':)
                 conArity   = foldr_l (\_ _ i -> 1 + i) 0 rec kids
 
                 showKid :: ShowD a -> a -> ShowS
                 showKid r x = showsPrecD r (p'+1) x
 
                 showRecord ::  MTup ShowD l -> l -> [String] -> ShowS
-                showRecord (r :+: MNil) (a :*: Nil) (l : ls) = showString l . ('=':) . showKid r a
+                showRecord (r :+: MNil) (a :*: Nil) (l : _) = showString l . ('=':) . showKid r a
                 showRecord (r :+: rs) (a :*: aa) (l : ls) =
                     showString l . ('=':) . showKid r a . showString (", ") . showRecord rs aa ls
                 showRecord _ _ _ = error ("Incorrect representation: " ++
