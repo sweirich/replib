@@ -38,7 +38,13 @@ data R a where
 -- | Representation of a data constructor includes an
 -- embedding between the datatype and a list of other types
 -- as well as the representation of that list of other types.
-data Con r a = forall l. Con (Emb l a) (MTup r l)
+data Con r a where
+  Con  :: Emb l a -> MTup r l -> Con r a
+
+  -- | To represent GADT constructors, we also include a
+  --   representation of the result type of the constructor, and a
+  --   proof that it is equal to the data type.
+  GADT :: R a' -> Equal a a' -> Emb l a' -> MTup r l -> Con r a
 
 -- | An embedding between a list of types @l@ and
 -- a datatype @a@, based on a particular data constructor.
