@@ -1,6 +1,7 @@
 -- OPTIONS -fglasgow-exts -fth -fallow-undecidable-instances -ddump-splices --
 
 {-# LANGUAGE TemplateHaskell, UndecidableInstances #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -29,8 +30,6 @@ import Generics.RepLib.R
 import Generics.RepLib.R1
 import Language.Haskell.TH
 import Data.List (nub)
-import Data.Tuple
-
 
 -- | Given a type, produce its representation.
 
@@ -39,11 +38,11 @@ import Data.Tuple
 repty :: Type -> Q Exp
 repty (ForallT _ _ _) = error "cannot rep"
 repty (VarT n) = return (SigE (VarE (mkName "rep")) ((ConT ''R) `AppT` (VarT n)))
-repty (AppT t1 t2) = (repty t1) -- `AppE` (repty t2)
+repty (AppT t1 _t2) = (repty t1) -- `AppE` (repty t2)
 repty (ConT n) = do
   info <- reify n
   case info of
-    TyConI (TySynD n' vars t) -> repty t
+    TyConI (TySynD _n' _vars t) -> repty t
     _ ->
      return $
       case nameBase n of
@@ -57,7 +56,7 @@ repty (ConT n) = do
        "IO"      -> (ConE 'IO)
        "[]"      -> (VarE 'rList)  --- don't know why this isn't ListT
        "String"  -> (VarE 'rList)
-       c         -> (VarE (rName n))
+       _         -> (VarE (rName n))
 repty (TupleT i)
   | i <= 7    = return $ VarE (mkName $ "rTup" ++ show i)
   | otherwise = error $ "Why on earth are you using " ++ (show i) ++ "-tuples??"
@@ -97,21 +96,21 @@ repcon :: Bool ->  -- Is this the ONLY constructor for the datatype
           Type ->  -- The type that this is a constructor for (applied to all of its parameters)
           (Name, [(Maybe Name, Type)]) ->  -- data constructor name * list of [record name * type]
 	  Q Exp
-repcon single d (name, sttys) =
+repcon single d (nm, sttys) =
 	 let rargs = foldr (\ (_,t) tl ->
 		 [| $(repty t) :+: $(tl) |]) [| MNil |] sttys in
-		 [| Con $(remb single d (name,sttys)) $(rargs) |]
+		 [| Con $(remb single d (nm,sttys)) $(rargs) |]
 
 -- the "from" function that coerces from an "a" to the arguments
 rfrom :: Bool ->  -- does this datatype have only a single constructor
           Type ->  -- the datatype itself
           (Name, [(Maybe Name, Type)]) ->  -- data constructor name, list of parameters with record names
           Q Exp
-rfrom single d (name, sttys) = do
+rfrom single _ (nm, sttys) = do
        vars <- mapM (\_ -> newName "x") sttys
        outvar <- newName "y"
        let outpat :: Pat
-           outpat = ConP name (map VarP vars)
+           outpat = ConP nm (map VarP vars)
            outbod :: Exp
            outbod = foldr (\v tl -> (ConE (mkName (":*:"))) `AppE` (VarE v) `AppE` tl)
                     (ConE 'Nil) vars
@@ -125,25 +124,25 @@ rfrom single d (name, sttys) = do
 
 -- to component of th embedding
 rto :: Type -> (Name, [(Maybe Name, Type)]) -> Q Exp
-rto d (name,sttys) =
+rto _ (nm,sttys) =
   do vars <- mapM (\_ -> newName "x") sttys
      let topat = foldr (\v tl -> InfixP  (VarP v) (mkName ":*:") tl)
                          (ConP 'Nil []) vars
-         tobod = foldl (\tl v -> tl `AppE` (VarE v)) (ConE name) vars
+         tobod = foldl (\tl v -> tl `AppE` (VarE v)) (ConE nm) vars
      return (LamE [topat] tobod)
 
 -- the embedding record
 remb :: Bool -> Type -> (Name, [(Maybe Name, Type)]) -> Q Exp
-remb single d (name, sttys) =
-    [| Emb  { name   = $(stringName name),
-              to     = $(rto d (name,sttys)),
-              from   = $(rfrom single d (name,sttys)),
+remb single d (nm, sttys) =
+    [| Emb  { name   = $(stringName nm),
+              to     = $(rto d (nm,sttys)),
+              from   = $(rfrom single d (nm,sttys)),
               labels = Nothing,
               fixity = Nonfix } |]
 
 repDT :: Name -> [Name] -> Q Exp
-repDT name param =
-      do str <- stringName name
+repDT nm param =
+      do str <- stringName nm
          let reps = foldr (\p f ->
 									  (ConE (mkName ":+:")) `AppE`
 									     (SigE (VarE (mkName "rep"))
@@ -159,17 +158,17 @@ repr :: Flag -> Name -> Q [Dec]
 repr f n = do info' <- reify n
               case info' of
                TyConI d -> do
-                  (name, param, ca, terms) <- typeInfo ((return d) :: Q Dec)
+                  (nm, param, ca, terms) <- typeInfo ((return d) :: Q Dec)
                   let paramNames = map tyVarBndrName param
-                  baseT <- conT name
+                  baseT <- conT nm
                   -- the type that we are defining, applied to its parameters.
                   let ty = foldl (\x p -> x `AppT` (VarT p)) baseT paramNames
                   -- the representations of the paramters, as a list
                   -- representations of the data constructors
                   rcons <- mapM (repcon (length terms == 1) ty) terms
                   body  <- case f of
-                     Conc -> [| Data $(repDT name paramNames) $(return (ListE rcons)) |]
-                     Abs  -> [| Abstract $(repDT name paramNames) |]
+                     Conc -> [| Data $(repDT nm paramNames) $(return (ListE rcons)) |]
+                     Abs  -> [| Abstract $(repDT nm paramNames) |]
                   let ctx = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
                   let rTypeName :: Name
                       rTypeName = rName n
@@ -202,14 +201,14 @@ ctx_params :: Type ->    -- type we are defining
 				-- name of termvariable "pt"
             -- (ctx t)
             -- t
-ctx_params ty ctxName l = do
+ctx_params _ty ctxName l = do
    let tys = nub (map snd (foldr (++) [] (map snd l)))
    mapM (\t -> do n <- newName "p"
                   let ctx_t = (VarT ctxName) `AppT` t
                   return (n, ctx_t, t)) tys
 
 lookupName :: Type -> [(Name, Type, Type)] -> [(Name, Type, Type)] ->  Name
-lookupName t l ((n, t1, t2):rest) = if t == t2 then n else lookupName t l rest
+lookupName t l ((n, _t1, t2):rest) = if t == t2 then n else lookupName t l rest
 lookupName t l [] = error ("lookupName: Cannot find type " ++ show t ++ " in " ++ show l)
 
 repcon1 :: Type                               -- result type of the constructor
@@ -218,21 +217,21 @@ repcon1 :: Type                               -- result type of the constructor
           -> [(Name,Type,Type)]               -- ctxParams
           -> (Name, [(Maybe Name, Type)])     -- name of data constructor + args
           -> Q Exp
-repcon1 d single rd1 ctxParams (name, sttys) =
+repcon1 d single rd1 ctxParams (nm, sttys) =
        let rec = foldr (\ (_,t) tl ->
                     let expQ = (VarE (lookupName t ctxParams ctxParams))
                     in [| $(return expQ) :+: $(tl) |]) [| MNil |] sttys in
-       [| Con $(remb single d (name,sttys)) $(rec) |]
+       [| Con $(remb single d (nm,sttys)) $(rec) |]
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
 repr1 f n = do info' <- reify n
                case info' of
                 TyConI d -> do
-                  (name, param, _, terms) <- typeInfo ((return d) :: Q Dec)
+                  (nm, param, _, terms) <- typeInfo ((return d) :: Q Dec)
                   let paramNames = map tyVarBndrName param
                   -- the type that we are defining, applied to its parameters.
-                  let ty = foldl (\x p -> x `AppT` (VarT p)) (ConT name) paramNames
+                  let ty = foldl (\x p -> x `AppT` (VarT p)) (ConT nm) paramNames
                   let rTypeName = rName1 n
 
                   ctx <- newName "ctx"
@@ -242,19 +241,19 @@ repr1 f n = do info' <- reify n
 
                   -- parameters to the rep function
                   -- let rparams = map (\p -> SigP (VarP p) ((ConT ''R) `AppT` (VarT p))) param
-                  let cparams = map (\(n,t,_) -> SigP (VarP n) t) ctxParams
+                  let cparams = map (\(x,t,_) -> SigP (VarP x) t) ctxParams
 
                   -- the recursive call of the rep function
                   let e1 = foldl (\a r -> a `AppE` (VarE r)) (VarE rTypeName) paramNames
-                  let e2 = foldl (\a (n,_,_) -> a `AppE` (VarE n)) e1 ctxParams
+                  let e2 = foldl (\a (x,_,_) -> a `AppE` (VarE x)) e1 ctxParams
 
                   -- the representations of the parameters, as a list
                   -- representations of the data constructors
                   rcons <- mapM (repcon1 ty (length terms == 1) e2 ctxParams) terms
                   body  <- case f of
-                            Conc -> [| Data1 $(repDT name paramNames)
+                            Conc -> [| Data1 $(repDT nm paramNames)
                                            $(return (ListE rcons)) |]
-                            Abs  -> [| Abstract1 $(repDT name paramNames) |]
+                            Abs  -> [| Abstract1 $(repDT nm paramNames) |]
 
                   let rhs = LamE (cparams) body
 {-                    rhs_type = ForallT (ctx:param) rparams
@@ -266,7 +265,7 @@ repr1 f n = do info' <- reify n
                       ctxRec = map (\(_,t,_) -> ClassP ''Sat [t]) ctxParams
 
                       -- appRep t = foldl (\a p -> a `AppE` (VarE 'rep)) t param
-                      appRec t = foldl (\a p -> a `AppE` (VarE 'dict)) t ctxParams
+                      appRec t = foldl (\a _ -> a `AppE` (VarE 'dict)) t ctxParams
 
                   let inst  = InstanceD (ctxRep ++ ctxRec)
                                 ((ConT ''Rep1) `AppT` (VarT ctx) `AppT` ty)
@@ -274,7 +273,7 @@ repr1 f n = do info' <- reify n
                                   (NormalB (appRec (VarE rTypeName))) []]
 
                   let rSig = SigD rTypeName (ForallT (map PlainTV (ctx : paramNames)) ctxRep
-                              (foldr (\(_,p,_) f -> (ArrowT `AppT` p `AppT` f))
+                              (foldr (\(_,p,_) x -> (ArrowT `AppT` p `AppT` x))
                                      ((ConT (mkName "R1")) `AppT` (VarT ctx) `AppT` ty)
                                      ctxParams))
                   decs <- repr f n
@@ -312,10 +311,10 @@ typeInfo :: DecQ -> Q (Name, [TyVarBndr], [([TyVarBndr], Cxt, Name, Int)], [(Nam
 typeInfo m =
      do d <- m
         case d of
-           d@(DataD _ _ _ _ _) ->
-            return $ (name d, paramsA d, consA d, termsA d)
-           d@(NewtypeD _ _ _ _ _) ->
-            return $ (name d, paramsA d, consA d, termsA d)
+           (DataD _ _ _ _ _) ->
+            return $ (getName d, paramsA d, consA d, termsA d)
+           (NewtypeD _ _ _ _ _) ->
+            return $ (getName d, paramsA d, consA d, termsA d)
            _ -> error ("derive: not a data type declaration: " ++ show d)
 
      where
@@ -336,12 +335,12 @@ typeInfo m =
         conA (NormalC c xs)         = ([], [], simpleName c, length xs)
         conA (RecC c xs)            = ([], [], simpleName c, length xs)
         conA (InfixC _ c _)         = ([], [], simpleName c, 2)
-        conA (ForallC bdrs cxt con) = let (bdrs', cxt', n, l) = conA con
-                                      in  (bdrs ++ bdrs', cxt ++ cxt', n, l)
+        conA (ForallC bdrs cx con) = let (bdrs', cx', n, l) = conA con
+                                      in  (bdrs ++ bdrs', cx ++ cx', n, l)
 
-        name (DataD _ n _ _ _)      = n
-        name (NewtypeD _ n _ _ _)   = n
-        name d                      = error $ show d
+        getName (DataD _ n _ _ _)      = n
+        getName (NewtypeD _ n _ _ _)   = n
+        getName d                      = error $ show d
 
 simpleName :: Name -> Name
 simpleName nm =

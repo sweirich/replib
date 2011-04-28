@@ -366,8 +366,10 @@ newtype T x = T { unT :: x -> x }
 -- | The type constructor for transformations
 newtype M m x = M { unM :: x -> m x }
 
+{-
 -- | The type constructor for queries
 newtype Q q x = Q { unQ :: x -> q }
+-}
 
 -- | The type constructor for readers
 newtype R m x = R { unR :: m x }

@@ -80,20 +80,16 @@ rnf = rnfR rep
 
 
 rnfR :: R a -> a -> a
-rnfR (Data dt cons) x =
+rnfR (Data _ cons) x =
     case (findCon cons x) of
       Val emb reps args -> to emb (map_l rnfR reps args)
 rnfR _ x = x
 
 deepSeqR :: R a -> a -> b -> b
-deepSeqR (Data dt cons) = \x ->
+deepSeqR (Data _ cons) = \x ->
     case (findCon cons x) of
       Val _ reps args -> foldl_l (\ra bb a -> (deepSeqR ra a) . bb) id reps args
 deepSeqR _ = seq
-
-deepSeq_l :: MTup R l -> l -> b -> b
-deepSeq_l MNil Nil = id
-deepSeq_l (rb :+: rs) (b :*: bs) = deepSeqR rb b . deepSeq_l rs bs
 
 ------------------- Generic Sum ----------------------
 -- | Add together all of the @Int@s in a datastructure
@@ -108,13 +104,13 @@ class Rep1 GSumD a => GSum a where
 data GSumD a = GSumD { gsumD :: a -> Int }
 
 gsumR1 :: R1 GSumD a -> a -> Int
-gsumR1 Int1              x  = x
-gsumR1 (Arrow1 r1 r2)    f  = error "urk"
-gsumR1 (Data1 dt cons)   x  =
+gsumR1 Int1           x = x
+gsumR1 (Arrow1 _ _)   _ = error "urk"
+gsumR1 (Data1 _ cons) x =
   case (findCon cons x) of
-      Val emb rec kids ->
+      Val _ rec kids ->
         foldl_l (\ca a b -> (gsumD ca b) + a) 0 rec kids
-gsumR1 _                 x  = 0
+gsumR1 _              _ = 0
 
 instance GSum a => Sat (GSumD a) where
    dict = GSumD gsum
@@ -147,11 +143,11 @@ instance Zero a => Sat (ZeroD a) where
 zeroR1 :: R1 ZeroD a -> a
 zeroR1 Int1 = 0
 zeroR1 Char1 = minBound
-zeroR1 (Arrow1 z1 z2) = \x -> zeroD z2
+zeroR1 (Arrow1 _ z2) = const (zeroD z2)
 zeroR1 Integer1 = 0
 zeroR1 Float1 = 0.0
 zeroR1 Double1 = 0.0
-zeroR1 (Data1 dt (Con emb rec : rest)) = to emb (fromTup zeroD rec)
+zeroR1 (Data1 _ (Con emb rec : _)) = to emb (fromTup zeroD rec)
 zeroR1 IOError1 = userError "Default Error"
 zeroR1 r1 = error ("No zero element of type: " ++ show r1)
 
@@ -185,16 +181,16 @@ genEnum :: (Enum a) => Int -> [a]
 genEnum d = enumFromTo (toEnum 0) (toEnum d)
 
 generateR1 :: R1 GenerateD a -> Int -> [a]
-generateR1 Int1  d = genEnum d
-generateR1 Char1 d = genEnum d
-generateR1 Integer1 d = genEnum d
-generateR1 Float1 d = genEnum d
-generateR1 Double1 d = genEnum d
-generateR1 (Data1 dt cons) 0 = []
-generateR1 (Data1 dt cons) d =
+generateR1 Int1           d = genEnum d
+generateR1 Char1          d = genEnum d
+generateR1 Integer1       d = genEnum d
+generateR1 Float1         d = genEnum d
+generateR1 Double1        d = genEnum d
+generateR1 (Data1 _ _)    0 = []
+generateR1 (Data1 _ cons) d =
   [ to emb l | (Con emb rec) <- cons,
                l <- fromTupM (\x -> generateD x (d-1)) rec]
-generateR1 r1 x = error ("No way to generate type: " ++ show r1)
+generateR1 r1 _ = error ("No way to generate type: " ++ show r1)
 
 instance Generate Int
 instance Generate Char
@@ -222,7 +218,7 @@ class Rep1 EnumerateD a => Enumerate a where
 enumerateR1 :: R1 EnumerateD a -> [a]
 enumerateR1 Int1 =  [minBound .. (maxBound::Int)]
 enumerateR1 Char1 = [minBound .. (maxBound::Char)]
-enumerateR1 (Data1 dt cons) = enumerateCons cons
+enumerateR1 (Data1 _ cons) = enumerateCons cons
 enumerateR1 r1 = error ("No way to enumerate type: " ++ show r1)
 
 enumerateCons :: [Con EnumerateD a] -> [a]
@@ -241,10 +237,10 @@ instance Shrink a => Sat (ShrinkD a) where
 class (Rep1 ShrinkD a) => Shrink a where
     shrink :: a -> [a]
     shrink a = subtrees a ++ shrinkStep a
-               where shrinkStep t = let M _ ts = gmapM1 m a
-                                    in ts
-                     m :: forall a. ShrinkD a -> a -> M a
-                     m dict x = M x ((shrinkD dict) x)
+               where shrinkStep _t = let M _ ts = gmapM1 m a
+                                     in ts
+                     m :: forall b. ShrinkD b -> b -> M b
+                     m d x = M x (shrinkD d x)
 
 data M a = M a [a]
 
@@ -253,7 +249,7 @@ instance Monad M where
  (M x xs) >>= k = M r (rs1 ++ rs2)
    where
      M r rs1 = k x
-     rs2 = [r | x <- xs, let M r _ = k x]
+     rs2 = [r' | x' <- xs, let M r' _ = k x']
 
 instance Shrink Int
 instance Shrink a => Shrink [a]
@@ -290,14 +286,14 @@ instance Lreduce b a => Sat (LreduceD b a) where
     dict = LreduceD { lreduceD = lreduce }
 
 lreduceR1 :: R1 (LreduceD b) a -> b -> a -> b
-lreduceR1 (Data1 dt cons) b a = case (findCon cons a) of
-  Val emb rec args -> foldl_l lreduceD b rec args
-lreduceR1 _               b a = b
+lreduceR1 (Data1 _ cons) b a = case (findCon cons a) of
+  Val _ rec args -> foldl_l lreduceD b rec args
+lreduceR1 _              b _ = b
 
 rreduceR1 :: R1 (RreduceD b) a -> a -> b -> b
-rreduceR1 (Data1 dt cons) a b = case (findCon cons a) of
-  Val emb rec args -> foldr_l rreduceD b rec args
-rreduceR1 _               a b = b
+rreduceR1 (Data1 _ cons) a b = case (findCon cons a) of
+  Val _ rec args -> foldr_l rreduceD b rec args
+rreduceR1 _              _ b = b
 
 -- Instances for standard types
 instance Lreduce b Int
