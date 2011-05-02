@@ -1,0 +1,36 @@
+\documentclass{article}
+
+\usepackage{hcar}
+\usepackage{graphicx}
+\usepackage{paralist}
+
+\begin{document}
+
+\begin{hcarentry}[new]{Unbound}
+\report{Brent Yorgey}
+\status{active development}
+\participants{Stephanie Weirich, Tim Sheard}
+\makeheader
+
+Unbound is a new domain-specific language and library for working with
+binding structure.  Implemented on top of the RepLib generic
+programming framework, it automatically provides operations such as
+alpha equivalence, capture-avoiding substitution, and free variable
+calculation for user-defined data types, requiring only a tiny bit of
+boilerplate on the part of the user.  It features a simple yet rich
+combinator language for binding specifications, including support for
+pattern binding, type annotations, recursive binding, nested binding,
+and multiple atom types.
+
+Work is ongoing to extend Unbound with support for generalized
+abstract data types (GADTs) and other features.
+
+\FurtherReading
+\begin{compactitem}
+\item \url{http://byorgey.wordpress.com/2011/03/28/binders-unbound/}
+\item \url{http://hackage.haskell.org/package/unbound}
+\item \url{http://code.google.com/p/replib/}
+\end{compactitem}
+\end{hcarentry}
+
+\end{document}
