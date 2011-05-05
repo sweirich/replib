@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, MagicHash,
     ScopedTypeVariables, GADTs, Rank2Types
   #-}
-{-# OPTIONS_GHC -fno-warn-orphans -fno-warn-incomplete-patterns #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepAux
@@ -16,7 +15,7 @@
 -----------------------------------------------------------------------------
 module Generics.RepLib.RepAux (
   -- ** Casting operations
-  eqR, cast, castR, gcast, gcastR,
+  eqT, eqR, cast, castR, gcast, gcastR,
 
   -- ** Comparison
   compareR,
@@ -39,9 +38,14 @@ module Generics.RepLib.RepAux (
 import Generics.RepLib.R
 import Generics.RepLib.R1
 import GHC.Base (unsafeCoerce#)
-
+import Data.Type.Equality (EqT(..), (:=:)(..))
 
 ------ Casting
+
+instance EqT R where
+  -- eqT :: R a -> R b -> Maybe (a :=: b)
+  eqT ra rb = 
+     if eqR ra rb then Just (unsafeCoerce# Refl) else Nothing
 
 -- | Determine if two reps are for the same type
 eqR :: R a -> R b -> Bool
@@ -69,18 +73,21 @@ eqRTup (r1 :+: rt1) (r2 :+: rt2) = eqR r1 r2 && eqRTup rt1 rt2
 
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
-castR (ra::R a) (rb::R b) =
-    if eqR ra rb then \(x::a) -> Just (unsafeCoerce# x::b) else const Nothing
+castR ra rb a =
+      case eqT ra rb of 
+         Just Refl -> Just a  
+         Nothing   -> Nothing
+
 
 -- | The type-safe cast operation, implicit arguments
 cast :: forall a b. (Rep a, Rep b) => a -> Maybe b
-cast x = castR (rep :: R a) (rep :: R b) x
+cast x = castR rep rep x
 
 -- | Leibniz equality between types, explicit representations
 gcastR :: forall a b c. R a -> R b -> c a -> Maybe (c b)
-gcastR ra rb = if eqR ra rb
-        then \(x :: c a) -> Just (unsafeCoerce# x :: c b)
-        else const Nothing
+gcastR ra rb x = case eqT ra rb of
+                    Just Refl -> Just x
+                    Nothing   -> Nothing
 
 -- | Leibniz equality between types, implicit representations
 gcast :: forall a b c. (Rep a, Rep b) => c a -> Maybe (c b)
