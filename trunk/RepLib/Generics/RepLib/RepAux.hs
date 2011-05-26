@@ -1,5 +1,10 @@
-{-# LANGUAGE TemplateHaskell, UndecidableInstances, MagicHash,
-    ScopedTypeVariables, GADTs, Rank2Types
+{-# LANGUAGE TemplateHaskell
+           , UndecidableInstances
+           , MagicHash
+           , ScopedTypeVariables
+           , GADTs
+           , Rank2Types
+           , TypeOperators
   #-}
 -----------------------------------------------------------------------------
 -- |
@@ -44,7 +49,7 @@ import Data.Type.Equality (EqT(..), (:=:)(..))
 
 instance EqT R where
   -- eqT :: R a -> R b -> Maybe (a :=: b)
-  eqT ra rb = 
+  eqT ra rb =
      if eqR ra rb then Just (unsafeCoerce# Refl) else Nothing
 
 -- | Determine if two reps are for the same type
@@ -74,8 +79,8 @@ eqRTup (r1 :+: rt1) (r2 :+: rt2) = eqR r1 r2 && eqRTup rt1 rt2
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
 castR ra rb a =
-      case eqT ra rb of 
-         Just Refl -> Just a  
+      case eqT ra rb of
+         Just Refl -> Just a
          Nothing   -> Nothing
 
 
@@ -153,14 +158,15 @@ compareMTup (a :+: as) (b :+: bs) =
 --------- Basic instances and library operations for heterogeneous lists ---------------
 
 -- | A datastructure to store the results of findCon
-data Val ctx a = forall l.  Val (Emb l a) (MTup ctx l) l
+data Val ctx a where
+  Val  :: Emb l a -> MTup ctx l -> l -> Val ctx a
 
 -- | Given a list of constructor representations for a datatype,
 -- determine which constructor formed the datatype.
 findCon :: [Con ctx a] -> a -> Val ctx a
 findCon (Con rcd rec : rest) x = case (from rcd x) of
-       Just ys -> Val rcd rec ys
-       Nothing -> findCon rest x
+  Just ys -> Val rcd rec ys
+  Nothing -> findCon rest x
 
 -- | A fold right operation for heterogeneous lists, that folds a function
 -- expecting a type type representation across each element of the list.
