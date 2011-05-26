@@ -6,6 +6,7 @@
            , Rank2Types
            , TypeOperators
   #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  RepAux
@@ -54,17 +55,19 @@ instance EqT R where
 
 -- | Determine if two reps are for the same type
 eqR :: R a -> R b -> Bool
-eqR Int Int = True
-eqR Char Char = True
-eqR Float Float = True
-eqR Integer Integer = True
-eqR Double Double = True
-eqR (IO t1) (IO t2) = eqR t1 t2
-eqR IOError IOError = True
-eqR (Arrow t1 t2) (Arrow s1 s2) = eqR t1 s1 && eqR t2 s2
-eqR (Data rc1 _) (Data rc2 _) = eqDT rc1 rc2
+eqR Int            Int            = True
+eqR Char           Char           = True
+eqR Integer        Integer        = True
+eqR Float          Float          = True
+eqR Double         Double         = True
+eqR Rational       Rational       = True
+eqR IOError        IOError        = True
+eqR (IO t1)        (IO t2)        = eqR t1 t2
+eqR (Arrow t1 t2)  (Arrow s1 s2)  = eqR t1 s1 && eqR t2 s2
+eqR (Data rc1 _)   (Data rc2 _)   = eqDT rc1 rc2
 eqR (Abstract rc1) (Abstract rc2) = eqDT rc1 rc2
-eqR _ _ = False
+eqR (Equal t1 t2)  (Equal s1 s2)  = eqR t1 s1 && eqR t2 s2
+eqR _ _                           = False
 
 eqDT :: DT -> DT -> Bool
 eqDT (DT str1 rt1) (DT str2 rt2) = str1 == str2 && eqRTup rt1 rt2
@@ -73,8 +76,9 @@ instance Eq DT where
    (==) = eqDT
 
 eqRTup :: MTup R t1 -> MTup R t2 -> Bool
-eqRTup MNil MNil = True
+eqRTup MNil MNil                 = True
 eqRTup (r1 :+: rt1) (r2 :+: rt2) = eqR r1 r2 && eqRTup rt1 rt2
+eqRTup _ _                       = False
 
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
@@ -102,41 +106,58 @@ gcast = gcastR (rep :: R a) (rep :: R b)
 
 -- | Heterogeneous Ordering
 compareR :: R a -> R b -> Ordering
-compareR Int Int = EQ
-compareR Int _   = LT
-compareR _   Int = GT
-compareR Char Char = EQ
-compareR Char _  = LT
-compareR _ Char  = GT
-compareR Integer Integer = EQ
-compareR Integer _  = LT
-compareR _ Integer  = GT
-compareR Float Float = EQ
-compareR Float _  = LT
-compareR _ Float  = GT
+
+compareR Int Int           = EQ
+compareR Int _             = LT
+compareR _   Int           = GT
+
+compareR Char Char         = EQ
+compareR Char _            = LT
+compareR _ Char            = GT
+
+compareR Integer Integer   = EQ
+compareR Integer _         = LT
+compareR _ Integer         = GT
+
+compareR Float Float       = EQ
+compareR Float _           = LT
+compareR _ Float           = GT
+
+compareR Double Double     = EQ
+compareR Double _          = LT
+compareR _ Double          = GT
+
 compareR Rational Rational = EQ
-compareR Rational _  = LT
-compareR _ Rational  = GT
-compareR IOError IOError = EQ
-compareR IOError _  = LT
-compareR _ IOError  = GT
-compareR (IO r1) (IO r2) = compareR r1 r2
-compareR (IO _) _  = LT
-compareR _ (IO _)  = GT
+compareR Rational _        = LT
+compareR _ Rational        = GT
+
+compareR IOError IOError   = EQ
+compareR IOError _         = LT
+compareR _ IOError         = GT
+
+compareR (IO r1) (IO r2)   = compareR r1 r2
+compareR (IO _) _          = LT
+compareR _ (IO _)          = GT
+
 compareR (Arrow r1 r2) (Arrow r3 r4) =
    case compareR r1 r3 of
-      EQ -> compareR r2 r4
+      EQ  -> compareR r2 r4
       ord -> ord
-compareR (Arrow _ _) _  = LT
-compareR _ (Arrow _ _)  = GT
-compareR (Data dt1 _) (Data dt2 _) =
-   compare dt1 dt2
-compareR (Data _ _) _ = LT
-compareR _ (Data _ _) = GT
-compareR (Abstract dt1) (Abstract dt2) =
-   compare dt1 dt2
-compareR (Abstract _) _ = LT
-compareR _ (Abstract _) = GT
+compareR (Arrow _ _) _                 = LT
+compareR _ (Arrow _ _)                 = GT
+
+compareR (Data dt1 _) (Data dt2 _)     = compare dt1 dt2
+compareR (Data _ _) _                  = LT
+compareR _ (Data _ _)                  = GT
+
+compareR (Abstract dt1) (Abstract dt2) = compare dt1 dt2
+compareR (Abstract _) _                = LT
+compareR _ (Abstract _)                = GT
+
+compareR (Equal t1 t2) (Equal s1 s2) =
+  case compareR t1 s1 of
+    EQ  -> compareR t2 s2
+    ord -> ord
 
 instance Ord DT where
   compare (DT str1 reps1) (DT str2 reps2) =
@@ -167,6 +188,7 @@ findCon :: [Con ctx a] -> a -> Val ctx a
 findCon (Con rcd rec : rest) x = case (from rcd x) of
   Just ys -> Val rcd rec ys
   Nothing -> findCon rest x
+findCon [] _ = error "findCon: panic: exhausted constructor list without finding a match"
 
 -- | A fold right operation for heterogeneous lists, that folds a function
 -- expecting a type type representation across each element of the list.
