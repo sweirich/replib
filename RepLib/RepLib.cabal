@@ -4,10 +4,10 @@ license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.6
-tested-with:    GHC == 7.0.1
+tested-with:    GHC == 7.0.1, GHC == 7.0.3
 author:         Stephanie Weirich
 maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
-		Chris Casinghino <ccasin@cis.upenn.edu>
+                Chris Casinghino <ccasin@cis.upenn.edu>
                 Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       http://code.google.com/p/replib/
 category:       Generics
@@ -20,7 +20,7 @@ Library
   build-depends: base >= 4.3 && < 5, 
                  template-haskell >= 2.4 && < 2.6, 
                  mtl >= 2.0 && < 2.1,
-					  type-equality >= 0.1
+                 type-equality >= 0.1
   exposed-modules:
     Generics.RepLib,
     Generics.RepLib.R,

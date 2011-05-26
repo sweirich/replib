@@ -1,5 +1,11 @@
-{-# LANGUAGE TemplateHaskell, UndecidableInstances, GADTs, ScopedTypeVariables,
-    MultiParamTypeClasses, FlexibleInstances, TypeSynonymInstances
+{-# LANGUAGE TemplateHaskell
+           , UndecidableInstances
+           , GADTs
+           , ScopedTypeVariables
+           , MultiParamTypeClasses
+           , FlexibleInstances
+           , TypeSynonymInstances
+           , TypeOperators
  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
@@ -19,6 +25,7 @@
 module Generics.RepLib.R1 where
 
 import Generics.RepLib.R
+import Data.Type.Equality
 
 ---------- Basic infrastructure
 
@@ -34,7 +41,7 @@ data R1 ctx a where
     Arrow1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a -> b)
     Data1     :: DT -> [Con ctx a] -> R1 ctx a
     Abstract1 :: DT -> R1 ctx a
-    Equal1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (Equal a b)
+    Equal1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a :=: b)
 class Sat a where dict :: a
 
 class Rep a => Rep1 ctx a where rep1 :: R1 ctx a
@@ -91,7 +98,7 @@ instance (Rep a, Rep b, Sat (ctx a), Sat (ctx b)) =>
          Rep1 ctx (a -> b) where rep1 = Arrow1 dict dict
 
 instance (Rep a, Rep b, Sat (ctx a), Sat (ctx b)) =>
-         Rep1 ctx (Equal a b) where rep1 = Equal1 dict dict
+         Rep1 ctx (a :=: b) where rep1 = Equal1 dict dict
 
 -- Data structures
 
