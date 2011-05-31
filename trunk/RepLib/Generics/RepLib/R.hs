@@ -117,14 +117,13 @@ instance Ord (R a) where
 
 instance Rep Int where rep = Int
 instance Rep Char where rep = Char
+instance Rep Integer where rep = Integer
+instance Rep Float where rep = Float
 instance Rep Double where rep = Double
 instance Rep Rational where rep = Rational
-instance Rep Float where rep = Float
-instance Rep Integer where rep = Integer
-instance Rep a => Rep (IO a) where rep = IO rep
 instance Rep IOError where rep = IOError
+instance Rep a => Rep (IO a) where rep = IO rep
 instance (Rep a, Rep b) => Rep (a -> b) where rep = Arrow rep rep
-
 instance (Rep a, Rep b) => Rep (a :=: b) where rep = Equal rep rep
 
 -- Unit
@@ -149,7 +148,7 @@ instance (Rep a, Rep b) => Rep (a,b) where
 
 rTup2 :: forall a b. (Rep a, Rep b) => R (a,b)
 rTup2 = let args =  ((rep :: R a) :+: (rep :: R b) :+: MNil) in
-			Data (DT "," args) [ Con rPairEmb args ]
+			Data (DT "(,)" args) [ Con rPairEmb args ]
 
 rPairEmb :: Emb (a :*: b :*: Nil) (a,b)
 rPairEmb =
