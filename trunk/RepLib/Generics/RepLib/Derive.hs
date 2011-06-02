@@ -28,6 +28,7 @@ import Generics.RepLib.R
 import Generics.RepLib.R1
 import Language.Haskell.TH
 import Data.List (nub)
+import Data.Maybe (catMaybes)
 
 -- | Given a type, produce its representation.
 repty :: Type -> Exp
@@ -61,14 +62,18 @@ rName1 n =
 --    Currently, we don't handle data constructors with record components.
 
 repcon :: Type ->  -- The type that this is a constructor for (applied to all of its parameters)
-          ConstrInfo ->
---          (Name, [(Maybe Name, Type)]) ->  -- data constructor name * [record name * type]
+          ConstrInfo ->  -- information about the contstructor
 	  Q Exp
-repcon d constr =
-	 let rargs = foldr (\ t tl -> [| $(return $ repty t) :+: $(tl) |])
-                           [| MNil |]
-                           (map fieldType . constrFields $ constr)
-         in  [| Con $(remb d constr) $(rargs) |]
+repcon d constr
+  | null (constrCxt constr) = [| Just $con |]
+  | otherwise               = gadtCase constr con
+  where rargs = foldr (\ t tl -> [| $(return $ repty t) :+: $(tl) |])
+                      [| MNil |]
+                      (map fieldType . constrFields $ constr)
+        con   = [| Con $(remb d constr) $(rargs) |]
+
+gadtCase :: ConstrInfo -> Q Exp -> Q Exp
+gadtCase constr con = undefined -- XXX
 
 -- the "from" function that coerces from an "a" to the arguments
 rfrom :: Type -> ConstrInfo -> Q Exp
@@ -126,7 +131,7 @@ repr :: Flag -> Name -> Q [Dec]
 repr f n = do info' <- reify n
               case info' of
                TyConI d -> do
-                  let dInfo      = typeInfo d -- (nm, param, _, terms)  XXX
+                  let dInfo      = typeInfo d
                       paramNames = map tyVarBndrName (typeParams dInfo)
                       nm         = typeName dInfo
                       constrs    = typeConstrs dInfo
@@ -137,7 +142,8 @@ repr f n = do info' <- reify n
                   -- representations of the data constructors
                   rcons <- mapM (repcon ty) constrs
                   body  <- case f of
-                     Conc -> [| Data $(repDT nm paramNames) $(return (ListE rcons)) |]
+                     Conc -> [| Data $(repDT nm paramNames)
+                                     (catMaybes $(return (ListE rcons))) |]
                      Abs  -> [| Abstract $(repDT nm paramNames) |]
                   let ctx = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
                   let rTypeName :: Name
@@ -198,7 +204,7 @@ repr1 :: Flag -> Name -> Q [Dec]
 repr1 f n = do info' <- reify n
                case info' of
                 TyConI d -> do
-                  let dInfo      = typeInfo d -- (nm, param, _, terms)  XXX
+                  let dInfo      = typeInfo d
                       paramNames = map tyVarBndrName (typeParams dInfo)
                       nm         = typeName dInfo
                       constrs    = typeConstrs dInfo
