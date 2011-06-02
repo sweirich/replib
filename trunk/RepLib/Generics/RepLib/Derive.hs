@@ -82,7 +82,7 @@ rfrom _ constr = do
       outbod = foldr (\v tl -> (ConE (mkName (":*:"))) `AppE` (VarE v) `AppE` tl)
                (ConE 'Nil) vars
       success = Match outpat (NormalB ((ConE 'Just) `AppE` outbod)) []
-      outcase x = if (length (constrFields constr) == 1)
+      outcase x = if isOnlyConstr constr
                     then CaseE x [success]
                     else CaseE x
                            [success, Match WildP  (NormalB (ConE 'Nothing)) [] ]
@@ -165,14 +165,13 @@ reprs f ns = foldl (\qd n -> do decs1 <- repr f n
 
 ctx_params :: Type ->    -- type we are defining
               Name ->    -- name of the type variable "ctx"
-				  [(Name, [(Maybe Name, Type)])] -> -- list of constructor names
-				                                    -- and the types of their arguments (plus record labels)
+              [ConstrInfo] ->
             Q [(Name, Type, Type)]
 				-- name of termvariable "pt"
             -- (ctx t)
             -- t
-ctx_params _ty ctxName l = do
-   let tys = nub (map snd (foldr (++) [] (map snd l)))
+ctx_params _ty ctxName constrs = do
+   let tys = nub . map fieldType . concatMap constrFields $ constrs
    mapM (\t -> do n <- newName "p"
                   let ctx_t = (VarT ctxName) `AppT` t
                   return (n, ctx_t, t)) tys
@@ -182,31 +181,34 @@ lookupName t l ((n, _t1, t2):rest) = if t == t2 then n else lookupName t l rest
 lookupName t l [] = error ("lookupName: Cannot find type " ++ show t ++ " in " ++ show l)
 
 repcon1 :: Type                               -- result type of the constructor
-          -> Bool
           -> Exp                              -- recursive call (rList1 ra pa)
           -> [(Name,Type,Type)]               -- ctxParams
-          -> (Name, [(Maybe Name, Type)])     -- name of data constructor + args
+          -> ConstrInfo
           -> Q Exp
-repcon1 d single rd1 ctxParams (nm, sttys) =
-       let rec = foldr (\ (_,t) tl ->
-                    let expQ = (VarE (lookupName t ctxParams ctxParams))
-                    in [| $(return expQ) :+: $(tl) |]) [| MNil |] sttys in
-       [| Con $(remb single d (nm,sttys)) $(rec) |]
+repcon1 d rd1 ctxParams constr =
+       let rec = foldr (\ ty tl ->
+                         let expQ = (VarE (lookupName ty ctxParams ctxParams))
+                         in [| $(return expQ) :+: $(tl) |])
+                       [| MNil |]
+                       (map fieldType . constrFields $ constr)
+       in  [| Con $(remb d constr) $(rec) |]
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
 repr1 f n = do info' <- reify n
                case info' of
                 TyConI d -> do
-                  let (nm, param, _, terms) = typeInfo d
-                  let paramNames = map tyVarBndrName param
+                  let dInfo      = typeInfo d -- (nm, param, _, terms)  XXX
+                      paramNames = map tyVarBndrName (typeParams dInfo)
+                      nm         = typeName dInfo
+                      constrs    = typeConstrs dInfo
                   -- the type that we are defining, applied to its parameters.
                   let ty = foldl (\x p -> x `AppT` (VarT p)) (ConT nm) paramNames
                   let rTypeName = rName1 n
 
                   ctx <- newName "ctx"
                   ctxParams <- case f of
-                                    Conc -> ctx_params ty ctx terms
+                                    Conc -> ctx_params ty ctx constrs
                                     Abs  -> return []
 
                   -- parameters to the rep function
@@ -219,7 +221,7 @@ repr1 f n = do info' <- reify n
 
                   -- the representations of the parameters, as a list
                   -- representations of the data constructors
-                  rcons <- mapM (repcon1 ty (length terms == 1) e2 ctxParams) terms
+                  rcons <- mapM (repcon1 ty e2 ctxParams) constrs
                   body  <- case f of
                             Conc -> [| Data1 $(repDT nm paramNames)
                                            $(return (ListE rcons)) |]
@@ -286,9 +288,12 @@ data ConstrInfo = ConstrInfo { constrName    :: Name   -- careful, this is NOT
                              , constrBinders :: [TyVarBndr]
                              , constrCxt     :: Cxt
                              , constrFields  :: [FieldInfo]
+                             , isOnlyConstr  :: Bool  -- is this the only
+                                                      -- constructor of its type?
                              }
 
-mkConstr nm = ConstrInfo nm [] [] []
+mkConstr :: Name -> ConstrInfo
+mkConstr nm = ConstrInfo nm [] [] [] False
 
 data FieldInfo = FieldInfo { fieldName :: Maybe Name
                            , fieldType :: Type
@@ -310,8 +315,8 @@ typeInfo d = case d of
     paramsA (DataD _ _ ps _ _)    = ps
     paramsA (NewtypeD _ _ ps _ _) = ps
 
-    consA (DataD _ _ _ cs _)      = map conA cs
-    consA (NewtypeD _ _ _ c _)    = [ conA c ]
+    consA (DataD _ _ _ cs _)      = rememberOnly $ map conA cs
+    consA (NewtypeD _ _ _ c _)    = rememberOnly $ [ conA c ]
 
     conA (NormalC c xs)           = (mkConstr c)
                                       { constrFields  = map normalField xs }
@@ -335,6 +340,10 @@ typeInfo d = case d of
                                     { fieldName = Just $ simpleName n
                                     , fieldType = t
                                     }
+
+rememberOnly :: [ConstrInfo] -> [ConstrInfo]
+rememberOnly [con] = [con { isOnlyConstr = True }]
+rememberOnly cons  = cons
 
 simpleName :: Name -> Name
 simpleName nm =
