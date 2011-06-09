@@ -70,17 +70,25 @@ rName1 n =
 -- As our representation of data constructors evolves, so must this definition.
 --    Currently, we don't handle data constructors with record components.
 
+-- | Generic constructor representation generation -- works for R or R1.
+repconG :: Type ->         -- type this is a constructor for
+           TypeInfo ->     -- information about the type
+           ConstrInfo ->   -- information about the constructor
+           [Q Exp] ->      -- contents of the second argument to Con, which will go in an MTup
+           Q Exp
+repconG d info constr args
+  | null (constrCxt constr) = [| Just $con |]
+  | otherwise               = gadtCase (typeParams info) constr con
+  where mtup = foldr (\ t tl -> [| $(t) :+: $(tl) |]) [| MNil |] args
+        con  = [| Con $(remb d constr) $(mtup) |]
+
+-- | Generate an R-type constructor representation.
 repcon :: Type ->  -- The type that this is a constructor for (applied to all of its parameters)
           TypeInfo ->    -- information about the type
           ConstrInfo ->  -- information about the contstructor
 	  Q Exp
 repcon d info constr
-  | null (constrCxt constr) = [| Just $con |]
-  | otherwise               = gadtCase (typeParams info) constr con
-  where rargs = foldr (\ t tl -> [| $(return $ repty t) :+: $(tl) |])
-                      [| MNil |]
-                      (map fieldType . constrFields $ constr)
-        con   = [| Con $(remb d constr) $(rargs) |]
+  = repconG d info constr (map (return . repty . fieldType) . constrFields $ constr)
 
 gadtCase :: [TyVarBndr] -> ConstrInfo -> Q Exp -> Q Exp
 gadtCase tyVars constr conQ = do
@@ -93,17 +101,7 @@ gadtCase tyVars constr conQ = do
     ]
 
       -- have to do the above in this long annoying explicit way
-      -- because I don't know how to splice in a pattern =(
-
-      -- this fails with an error:
-
-      -- [| case $(matcher constr) of
-      --     $(successCase constr) ->
-      --     _                     -> Nothing }
-      -- |]
-
-      -- Generics/RepLib/Derive.hs:78:7:
-      --    Parse error in pattern: $(successCase constr)
+      -- because splicing patterns is not supported.
 
 typeRefinements :: [TyVarBndr] -> ConstrInfo -> Q (Exp, Pat)
 typeRefinements tyVars constr =
@@ -246,18 +244,45 @@ reprs f ns = concat <$> mapM (repr f) ns
 -- The difficult part of repr1 is that we need to paramerize over reps for types that
 -- appear as arguments of constructors, as well as the reps of parameters.
 
-data CtxParam = CtxParam { ctxParamName :: Name
-                         , ctxParamType :: Type
+-- The constructor for the R1 representation takes one argument
+-- corresponding to each constructor, providing contexts for the
+-- arguments to that constructor.  Some of them are just (tuples of)
+-- applications of ctx to some type.  However, for GADT constructors,
+-- the argument is a polymorphic function which takes an equality
+-- proof (in order to refine one or more type parameters) and then
+-- returns some contexts.  For example, for
+--
+-- data Foo a where
+--   Bar  :: Int -> Foo Int
+--   Bar2 :: Foo b -> Foo [b]
+--   Bar3 :: Foo c -> Foo d -> Foo (c,d)
+--
+-- we have
+--
+-- rFoo1 ::
+-- forall ctx a. Rep a =>
+-- ctx Int ->
+-- (forall b. a :=: [b] -> ctx (Foo b)) ->
+-- (forall c d. a :=: (c,d) -> (ctx (Foo c), ctx (Foo d))) ->
+-- R1 ctx (Foo a)
+
+data CtxParam = CtxParam { cpName    :: Name            -- The argument name
+                         , cpType    :: Type            -- The argument type
+                         , cpEqs     :: [(Name, Type)]  -- Required equality proofs
+                         , cpPayload :: Type            -- What you get after supplying
+                                                        -- the proofs
                          }
 
-ctx_params :: Type ->    -- type we are defining
-              Name ->    -- name of the type variable "ctx"
-              [ConstrInfo] ->
+-- | Generate the context parameters (see above) for a given type.
+ctx_params :: Type ->          -- type we are defining
+              Name ->          -- name of the type variable "ctx"
+              [ConstrInfo] ->  -- information about the type's constructors
             Q [CtxParam]
 ctx_params _ty ctxName constrs = mapM (genCtxParam ctxName) constrs
 
+-- | Generate a context parameter for a single constructor.
 genCtxParam :: Name -> ConstrInfo -> Q CtxParam
-genCtxParam ctxName constr = newName "c" >>= \c -> CtxParam c pType
+genCtxParam ctxName constr = newName "c" >>= \c -> CtxParam c pType eqs payload
   where eqs = extractParamEqualities (constrCxt constr)
         pType | null eqs  = payload
               | otherwise = guarded
@@ -278,22 +303,13 @@ tyFV ListT             = S.empty
 tyFV (AppT ty1 ty2)    = tyFV ty1 `S.union` tyFV ty2
 tyFV (SigT ty _)       = tyFV ty
 
-lookupName :: Type -> [(Name, Type, Type)] -> [(Name, Type, Type)] ->  Name
-lookupName t l ((n, _t1, t2):rest) = if t == t2 then n else lookupName t l rest
-lookupName t l [] = error ("lookupName: Cannot find type " ++ show t ++ " in " ++ show l)
-
-repcon1 :: Type                               -- result type of the constructor
-          -> Exp                              -- recursive call (rList1 ra pa)
-          -> [(Name,Type,Type)]               -- ctxParams
-          -> ConstrInfo
-          -> Q Exp
-repcon1 d rd1 ctxParams constr =
-       let rec = foldr (\ ty tl ->
-                         let expQ = (VarE (lookupName ty ctxParams ctxParams))
-                         in [| $(return expQ) :+: $(tl) |])
-                       [| MNil |]
-                       (map fieldType . constrFields $ constr)
-       in  [| Con $(remb d constr) $(rec) |]
+repcon1 :: Type                -- result type of the constructor
+        -> TypeInfo            -- information about the type
+        -> CtxParam            -- corresponding context parameter
+        -> ConstrInfo          -- info about the constructor
+        -> Q Exp
+repcon1 d info ctxParam constr = repconG d info constr
+  -- XXX working here -- need to pattern match on result of applying context parameter...
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
@@ -315,8 +331,6 @@ repr1 f n = do info' <- reify n
 
                   -- XXX need to use the new ctxParams correctly below
 
-                  -- parameters to the rep function
-                  -- let rparams = map (\p -> SigP (VarP p) ((ConT ''R) `AppT` (VarT p))) param
                   let cparams = map (\(x,t,_) -> SigP (VarP x) t) ctxParams
 
                   -- the recursive call of the rep function
