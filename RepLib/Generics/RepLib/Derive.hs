@@ -32,6 +32,7 @@ import Generics.RepLib.R
 import Generics.RepLib.R1
 import Language.Haskell.TH
 import Data.List (nub, foldl')
+import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
 
@@ -109,9 +110,12 @@ typeRefinements tyVars constr =
       fmap ((TupE *** TupP) . unzip)
     . sequence
     . map genRefinement
-    . catMaybes . map extractLHSVars
-    . catMaybes . map extractEq
+    . extractParamEqualities
     $ constrCxt constr
+
+extractParamEqualities :: [TyVarBndr] -> Cxt -> [(Name, Type)]
+extractParamEqualities tyVars = filterWith extractLHSVars
+                              . filterWith extractEq
   where extractEq (EqualP ty1 ty2)  = Just (ty1, ty2)
         extractEq _                 = Nothing
 
@@ -119,6 +123,8 @@ typeRefinements tyVars constr =
         extractLHSVars _            = Nothing
         -- Note, assuming here that equalities involving type parameters
         -- will always have the type parameter on the LHS...
+
+        filterWith f = catMaybes . map f
 
 genRefinement :: (Name, Type) -> Q (Exp, Pat)
 genRefinement (n, ty) = do
@@ -228,6 +234,7 @@ repr f n = do info' <- reify n
                       rType = ValD (VarP rTypeName) (NormalB body) []
                   let inst  = InstanceD ctx ((ConT (mkName "Rep")) `AppT` ty)
                                  [ValD (VarP (mkName "rep")) (NormalB (VarE rTypeName)) []]
+
                   return [rSig, rType, inst]
 
 reprs :: Flag -> [Name] -> Q [Dec]
@@ -239,18 +246,37 @@ reprs f ns = concat <$> mapM (repr f) ns
 -- The difficult part of repr1 is that we need to paramerize over reps for types that
 -- appear as arguments of constructors, as well as the reps of parameters.
 
+data CtxParam = CtxParam { ctxParamName :: Name
+                         , ctxParamType :: Type
+                         }
+
 ctx_params :: Type ->    -- type we are defining
               Name ->    -- name of the type variable "ctx"
               [ConstrInfo] ->
-            Q [(Name, Type, Type)]
-				-- name of termvariable "pt"
-            -- (ctx t)
-            -- t
-ctx_params _ty ctxName constrs = do
-   let tys = nub . map fieldType . concatMap constrFields $ constrs
-   mapM (\t -> do n <- newName "p"
-                  let ctx_t = (VarT ctxName) `AppT` t
-                  return (n, ctx_t, t)) tys
+            Q [CtxParam]
+ctx_params _ty ctxName constrs = mapM (genCtxParam ctxName) constrs
+
+genCtxParam :: Name -> ConstrInfo -> Q CtxParam
+genCtxParam ctxName constr = newName "c" >>= \c -> CtxParam c pType
+  where eqs = extractParamEqualities (constrCxt constr)
+        pType | null eqs  = payload
+              | otherwise = guarded
+        payload = TupE . map (VarT ctxName `AppT`) . constrFields $ constr
+        guarded = ForallT vars [] (foldr (AppT . AppT ArrowT) payload proofs)
+        vars    = map PlainTV $ concatMap (S.toList . tyFV . fst) eqs
+        proofs  = map mkProof eqs
+        mkProof (n, ty) = AppT (AppT (ConT (mkName ":=:")) (VarT n)) ty
+
+-- | Compute the free type variables of a type.
+tyFV :: Type -> S.Set Name
+tyFV (ForallT vs _ ty) = tyFV ty `S.difference` (S.fromList . map tyVarBndrName $ vs)
+tyFV (VarT n)          = S.singleton n
+tyFV (ConT _)          = S.empty
+tyFV (TupleT _)        = S.empty
+tyFV ArrowT            = S.empty
+tyFV ListT             = S.empty
+tyFV (AppT ty1 ty2)    = tyFV ty1 `S.union` tyFV ty2
+tyFV (SigT ty _)       = tyFV ty
 
 lookupName :: Type -> [(Name, Type, Type)] -> [(Name, Type, Type)] ->  Name
 lookupName t l ((n, _t1, t2):rest) = if t == t2 then n else lookupName t l rest
@@ -286,6 +312,8 @@ repr1 f n = do info' <- reify n
                   ctxParams <- case f of
                                     Conc -> ctx_params ty ctx constrs
                                     Abs  -> return []
+
+                  -- XXX need to use the new ctxParams correctly below
 
                   -- parameters to the rep function
                   -- let rparams = map (\p -> SigP (VarP p) ((ConT ''R) `AppT` (VarT p))) param
