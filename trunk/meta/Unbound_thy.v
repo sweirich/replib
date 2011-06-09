@@ -257,13 +257,8 @@ Proof.
 apply_mutual_ind term_mutind. default_simp.
 intros.
 simpl.
-remember (find n x1) as p.
-destruct p. 
-eapply degree_wrt_term_var_b with (n4 := n0). 
-Focus 3.
-default_simp.
-Focus 5.
 Admitted.
+
 
 (* end hide *)
 

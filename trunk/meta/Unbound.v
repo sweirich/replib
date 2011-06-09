@@ -6,6 +6,7 @@ Add LoadPath "metatheory".
 
 Require Import Metatheory.
 Require Import CoqEqDec.
+Require Import Arith.
 
 (** syntax *)
 Definition name := var.
@@ -31,46 +32,27 @@ Definition eq_mode_dec : forall x y: mode, { x = y } + { x <> y }.
 decide equality.
 Qed.
 
-Print EqDec_eq.
-
 Instance EqDec_mode : EqDec_eq mode := eq_mode_dec.
 
 (** aeq **)
 Fixpoint aeq (m:mode) (t1:term) (t2:term) : bool :=
   match t1, t2 with
     | var_b n11 n12, var_b n21 n22 =>
-      if (n11 == n21) then beq_nat n12 n22 else false
+      if beq_nat n11 n21 then beq_nat n12 n22 else false
     | var_f x, var_f y =>  match m with 
-                           | Term =>  if x == y then true else false
-                           | Pat  => false
+                           | Term => if eq_var x y then true else false
+                           | Pat  => true
                            end
     | bind p1 t1, bind p2 t2 => 
        aeq Pat p1 p2 && aeq Term t1 t2
     | data k1, data k2 => beq_nat k1 k2
     | app t1 t2, app u1 u2 => aeq m t1 u1 && aeq m t2 u2
-    | rebind p1 t1, rebind p2 t2 => aeq Pat p1 p2 && aeq Pat p2 t2
+    | rebind p1 t1, rebind p2 t2 => aeq Pat p1 p2 && aeq Pat t1 t2
     | rec p1, rec p2 => aeq Pat p1 p2
     | emb t1, emb t2 => aeq Term t1 t2
-    | shift p1, shift p2 => aeq m p1 p2
+    | shift p1, shift p2 => aeq Pat p1 p2
     | _ , _ => false
   end.
-
-(** free variables *)
-Fixpoint fv (m:mode) (t_5:term) : vars :=
-  match t_5 with
-  | (var_b n1 n2) => {}
-  | (var_f x) => match m with
-                  | Term => {{x}}
-                  | Pat  => {}
-                 end
-  | (bind p t) => (fv Pat p) \u (fv m t)
-  | (data K) => {}
-  | (app t1 t2) => (fv m t1) \u (fv m t2)
-  | (rebind p t) => (fv Pat p) \u (fv m t)
-  | (rec p) => (fv m p)
-  | (emb t) => (fv Term t)
-  | (shift p) => (fv m p)
-end.
 
 
 (* Strong pattern equality. Names must match *)
@@ -90,6 +72,22 @@ Fixpoint peq (t1:term) (t2:term) : bool :=
     | _ , _ => false
   end.
 
+(** free variables *)
+Fixpoint fv (m:mode) (t_5:term) : vars :=
+  match t_5 with
+  | (var_b n1 n2) => {}
+  | (var_f x) => match m with
+                  | Term => {{x}}
+                  | Pat  => {}
+                 end
+  | (bind p t) => (fv Pat p) \u (fv Term t)
+  | (data K) => {}
+  | (app t1 t2) => (fv m t1) \u (fv m t2)
+  | (rebind p t) => (fv Pat p) \u (fv Pat t)
+  | (rec p) => (fv Pat p)
+  | (emb t) => (fv Term t)
+  | (shift p) => (fv Pat p)
+end.
 
 (** binders *)
 Fixpoint binders (t_5:term) : list var :=
@@ -106,7 +104,6 @@ Fixpoint binders (t_5:term) : list var :=
 end.
 
 
-
 Inductive FindResult := 
   | index : nat -> FindResult
   | seen  : nat -> FindResult.
@@ -120,6 +117,7 @@ Definition FRappend (f1 : FindResult) (f2 : FindResult) :=
 
 Definition FRempty : FindResult := seen 0.
 
+
 Fixpoint find (x : atom) (p : term) : FindResult :=
   match p with 
   | var_b x y => FRempty
@@ -132,6 +130,8 @@ Fixpoint find (x : atom) (p : term) : FindResult :=
   | bind p t => FRempty
   | shift t => FRempty
   end.
+
+Require Import Arith.Bool_nat.
 
 Fixpoint close_term_wrt_term_rec (n1 : nat) (p : term) (t1 : term) {struct t1} 
 : term :=
@@ -207,21 +207,196 @@ Definition open_term_wrt_term p t__6 := open_term_wrt_term_rec 0 t__6 p.
 
 
 (** substitutions *)
-Fixpoint subst_term (t_5:term) (x5:name) (t__6:term) {struct t__6} : term :=
+Fixpoint subst (m:mode) (t_5:term) (x5:name) (t__6:term) {struct t__6} : term :=
   match t__6 with
   | (var_b n1 n2) => var_b n1 n2
-  | (var_f x) => (if eq_var x x5 then t_5 else (var_f x))
-  | (bind p t) => bind (subst_term t_5 x5 p) (subst_term t_5 x5 t)
+  | (var_f x) => match m with
+	| Term => (if eq_var x x5 then t_5 else (var_f x))
+	| Pat  => var_f x
+        end
+  | (bind p t) => bind (subst Pat t_5 x5 p) (subst Term t_5 x5 t)
   | (data K) => data K
-  | (app t1 t2) => app (subst_term t_5 x5 t1) (subst_term t_5 x5 t2)
-  | (rebind p t) => rebind (subst_term t_5 x5 p) (subst_term t_5 x5 t)
-  | (rec p) => rec (subst_term t_5 x5 p)
-  | (emb t) => emb (subst_term t_5 x5 t)
-  | (shift p) => shift (subst_term t_5 x5 p)
+  | (app t1 t2) => app (subst m t_5 x5 t1) (subst m t_5 x5 t2)
+  | (rebind p t) => rebind (subst Pat t_5 x5 p) (subst Pat t_5 x5 t)
+  | (rec p) => rec (subst Pat t_5 x5 p)
+  | (emb t) => emb (subst Term t_5 x5 t)
+  | (shift p) => shift (subst Pat t_5 x5 p)
+end.
+
+Definition perm := list (name*name).
+
+(* Inductive relation specifying the act of freshening a 
+  pattern with a list of names, producing a new term and a permutation. 
+  This relation doesn't actually require that the new names are 
+  disjoint from the old ones.
+*)
+
+Inductive fresh : term -> term -> list name -> perm -> Prop :=
+  | fresh_var_f : forall x y,
+      fresh (var_f x) (var_f y) [y] [(x,y)]
+  | fresh_app   : forall t1 t2 t1' t2' ns1 ns2 perm1 perm2,
+      fresh t1 t1' ns1 perm1 ->
+      fresh t2 t2' ns2 perm2 ->
+      fresh (app t1 t2) (app t1' t2') (ns1++ns2) (perm2 ++ perm1)
+  | fresh_rebind : forall p1 p1' t1 t1' ns1 ns2 perm1 perm2, 
+      fresh p1 p1' ns1 perm1 ->
+      fresh t1 t1' ns2 perm2 ->
+      fresh (rebind p1 t1) (rebind p1' t1') (ns1++ns2) (perm2++perm1)
+  | fresh_rec : forall p1 p1' ns1 perm1, 
+      fresh p1 p1' ns1 perm1 ->
+      fresh (rec p1) (rec p1') ns1 perm1
+  | fresh_emb : forall t, 
+      fresh (emb t) (emb t) nil nil
+  | fresh_var_b : forall n1 n2,
+      fresh (var_b n1 n2) (var_b n1 n2) nil nil
+  | fresh_bind : forall p1 t1, 
+      fresh (bind p1 t1) (bind p1 t1) nil nil
+  | fresh_data : forall K, 
+      fresh (data K) (data K) nil nil.
+
+Hint Constructors fresh.
+
+
+(* Function that freshens the binding variables in a pattern. *)
+
+Fixpoint freshen (t:term) (ns:list name) (p: perm) : term * list name * perm :=
+  match t with
+  | (var_b n1 n2) => (var_b n1 n2, ns, p)
+  | (var_f x) =>  match ns with 
+                   | nil => (var_f x, ns, p) 
+                   | y :: ns => (var_f y, ns, (x,y)::p)
+                  end 
+  | (bind pat t) => (bind pat t, ns, p)
+  | (data K) => (data K, ns, p)
+  | (app t1 t2) =>
+     match (freshen t1 ns p) with
+     | ( t1', ns', p' ) => match (freshen t2 ns' p') with
+        | ( t2', ns'', p'') => (app t1' t2', ns'', p'')
+        end
+     end
+  | (rebind pat t) => match (freshen pat ns p) with
+     | ( pat', ns', p' ) => match (freshen t ns' p') with
+        | ( term', ns'', p'') => (rebind pat' term', ns'', p'')
+        end
+     end
+  | (rec pat) => match (freshen pat ns p) with
+     | ( pat', ns', p' ) => (rec pat', ns', p')
+     end
+  | (emb t) => (emb t, ns, p)
+  | (shift pat) => (shift pat, ns, p)
 end.
 
 
 
+Fixpoint swap_var (p : perm) (v : var) : var :=
+  match p with 
+  | nil => v
+  | ( (x,y) :: ps) => 
+    if eq_var x v then y else swap_var ps v
+(*    else if eq_var y v then x else swap_var ps v *)
+  end.
+
+(* Use a permutation to rename variables in a term. 
+*)
+
+Fixpoint swaps (p : perm) (t: term) : term :=
+   match t with
+    | var_f x1 => var_f (swap_var p x1)
+    | var_b n1 n2 => var_b n1 n2
+    | bind p1 t2 => bind (swaps p p1) (swaps p t2)
+    | data K1 => data K1
+    | app t2 t3 => app (swaps p t2) (swaps p t3)
+    | rebind p1 t2 => rebind (swaps p p1) (swaps p t2)
+    | rec p1 => rec (swaps p p1)
+    | emb t2 => emb (swaps p t2)
+    | shift p1 => shift (swaps p p1)
+  end.
+
+(*******************************************************)
+
+
+Lemma aeq_refl : forall t m, aeq m t t = true.
+induction t; intro m; destruct m; simpl in *; 
+   try (rewrite <- beq_nat_refl); 
+   try (rewrite (IHt1 Pat));
+   try (rewrite (IHt2 Pat));
+   try (rewrite (IHt1 Term));
+   try (rewrite (IHt2 Term));
+   auto using beq_nat_refl.
+destruct (n == n); auto.
+Qed.
+
+Lemma aeq_freshen_pat : forall pat pat1 pat2 ns1 ns2 perm1 perm2,
+  fresh pat1 pat ns1 perm1 ->
+  fresh pat2 pat ns2 perm2 ->
+  aeq Pat pat1 pat2 = true.
+induction pat; intros pat1' pat2' ns1' ns2' perm1' perm2' H1 H2; 
+    inversion H1; inversion H2; subst; simpl; auto.
+rewrite <- (beq_nat_refl n). rewrite <- beq_nat_refl. auto.
+rewrite aeq_refl. rewrite aeq_refl. auto.
+rewrite <- beq_nat_refl. auto.
+rewrite (IHpat1 _ _ ns1 ns0 perm1 perm0); auto.  
+rewrite (IHpat2 _ _ ns2 ns3 perm2 perm3); auto.
+rewrite (IHpat1 _ _ ns1 ns0 perm1 perm0); auto.  
+rewrite (IHpat2 _ _ ns2 ns3 perm2 perm3); auto.
+rewrite (IHpat _ _ ns1' ns2' perm1' perm2'); auto.
+rewrite aeq_refl. auto.
+Qed.  
+
+
+Lemma swap_id : forall t, swaps nil t = t.
+induction t; simpl; try (rewrite IHt); try (rewrite IHt1); try (rewrite IHt2); auto.
+Qed.
+
+
+Lemma fresh_freshen : forall p p' ns ps,
+  fresh p p' ns ps -> forall ns' ps', freshen p (ns ++ ns') ps' = (p', ns', ps ++ ps')
+.
+intros p p' ns ps H.
+induction H; simpl; auto; intros ns' ps'; 
+   simpl_env; 
+   try (rewrite IHfresh1; rewrite IHfresh2; auto); auto.
+rewrite IHfresh; auto.
+Qed.
+
+Lemma app_nil : forall a (l1: list a) l2, l1 ++ l2 = l2 -> l1 = nil.
+Admitted.
+
+Lemma app_inj1 : forall a (l1:list a) l1' l2, l1 ++ l2 = l1' ++ l2 -> l1 = l1'.
+Admitted.
+
+Lemma freshen_fresh : forall p p' ns ns' ps ps', 
+  freshen p (ns ++ ns') ps' = (p', ns', ps ++ ps') ->
+  length ns = length (binders p) ->
+  fresh p p' ns ps.
+intro p. induction p.
+intros. simpl in *. 
+inversion H. assert (ns = nil); eauto using app_nil.
+ assert (ps = nil); eauto using app_nil. subst ns. subst ps. auto.
+intros p' ns ns' ps ps' H L. simpl in L. destruct ns. inversion L. 
+inversion L. destruct ns. simpl in *. 
+simpl_env. inversion H. simpl_env in H3. 
+assert (ps = [(n,n0)]); eauto using app_inj1. subst.
+auto. simpl in H1. inversion H1.
+(* bind case *)
+Admitted.
+
+
+Lemma fresh_fcn : forall p ns, 
+   (length ns = length (binders p)) ->
+   exists p', exists ps, fresh p p' ns ps.
+intros p ns H.
+pose (ans := freshen p (ns ++ nil) nil).
+assert (freshen p (ns ++ nil) nil = ans). auto.
+destruct ans as [[p' ns'] ps].
+exists p'. exists ps. apply freshen_fresh with (ns':=nil)(ps' :=nil).
+replace ps with (ps ++ nil) in H0. eauto.
+Admitted.
+
+Definition rename (ns : list var) (t : term) :=
+  match freshen t ns nil with 
+  |  (t', _, _) => t'
+  end.
 
 (* *********************************************************************** *)
 (** * Size *)
@@ -302,7 +477,6 @@ Hint Constructors degree_term_wrt_term : core lngen.
 
 (* Rename the binders in the pattern using the list of variables. If 
    there are not enough names given, leaves the rest of the names alone..*)
-Parameter rename : list var -> term -> term.
 
 
 (* right now, lc_term is defined with weak definition. *)
@@ -356,12 +530,12 @@ Inductive lc_set_term : term -> Set :=
   | lc_set_rebind : forall p1 t1,
     lc_set_term p1 ->
     (forall x1 : list name, forall p2: term, 
-      rename x1 p1 = Some p2 -> 
+      rename x1 p1 = p2 -> 
         lc_set_term (open_term_wrt_term t1 p2)) ->
     lc_set_term (rebind p1 t1)
   | lc_set_rec : forall p1,
     (forall x1 : list name, forall p2: term,
-      rename x1 p1 = Some p2 -> 
+      rename x1 p1 = p2 -> 
         lc_set_term (open_term_wrt_term p1 p2)) ->
     lc_set_term (rec p1)
   | lc_set_emb : forall t1,
@@ -409,12 +583,157 @@ Lemma l1 : forall x (p : term) i,
    find x p = index i -> In x (binders p).
 Admitted.
 
+Print atoms.
+Print AtomSetImpl.
+Print AtomSetImpl.fold.
+
+Definition minus (s1:atoms) (s2:atoms) :=
+ AtomSetImpl.fold (AtomSetImpl.remove) s2 s1.
+
+Lemma minus_empty : forall s1, minus empty s1 = empty.
+unfold minus.
+Admitted.
+
+
+Definition mk_bind (pat : term) (body : term) : term := 
+  bind pat (close_term_wrt_term pat body).
+
+Lemma eight: forall t p, 
+  fv Term (mk_bind p t) = fv Pat p `union` (minus (fv Term t) (fv Pat p)).
+intro t. induction t; intro p; simpl.
+  rewrite minus_empty. auto.
+Admitted.
+
 
 (** terms are locally-closed pre-terms *)
 (** definitions *)
+(***********************************************************************)
+
+Lemma beq_nat_and : forall n1 n2 n3 n4, 
+  (if beq_nat n1 n2 then beq_nat n3 n4 else false) = true ->
+  n1 = n2 /\ n3 = n4.
+Admitted.
+
+Parameter skip : forall a:Prop, a.
+
+(* If pat1 freshens to pat by perm1 and pat2 freshens to pat by perm2, 
+   and swapping n1 by perm1 = swapping n2 by perm2, and n1 <> n2, then 
+   *both* n1 and n2 must be in the new pattern in the same place. 
+*)
+
+Print find.
+
+Lemma same_var : forall pat pat1 pat2 ns1 ns2 perm1 perm2 n1 n2 k,
+n1 <> n2 ->
+fresh pat1 pat ns1 perm1 ->
+fresh pat2 pat ns2 perm2 ->
+swap_var perm1 n1 = swap_var perm2 n2 ->
+k = swap_var perm1 n1 ->
+exists j, find n1 pat1 = index j /\ find n2 pat2 = index j /\ find k pat = index j.
+intros pat pat1 pat2 ns1 ns2 perm1 perm2 n1 n2 k H0 H1 H2 S1 K. 
+induction pat; inversion H1; inversion H2; subst.
+simpl in S1. auto.
+simpl. contradiction.
+simpl.
+exists 0.
+destruct (n1 == x). rewrite e. destruct (x == x). 
+   destruct (n2 == x0). Focus 2.
+   subst. simpl in S1.
+   destruct (x == x). 
+   destruct (x0 == n2). subst. contradiction n0. auto.
+   subst.  
+Admitted.
+(*
+ destruct (n1 == n).
+   rewrite e in S1. simpl in S1.
+   destruct (x0 == n2). rewrite e0 in H2. 
+   inversion H2. inversion H2. 
+
+ destruct (n2 == n). rewrite <- e0 in e. contradiction.
+   simpl in S1. rewrite e in S1.
+   destruct (x == n). contradiction.
+   destruct (x0 == n2). subst. inversion H2. *)
+(* cases 
+  - x0 = x (easy)
+  - x0 <> x
+      - n1 = n, n2 = n (easy)
+      - n1 = n, n2 <> n
+           - x = n2 or x0 = n2
+      
+      
+
+simpl. destruct (n1 == n). destruct (n2 == n). auto.
+  inversion H2. subst. inversion H1. subst.
+  simpl in S1. destruct (x == n). contradiction. 
+  destruct (n == n). destruct (x0 == n2). contradiction.
+  destruct (n == n2). subst. auto. subst.
+simpl in S1. destruct (x == n1). destruct (x0 == n2).
+destruct H0. Focus 2.
+Admitted.
+*)
+Lemma aeq_swaps_close : forall pat pat1 pat2 ns1 ns2 perm1 perm2 t1 k t2 m,
+  lc_term pat1 -> lc_term pat2 ->
+  fresh pat1 pat ns1 perm1 ->
+  fresh pat2 pat ns2 perm2 ->
+  aeq m (swaps perm1 t1) (swaps perm2 t2) = true ->
+  aeq m (close_term_wrt_term_rec k pat t1) (close_term_wrt_term_rec k pat t2) = true.
+intros pat pat1 pat2 ns1 ns2 perm1 perm2.
+induction t1; intros k t2 m LCP1 LCP2 H1 H2 H3;
+destruct t2; simpl in H3; inversion H3.
+rewrite H3.
+ destruct (beq_nat_and _ _ _ _ H3). subst. apply aeq_refl.
+(* variable case *)
+destruct m; auto. rewrite H3.
+assert (swap_var perm1 n = swap_var perm2 n0). apply skip.
+simpl.
+destruct (n == n0). subst. apply aeq_refl.
+(*
+destruct (same_var _ _ _ _ _ _ _ _ _ _ H1 H2 H).
+rewrite H4. rewrite H5. simpl. destruct (find n0 pat). apply aeq_refl.
+destruct (find n pat). 
+rewrite <- H4. 
+apply aeq_refl.
+rewrite <- H4.  
+*)
+apply skip. (* COME BACK TO THIS *)
+(* pat var case *)
+simpl. apply skip.
+(* bind case *)
+simpl.
+  rewrite IHt1_1; auto. 
+  rewrite IHt1_2; auto. 
+  symmetry in H3; destruct (andb_true_eq _ _ H3); auto.
+  symmetry in H3; destruct (andb_true_eq _ _ H3); auto.
+(* data case *)
+simpl. auto.
+(* app case *)
+simpl. rewrite IHt1_1; auto. rewrite IHt1_2; auto.
+  symmetry in H3; destruct (andb_true_eq _ _ H3); auto.
+  symmetry in H3; destruct (andb_true_eq _ _ H3); auto.
+(* rebind case *)
+simpl. rewrite IHt1_1; auto. rewrite IHt1_2; auto.
+  symmetry in H3; destruct (andb_true_eq _ _ H3); auto.
+  symmetry in H3; destruct (andb_true_eq _ _ H3); auto.
+(* rec *)
+simpl. rewrite IHt1; auto.
+simpl. rewrite IHt1; auto.
+simpl. rewrite IHt1; auto.
+Qed.  
+ 
 
 
-
+Lemma aeq_freshen : forall pat t1 t2 pat1 pat2 ns1 ns2 perm1 perm2,
+  lc_term pat1 -> lc_term pat2 ->
+  lc_term t1 -> lc_term t2 ->
+  fresh pat1 pat ns1 perm1 ->
+  fresh pat2 pat ns2 perm2 ->
+  aeq Term (swaps perm1 t1) (swaps perm2 t2) = true ->
+  aeq Term (mk_bind pat1 t1) (mk_bind pat2 t2) = true.
+intro pat. induction pat; 
+  intros t1 t2 pat1' pat2' ns1 ns2 perm1 perm2 LCP1 LCP2 LCT1 LCT2 H1 H2 H3;
+simpl in *; inversion H1; inversion H2; subst.
+inversion LCP2.
+simpl.
 
 
 
