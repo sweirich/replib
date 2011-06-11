@@ -36,6 +36,7 @@ import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
 
+import Control.Monad (replicateM)
 import Control.Arrow ((***), second)
 import Control.Applicative ((<$>))
 
@@ -108,13 +109,14 @@ typeRefinements tyVars constr =
       fmap ((TupE *** TupP) . unzip)
     . sequence
     . map genRefinement
-    . extractParamEqualities
+    . extractParamEqualities tyVars
     $ constrCxt constr
 
 extractParamEqualities :: [TyVarBndr] -> Cxt -> [(Name, Type)]
 extractParamEqualities tyVars = filterWith extractLHSVars
                               . filterWith extractEq
-  where extractEq (EqualP ty1 ty2)  = Just (ty1, ty2)
+  where extractEq :: Pred -> Maybe (Type, Type)
+        extractEq (EqualP ty1 ty2)  = Just (ty1, ty2)
         extractEq _                 = Nothing
 
         extractLHSVars (VarT n, t2) | any ((==n) . tyVarBndrName) tyVars = Just (n,t2)
@@ -122,6 +124,7 @@ extractParamEqualities tyVars = filterWith extractLHSVars
         -- Note, assuming here that equalities involving type parameters
         -- will always have the type parameter on the LHS...
 
+        filterWith :: (a -> Maybe b) -> [a] -> [b]
         filterWith f = catMaybes . map f
 
 genRefinement :: (Name, Type) -> Q (Exp, Pat)
@@ -282,15 +285,18 @@ ctx_params _ty ctxName constrs = mapM (genCtxParam ctxName) constrs
 
 -- | Generate a context parameter for a single constructor.
 genCtxParam :: Name -> ConstrInfo -> Q CtxParam
-genCtxParam ctxName constr = newName "c" >>= \c -> CtxParam c pType eqs payload
-  where eqs = extractParamEqualities (constrCxt constr)
+genCtxParam ctxName constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload)
+  where eqs = extractParamEqualities (constrBinders constr) (constrCxt constr)
         pType | null eqs  = payload
               | otherwise = guarded
-        payload = TupE . map (VarT ctxName `AppT`) . constrFields $ constr
+        payload = mkTupleT . map ((VarT ctxName `AppT`) . fieldType) . constrFields $ constr
         guarded = ForallT vars [] (foldr (AppT . AppT ArrowT) payload proofs)
-        vars    = map PlainTV $ concatMap (S.toList . tyFV . fst) eqs
+        vars    = map PlainTV $ concatMap (S.toList . tyFV . snd) eqs
         proofs  = map mkProof eqs
         mkProof (n, ty) = AppT (AppT (ConT (mkName ":=:")) (VarT n)) ty
+
+mkTupleT :: [Type] -> Type
+mkTupleT tys = foldl' AppT (TupleT (length tys)) tys
 
 -- | Compute the free type variables of a type.
 tyFV :: Type -> S.Set Name
@@ -308,8 +314,16 @@ repcon1 :: Type                -- result type of the constructor
         -> CtxParam            -- corresponding context parameter
         -> ConstrInfo          -- info about the constructor
         -> Q Exp
-repcon1 d info ctxParam constr = repconG d info constr
-  -- XXX working here -- need to pattern match on result of applying context parameter...
+repcon1 d info ctxParam constr = do
+  cs <- replicateM (length . constrFields $ constr) (newName "c")
+  caseE (applyPfs ctxParam)
+    [ match (tupP . map varP $ cs) (normalB (repconG d info constr (map varE cs))) [] ]
+
+-- | Apply a context parameter to the right number of equality proofs
+--   to get out the promised context.
+applyPfs :: CtxParam -> Q Exp
+applyPfs (CtxParam { cpName = n, cpEqs = eqs }) =
+  appsE (varE n : replicate (length eqs) [| Refl |])
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
@@ -328,8 +342,6 @@ repr1 f n = do info' <- reify n
                   ctxParams <- case f of
                                     Conc -> ctx_params ty ctx constrs
                                     Abs  -> return []
-
-                  -- XXX need to use the new ctxParams correctly below
 
                   let cparams = map (\(x,t,_) -> SigP (VarP x) t) ctxParams
 
