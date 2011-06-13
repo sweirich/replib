@@ -36,7 +36,7 @@ import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
 
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, zipWithM)
 import Control.Arrow ((***), second)
 import Control.Applicative ((<$>))
 
@@ -71,25 +71,16 @@ rName1 n =
 -- As our representation of data constructors evolves, so must this definition.
 --    Currently, we don't handle data constructors with record components.
 
--- | Generic constructor representation generation -- works for R or R1.
-repconG :: Type ->         -- type this is a constructor for
-           TypeInfo ->     -- information about the type
-           ConstrInfo ->   -- information about the constructor
-           [Q Exp] ->      -- contents of the second argument to Con, which will go in an MTup
-           Q Exp
-repconG d info constr args
+-- | Generate an R-type constructor representation.
+repcon :: TypeInfo ->     -- information about the type
+          ConstrInfo ->   -- information about the constructor
+          Q Exp
+repcon info constr
   | null (constrCxt constr) = [| Just $con |]
   | otherwise               = gadtCase (typeParams info) constr con
-  where mtup = foldr (\ t tl -> [| $(t) :+: $(tl) |]) [| MNil |] args
-        con  = [| Con $(remb d constr) $(mtup) |]
-
--- | Generate an R-type constructor representation.
-repcon :: Type ->  -- The type that this is a constructor for (applied to all of its parameters)
-          TypeInfo ->    -- information about the type
-          ConstrInfo ->  -- information about the contstructor
-	  Q Exp
-repcon d info constr
-  = repconG d info constr (map (return . repty . fieldType) . constrFields $ constr)
+  where args = map (return . repty . fieldType) . constrFields $ constr
+        mtup = foldr (\ t tl -> [| $(t) :+: $(tl) |]) [| MNil |] args
+        con  = [| Con $(remb constr) $(mtup) |]
 
 gadtCase :: [TyVarBndr] -> ConstrInfo -> Q Exp -> Q Exp
 gadtCase tyVars constr conQ = do
@@ -155,8 +146,8 @@ appUnits ty n = do
   return $ foldl' AppT ty (replicate n u)
 
 -- the "from" function that coerces from an "a" to the arguments
-rfrom :: Type -> ConstrInfo -> Q Exp
-rfrom _ constr = do
+rfrom :: ConstrInfo -> Q Exp
+rfrom constr = do
   vars <- mapM (const (newName "x")) (constrFields constr)
   outvar <- newName "y"
   let nm = (simpleName . constrName $ constr)
@@ -173,8 +164,8 @@ rfrom _ constr = do
   return (LamE [VarP outvar] (outcase (VarE outvar)))
 
 -- to component of th embedding
-rto :: Type -> ConstrInfo -> Q Exp
-rto _ constr =
+rto :: ConstrInfo -> Q Exp
+rto constr =
   do vars <- mapM (const (newName "x")) (constrFields constr)
      let topat = foldr (\v tl -> InfixP  (VarP v) (mkName ":*:") tl)
                          (ConP 'Nil []) vars
@@ -184,11 +175,11 @@ rto _ constr =
      return (LamE [topat] tobod)
 
 -- the embedding record
-remb :: Type -> ConstrInfo -> Q Exp
-remb d constr =
+remb :: ConstrInfo -> Q Exp
+remb constr =
     [| Emb  { name   = $(stringName . simpleName . constrName $ constr),
-              to     = $(rto d constr),
-              from   = $(rfrom d constr),
+              to     = $(rto constr),
+              from   = $(rfrom constr),
               labels = Nothing,
               fixity = Nonfix } |]
 
@@ -219,7 +210,7 @@ repr f n = do info' <- reify n
                   let ty = foldl' (\x p -> x `AppT` (VarT p)) baseT paramNames
                   -- the representations of the paramters, as a list
                   -- representations of the data constructors
-                  rcons <- mapM (repcon ty dInfo) constrs
+                  rcons <- mapM (repcon dInfo) constrs
                   body  <- case f of
                      Conc -> [| Data $(repDT nm paramNames)
                                      (catMaybes $(return (ListE rcons))) |]
@@ -310,15 +301,20 @@ tyFV ListT             = S.empty
 tyFV (AppT ty1 ty2)    = tyFV ty1 `S.union` tyFV ty2
 tyFV (SigT ty _)       = tyFV ty
 
-repcon1 :: Type                -- result type of the constructor
-        -> TypeInfo            -- information about the type
+repcon1 :: TypeInfo            -- information about the type
         -> CtxParam            -- corresponding context parameter
         -> ConstrInfo          -- info about the constructor
         -> Q Exp
-repcon1 d info ctxParam constr = do
-  cs <- replicateM (length . constrFields $ constr) (newName "c")
-  caseE (applyPfs ctxParam)
-    [ match (tupP . map varP $ cs) (normalB (repconG d info constr (map varE cs))) [] ]
+repcon1 info ctxParam constr = do
+  cs      <- replicateM (length . constrFields $ constr) (newName "c")
+  let conBody = caseE (applyPfs ctxParam)
+                [ match (tupP . map varP $ cs) (normalB con) [] ]
+      args    = map varE cs
+      mtup    = foldr (\ t tl -> [| $(t) :+: $(tl) |]) [| MNil |] args
+      con     = [| Con $(remb constr) $(mtup) |]
+  case (null (constrCxt constr)) of
+    True -> [| Just $con |]
+    _    -> gadtCase (typeParams info) constr conBody
 
 -- | Apply a context parameter to the right number of equality proofs
 --   to get out the promised context.
@@ -353,30 +349,23 @@ repr1 f n = do info' <- reify n
                                  (foldr (AppT . AppT ArrowT) r1Ty (map cpType ctxParams))
                                )
 
-                      -- rTypeDecl
+                  rcons <- zipWithM (repcon1 dInfo) ctxParams constrs
+                  body  <- case f of
+                             Conc -> [| Data1 $(repDT nm paramNames)
+                                              (catMaybes $(return (ListE rcons))) |]
+                             Abs  -> [| Abstract1 $(repDT nm paramNames) |]
+
+                  let rhs = LamE (map (VarP . cpName) ctxParams) body
+
+                      rDecl = ValD (VarP rTypeName) (NormalB rhs) []
 
                   decs <- repr f n
-                  return (decs ++ [rSig {- , rTypeDecl, inst -} ])
+                  return (decs ++ [rSig, rDecl {- , inst -} ])
 
 {-
-                  let cparams = map (\(x,t,_) -> SigP (VarP x) t) ctxParams
-
                   -- the recursive call of the rep function
                   let e1 = foldl' (\a r -> a `AppE` (VarE r)) (VarE rTypeName) paramNames
                   let e2 = foldl' (\a (x,_,_) -> a `AppE` (VarE x)) e1 ctxParams
-
-                  -- the representations of the parameters, as a list
-                  -- representations of the data constructors
-                  rcons <- mapM (repcon1 ty e2 ctxParams) constrs
-                  body  <- case f of
-                            Conc -> [| Data1 $(repDT nm paramNames)
-                                           $(return (ListE rcons)) |]
-                            Abs  -> [| Abstract1 $(repDT nm paramNames) |]
-
-                  let rhs = LamE (cparams) body
-{-                    rhs_type = ForallT (ctx:param) rparams
-                                  (foldr (\ (p,t) ret -> `ArrowT` `AppT` t `AppT` ret) ty params) -}
-                      rTypeDecl = ValD (VarP rTypeName) (NormalB rhs) []
 
 
                   let ctxRep = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
@@ -389,11 +378,6 @@ repr1 f n = do info' <- reify n
                                 ((ConT ''Rep1) `AppT` (VarT ctx) `AppT` ty)
                                 [ValD (VarP (mkName "rep1"))
                                   (NormalB (appRec (VarE rTypeName))) []]
-
-                  let rSig = SigD rTypeName (ForallT (map PlainTV (ctx : paramNames)) ctxRep
-                              (foldr (\(_,p,_) x -> (ArrowT `AppT` p `AppT` x))
-                                     ((ConT (mkName "R1")) `AppT` (VarT ctx) `AppT` ty)
-                                     ctxParams))
 -}
 
 
