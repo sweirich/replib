@@ -31,7 +31,7 @@ module Generics.RepLib.Derive (
 import Generics.RepLib.R
 import Generics.RepLib.R1
 import Language.Haskell.TH
-import Data.List (nub, foldl')
+import Data.List (foldl')
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
@@ -277,16 +277,17 @@ data CtxParam = CtxParam { cpName    :: Name            -- The argument name
                          }
 
 -- | Generate the context parameters (see above) for a given type.
-ctx_params :: Type ->          -- type we are defining
+ctx_params :: TypeInfo ->      -- information about the type we are defining
               Name ->          -- name of the type variable "ctx"
               [ConstrInfo] ->  -- information about the type's constructors
             Q [CtxParam]
-ctx_params _ty ctxName constrs = mapM (genCtxParam ctxName) constrs
+ctx_params tyInfo ctxName constrs = mapM (genCtxParam ctxName tyInfo) constrs
 
 -- | Generate a context parameter for a single constructor.
-genCtxParam :: Name -> ConstrInfo -> Q CtxParam
-genCtxParam ctxName constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload)
-  where eqs = extractParamEqualities (constrBinders constr) (constrCxt constr)
+genCtxParam :: Name -> TypeInfo -> ConstrInfo -> Q CtxParam
+genCtxParam ctxName tyInfo constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload)
+  where allEqs = extractParamEqualities (typeParams tyInfo) (constrCxt constr)
+        eqs    = filter (not . S.null . tyFV . snd) allEqs
         pType | null eqs  = payload
               | otherwise = guarded
         payload = mkTupleT . map ((VarT ctxName `AppT`) . fieldType) . constrFields $ constr
@@ -340,9 +341,24 @@ repr1 f n = do info' <- reify n
 
                   ctx <- newName "ctx"
                   ctxParams <- case f of
-                                    Conc -> ctx_params ty ctx constrs
+                                    Conc -> ctx_params dInfo ctx constrs
                                     Abs  -> return []
 
+                  r1Ty <- [t| $(conT $ mkName "R1") $(varT ctx) $(return ty) |]
+                  let ctxRep = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
+                      rSig = SigD rTypeName
+                               (ForallT
+                                 (map PlainTV (ctx : paramNames))
+                                 ctxRep
+                                 (foldr (AppT . AppT ArrowT) r1Ty (map cpType ctxParams))
+                               )
+
+                      -- rTypeDecl
+
+                  decs <- repr f n
+                  return (decs ++ [rSig {- , rTypeDecl, inst -} ])
+
+{-
                   let cparams = map (\(x,t,_) -> SigP (VarP x) t) ctxParams
 
                   -- the recursive call of the rep function
@@ -378,8 +394,7 @@ repr1 f n = do info' <- reify n
                               (foldr (\(_,p,_) x -> (ArrowT `AppT` p `AppT` x))
                                      ((ConT (mkName "R1")) `AppT` (VarT ctx) `AppT` ty)
                                      ctxParams))
-                  decs <- repr f n
-                  return (decs ++ [rSig, rTypeDecl, inst])
+-}
 
 
 repr1s :: Flag -> [Name] -> Q [Dec]
