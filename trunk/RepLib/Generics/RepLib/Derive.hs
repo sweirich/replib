@@ -265,6 +265,10 @@ data CtxParam = CtxParam { cpName    :: Name            -- The argument name
                          , cpEqs     :: [(Name, Type)]  -- Required equality proofs
                          , cpPayload :: Type            -- What you get after supplying
                                                         -- the proofs
+                         , cpSat     :: Maybe (Name, Name)
+                            -- names of the special Sat-like class and
+                            -- its dictionary method for this
+                            -- constructor
                          }
 
 -- | Generate the context parameters (see above) for a given type.
@@ -276,7 +280,7 @@ ctx_params tyInfo ctxName constrs = mapM (genCtxParam ctxName tyInfo) constrs
 
 -- | Generate a context parameter for a single constructor.
 genCtxParam :: Name -> TypeInfo -> ConstrInfo -> Q CtxParam
-genCtxParam ctxName tyInfo constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload)
+genCtxParam ctxName tyInfo constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload Nothing)
   where allEqs = extractParamEqualities (typeParams tyInfo) (constrCxt constr)
         eqs    = filter (not . S.null . tyFV . snd) allEqs
         pType | null eqs  = payload
@@ -313,7 +317,7 @@ repcon1 info ctxParam constr = do
       mtup    = foldr (\ t tl -> [| $(t) :+: $(tl) |]) [| MNil |] args
       con     = [| Con $(remb constr) $(mtup) |]
   case (null (constrCxt constr)) of
-    True -> [| Just $con |]
+    True -> [| Just $conBody |]
     _    -> gadtCase (typeParams info) constr conBody
 
 -- | Apply a context parameter to the right number of equality proofs
@@ -321,6 +325,16 @@ repcon1 info ctxParam constr = do
 applyPfs :: CtxParam -> Q Exp
 applyPfs (CtxParam { cpName = n, cpEqs = eqs }) =
   appsE (varE n : replicate (length eqs) [| Refl |])
+
+genSatClass :: CtxParam -> Q (CtxParam, [Dec])
+genSatClass p = do
+  satNm  <- newName "Sat"
+  dictNm <- newName "dict"
+  -- XXX working here
+  return (p { cpSat = Just (satNm, dictNm) }, [])
+
+genSatClasses :: [CtxParam] -> Q ([CtxParam], [Dec])
+genSatClasses ps = (second concat . unzip) <$> mapM genSatClass ps
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
@@ -340,8 +354,8 @@ repr1 f n = do info' <- reify n
                                     Conc -> ctx_params dInfo ctx constrs
                                     Abs  -> return []
 
-                  r1Ty <- [t| $(conT $ mkName "R1") $(varT ctx) $(return ty) |]
-                  let ctxRep = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
+                  r1Ty <- [t| $(conT $ ''R1) $(varT ctx) $(return ty) |]
+                  let ctxRep = map (\p -> ClassP (''Rep) [VarT p]) paramNames
                       rSig = SigD rTypeName
                                (ForallT
                                  (map PlainTV (ctx : paramNames))
@@ -359,8 +373,20 @@ repr1 f n = do info' <- reify n
 
                       rDecl = ValD (VarP rTypeName) (NormalB rhs) []
 
+ -- XXX working here
+                  -- generate a Sat-like class for each constructor requiring
+                  -- equality proofs
+                  (ctxParams', satClasses) <- genSatClasses (filter (not . null . cpEqs) ctxParams)
+                  let ctxRec = undefined
+
+                  inst <- instanceD (return $ ctxRep {- ++ ctxRec -})
+                                    (conT ''Rep1 `appT` varT ctx `appT` (return ty))
+                                    [valD (varP 'rep1) (normalB (varE 'undefined)) []]
+-- XXX working here
+
+                  -- generate the Rep instances as well
                   decs <- repr f n
-                  return (decs ++ [rSig, rDecl {- , inst -} ])
+                  return (decs ++ [rSig, rDecl] ++ satClasses ++ [inst])
 
 {-
                   -- the recursive call of the rep function
