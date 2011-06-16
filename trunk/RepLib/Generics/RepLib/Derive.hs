@@ -31,7 +31,7 @@ module Generics.RepLib.Derive (
 import Generics.RepLib.R
 import Generics.RepLib.R1
 import Language.Haskell.TH
-import Data.List (foldl')
+import Data.List (foldl', nub)
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
@@ -265,6 +265,9 @@ data CtxParam = CtxParam { cpName    :: Name            -- The argument name
                          , cpEqs     :: [(Name, Type)]  -- Required equality proofs
                          , cpPayload :: Type            -- What you get after supplying
                                                         -- the proofs
+                         , cpPayloadElts :: [Type]      -- individual elements in
+                                                        -- the payload
+                         , cpCtxName :: Name
                          , cpSat     :: Maybe (Name, Name)
                             -- names of the special Sat-like class and
                             -- its dictionary method for this
@@ -280,12 +283,13 @@ ctx_params tyInfo ctxName constrs = mapM (genCtxParam ctxName tyInfo) constrs
 
 -- | Generate a context parameter for a single constructor.
 genCtxParam :: Name -> TypeInfo -> ConstrInfo -> Q CtxParam
-genCtxParam ctxName tyInfo constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload Nothing)
+genCtxParam ctxName tyInfo constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload payloadElts ctxName Nothing)
   where allEqs = extractParamEqualities (typeParams tyInfo) (constrCxt constr)
         eqs    = filter (not . S.null . tyFV . snd) allEqs
         pType | null eqs  = payload
               | otherwise = guarded
-        payload = mkTupleT . map ((VarT ctxName `AppT`) . fieldType) . constrFields $ constr
+        payloadElts = map ((VarT ctxName `AppT`) . fieldType) . constrFields $ constr
+        payload = mkTupleT payloadElts
         guarded = ForallT vars [] (foldr (AppT . AppT ArrowT) payload proofs)
         vars    = map PlainTV $ concatMap (S.toList . tyFV . snd) eqs
         proofs  = map mkProof eqs
@@ -327,85 +331,105 @@ applyPfs (CtxParam { cpName = n, cpEqs = eqs }) =
   appsE (varE n : replicate (length eqs) [| Refl |])
 
 genSatClass :: CtxParam -> Q (CtxParam, [Dec])
-genSatClass p = do
+genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
+                     | otherwise = do
   satNm  <- newName "Sat"
   dictNm <- newName "dict"
-  -- XXX working here
-  return (p { cpSat = Just (satNm, dictNm) }, [])
+
+  let ctx = cpCtxName ctxParam
+      eqs = cpEqs ctxParam
+      satClass = ClassD [] satNm (PlainTV ctx : map (PlainTV . fst) eqs) []
+                   [SigD dictNm (cpType ctxParam)]
+
+      satInstHead = foldl' AppT (ConT satNm) (VarT ctx : map snd eqs)
+
+      satInst  = InstanceD
+                   (map (ClassP ''Sat . (:[])) (cpPayloadElts ctxParam))
+                   satInstHead
+                   [ValD (VarP dictNm)
+                         (NormalB (LamE (replicate (length eqs) (ConP 'Refl []))
+                                        (TupE (replicate (length (cpPayloadElts ctxParam))
+                                                         (VarE 'dict)
+                                              )
+                                        )
+                                  )
+                         )
+                         []
+                   ]
+
+  nms <- replicateM (length eqs) (newName "a")
+  err <- [| error "Impossible Sat instance!" |]
+
+  let defSatInst = InstanceD [] (foldl' AppT (ConT satNm) (map VarT (ctx : nms)))
+                     [ValD (VarP dictNm)
+                           (NormalB (LamE (replicate (length eqs) (ConP 'Refl [])) err))
+                           []
+                     ]
+
+  return (ctxParam { cpSat = Just (satNm, dictNm) }, [satClass, satInst, defSatInst])
 
 genSatClasses :: [CtxParam] -> Q ([CtxParam], [Dec])
 genSatClasses ps = (second concat . unzip) <$> mapM genSatClass ps
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
-repr1 f n = do info' <- reify n
-               case info' of
-                TyConI d -> do
-                  let dInfo      = typeInfo d
-                      paramNames = map tyVarBndrName (typeParams dInfo)
-                      nm         = typeName dInfo
-                      constrs    = typeConstrs dInfo
-                  -- the type that we are defining, applied to its parameters.
-                  let ty = foldl' (\x p -> x `AppT` (VarT p)) (ConT nm) paramNames
-                  let rTypeName = rName1 n
+repr1 f n = do
+  info' <- reify n
+  case info' of
+   TyConI d -> do
+     let dInfo      = typeInfo d
+         paramNames = map tyVarBndrName (typeParams dInfo)
+         nm         = typeName dInfo
+         constrs    = typeConstrs dInfo
+     -- the type that we are defining, applied to its parameters.
+     let ty = foldl' (\x p -> x `AppT` (VarT p)) (ConT nm) paramNames
+     let rTypeName = rName1 n
 
-                  ctx <- newName "ctx"
-                  ctxParams <- case f of
-                                    Conc -> ctx_params dInfo ctx constrs
-                                    Abs  -> return []
+     ctx <- newName "ctx"
+     ctxParams <- case f of
+                       Conc -> ctx_params dInfo ctx constrs
+                       Abs  -> return []
 
-                  r1Ty <- [t| $(conT $ ''R1) $(varT ctx) $(return ty) |]
-                  let ctxRep = map (\p -> ClassP (''Rep) [VarT p]) paramNames
-                      rSig = SigD rTypeName
-                               (ForallT
-                                 (map PlainTV (ctx : paramNames))
-                                 ctxRep
-                                 (foldr (AppT . AppT ArrowT) r1Ty (map cpType ctxParams))
-                               )
+     r1Ty <- [t| $(conT $ ''R1) $(varT ctx) $(return ty) |]
+     let ctxRep = map (\p -> ClassP (''Rep) [VarT p]) paramNames
+         rSig = SigD rTypeName
+                  (ForallT
+                    (map PlainTV (ctx : paramNames))
+                    ctxRep
+                    (foldr (AppT . AppT ArrowT) r1Ty (map cpType ctxParams))
+                  )
 
-                  rcons <- zipWithM (repcon1 dInfo) ctxParams constrs
-                  body  <- case f of
-                             Conc -> [| Data1 $(repDT nm paramNames)
-                                              (catMaybes $(return (ListE rcons))) |]
-                             Abs  -> [| Abstract1 $(repDT nm paramNames) |]
+     rcons <- zipWithM (repcon1 dInfo) ctxParams constrs
+     body  <- case f of
+                Conc -> [| Data1 $(repDT nm paramNames)
+                                 (catMaybes $(return (ListE rcons))) |]
+                Abs  -> [| Abstract1 $(repDT nm paramNames) |]
 
-                  let rhs = LamE (map (VarP . cpName) ctxParams) body
+     let rhs = LamE (map (VarP . cpName) ctxParams) body
 
-                      rDecl = ValD (VarP rTypeName) (NormalB rhs) []
+         rDecl = ValD (VarP rTypeName) (NormalB rhs) []
 
- -- XXX working here
-                  -- generate a Sat-like class for each constructor requiring
-                  -- equality proofs
-                  (ctxParams', satClasses) <- genSatClasses (filter (not . null . cpEqs) ctxParams)
-                  let ctxRec = undefined
+     -- generate a Sat-like class for each constructor requiring
+     -- equality proofs
+     (ctxParams', satClasses) <- genSatClasses ctxParams
+     let mkCtxRec c = case cpSat c of
+                        Nothing    -> map (ClassP ''Sat . (:[])) (cpPayloadElts c)
+                        Just (s,_) -> [ClassP s (map VarT (cpCtxName c : paramNames))]
+         ctxRec = nub $ concatMap mkCtxRec ctxParams'
+         mkDictArg c = case cpSat c of
+                         Just (_,dn) -> VarE dn
+                         Nothing     -> TupE (replicate (length (cpPayloadElts c)) (VarE 'dict))
+         dicts  = map mkDictArg ctxParams'
 
-                  inst <- instanceD (return $ ctxRep {- ++ ctxRec -})
-                                    (conT ''Rep1 `appT` varT ctx `appT` (return ty))
-                                    [valD (varP 'rep1) (normalB (varE 'undefined)) []]
--- XXX working here
+     inst <- instanceD (return $ ctxRep ++ ctxRec)
+                       (conT ''Rep1 `appT` varT ctx `appT` (return ty))
+                       [valD (varP 'rep1) (normalB (appsE (varE rTypeName
+                                                           : map return dicts))) []]
+     -- XXX working here
 
-                  -- generate the Rep instances as well
-                  decs <- repr f n
-                  return (decs ++ [rSig, rDecl] ++ satClasses ++ [inst])
-
-{-
-                  -- the recursive call of the rep function
-                  let e1 = foldl' (\a r -> a `AppE` (VarE r)) (VarE rTypeName) paramNames
-                  let e2 = foldl' (\a (x,_,_) -> a `AppE` (VarE x)) e1 ctxParams
-
-
-                  let ctxRep = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
-                      ctxRec = map (\(_,t,_) -> ClassP ''Sat [t]) ctxParams
-
-                      -- appRep t = foldl' (\a p -> a `AppE` (VarE 'rep)) t param
-                      appRec t = foldl' (\a _ -> a `AppE` (VarE 'dict)) t ctxParams
-
-                  let inst  = InstanceD (ctxRep ++ ctxRec)
-                                ((ConT ''Rep1) `AppT` (VarT ctx) `AppT` ty)
-                                [ValD (VarP (mkName "rep1"))
-                                  (NormalB (appRec (VarE rTypeName))) []]
--}
-
+     -- generate the Rep instances as well
+     decs <- repr f n
+     return (decs ++ [rSig, rDecl] ++ satClasses ++ [inst])
 
 repr1s :: Flag -> [Name] -> Q [Dec]
 repr1s f ns = concat <$> mapM (repr1 f) ns
