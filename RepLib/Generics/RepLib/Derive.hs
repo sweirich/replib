@@ -263,6 +263,9 @@ reprs f ns = concat <$> mapM (repr f) ns
 data CtxParam = CtxParam { cpName    :: Name            -- The argument name
                          , cpType    :: Type            -- The argument type
                          , cpEqs     :: [(Name, Type)]  -- Required equality proofs
+                         , cpTyVars  :: [Name]          -- *All* type variable arguments to the type
+                                                        -- (not just ones requiring equality proofs);
+                                                        -- needed when generating special Sat classes
                          , cpPayload :: Type            -- What you get after supplying
                                                         -- the proofs
                          , cpPayloadElts :: [Type]      -- individual elements in
@@ -283,9 +286,11 @@ ctx_params tyInfo ctxName constrs = mapM (genCtxParam ctxName tyInfo) constrs
 
 -- | Generate a context parameter for a single constructor.
 genCtxParam :: Name -> TypeInfo -> ConstrInfo -> Q CtxParam
-genCtxParam ctxName tyInfo constr = newName "c" >>= \c -> return (CtxParam c pType eqs payload payloadElts ctxName Nothing)
+genCtxParam ctxName tyInfo constr
+    = newName "c" >>= \c -> return (CtxParam c pType eqs tvars payload payloadElts ctxName Nothing)
   where allEqs = extractParamEqualities (typeParams tyInfo) (constrCxt constr)
         eqs    = filter (not . S.null . tyFV . snd) allEqs
+        tvars  = map tyVarBndrName . typeParams $ tyInfo
         pType | null eqs  = payload
               | otherwise = guarded
         payloadElts = map ((VarT ctxName `AppT`) . fieldType) . constrFields $ constr
@@ -338,10 +343,14 @@ genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
 
   let ctx = cpCtxName ctxParam
       eqs = cpEqs ctxParam
-      satClass = ClassD [] satNm (PlainTV ctx : map (PlainTV . fst) eqs) []
+      tvs = cpTyVars ctxParam
+      satClass = ClassD [] satNm (PlainTV ctx : map PlainTV tvs) []
                    [SigD dictNm (cpType ctxParam)]
 
-      satInstHead = foldl' AppT (ConT satNm) (VarT ctx : map snd eqs)
+      satInstHead = foldl' AppT (ConT satNm) (VarT ctx : map tvOrEqType tvs)
+      tvOrEqType a = case lookup a eqs of
+                       Just t  -> t
+                       Nothing -> VarT a
 
       satInst  = InstanceD
                    (map (ClassP ''Sat . (:[])) (cpPayloadElts ctxParam))
@@ -370,6 +379,10 @@ genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
 
 genSatClasses :: [CtxParam] -> Q ([CtxParam], [Dec])
 genSatClasses ps = (second concat . unzip) <$> mapM genSatClass ps
+
+-- XXX look at Basics.hs -- tree example.  The context for recursive
+-- subtrees ends up getting duplicated.  Need to nub out something so
+-- that doesn't happen.
 
 -- Generate a parameterized representation of a type
 repr1 :: Flag -> Name -> Q [Dec]
@@ -425,7 +438,6 @@ repr1 f n = do
                        (conT ''Rep1 `appT` varT ctx `appT` (return ty))
                        [valD (varP 'rep1) (normalB (appsE (varE rTypeName
                                                            : map return dicts))) []]
-     -- XXX working here
 
      -- generate the Rep instances as well
      decs <- repr f n
