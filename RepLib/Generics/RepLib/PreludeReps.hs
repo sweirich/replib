@@ -18,7 +18,6 @@
 module Generics.RepLib.PreludeReps where
 
 import Generics.RepLib.R
-import Generics.RepLib.R1
 import Generics.RepLib.Derive
 import Language.Haskell.TH
 
