@@ -555,8 +555,7 @@ instance Rep a => Alpha (Name a) where
                            Nothing -> error "Internal error in swaps': sort mismatch"
   swaps' c p x | mode c == Pat  = x
 
-  aeq' _ x y   | x == y         = True
-  aeq' c n1 n2 | mode c == Term = False
+  aeq' c x y   | mode c == Term = x == y
   aeq' c _ _   | mode c == Pat  = True
 
 {-
