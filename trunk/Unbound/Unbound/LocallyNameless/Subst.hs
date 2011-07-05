@@ -42,7 +42,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
   --   non-variable arguments.  The default implementation always
   --   returns 'Nothing'.
   isvar :: a -> Maybe (SubstName a b)
-  isvar x = Nothing
+  isvar _ = Nothing
 
   -- | @'subst' nm sub tm@ substitutes @sub@ for @nm@ in @tm@.  It has
   --   a default generic implementation in terms of @isvar@.
@@ -51,7 +51,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
      case (isvar x :: Maybe (SubstName a b)) of
         Just (SubstName m) -> if  m == n then u else x
         Nothing -> substR1 rep1 n u x
-  subst m u x = error $ "Cannot substitute for bound variable " ++ show m
+  subst m _ _ = error $ "Cannot substitute for bound variable " ++ show m
 
   -- | Perform several simultaneous substitutions.  This method also
   --   has a default generic implementation in terms of @isvar@.
@@ -81,20 +81,20 @@ substDefault :: Rep1 (SubstD b) a => Name b -> b -> a -> a
 substDefault = substR1 rep1
 
 substR1 :: R1 (SubstD b) a -> Name b -> b -> a -> a
-substR1 (Data1 dt cons) = \ x y d ->
+substR1 (Data1 _dt cons) = \ x y d ->
   case (findCon cons d) of
   Val c rec kids ->
       let z = map_l (\ w -> substD w x y) rec kids
       in (to c z)
-substR1 r               = \ x y c -> c
+substR1 _               = \ _ _ c -> c
 
 substsR1 :: R1 (SubstD b) a -> [(Name b, b)] -> a -> a
-substsR1 (Data1 dt cons) = \ s d ->
+substsR1 (Data1 _dt cons) = \ s d ->
   case (findCon cons d) of
   Val c rec kids ->
       let z = map_l (\ w -> substsD w s) rec kids
       in (to c z)
-substsR1 r               = \ s c -> c
+substsR1 _               = \ _ c -> c
 
 instance Subst b Int
 instance Subst b Bool
