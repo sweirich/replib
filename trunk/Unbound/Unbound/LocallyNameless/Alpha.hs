@@ -463,20 +463,20 @@ lfreshenL (r :+: rs) p (t :*: ts) f =
 
 
 findpatR1 :: R1 AlphaD b -> b -> AnyName -> FindResult
-findpatR1 (Data1 dt cons) = \ d n ->
+findpatR1 (Data1 _dt cons) = \ d n ->
    case findCon cons d of
-     Val c rec kids -> findpatL rec kids n
-findpatR1 _ = \ x n -> mempty
+     Val _c rec kids -> findpatL rec kids n
+findpatR1 _ = \ _ _ -> mempty
 
 findpatL :: MTup AlphaD l -> l -> AnyName -> FindResult
-findpatL MNil Nil n              = mempty
+findpatL MNil Nil _              = mempty
 findpatL (r :+: rs) (t :*: ts) n = findpatD r t n <> findpatL rs ts n
 
 nthpatR1 :: R1 AlphaD b -> b -> NthCont
-nthpatR1 (Data1 dt cons) = \ d ->
+nthpatR1 (Data1 _dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> nthpatL rec kids
-nthpatR1 _ = \ x -> mempty
+     Val _c rec kids -> nthpatL rec kids
+nthpatR1 _ = \ _ -> mempty
 
 nthpatL :: MTup AlphaD l -> l -> NthCont
 nthpatL MNil Nil              = mempty
@@ -488,43 +488,39 @@ combine (Just ns1) (Just ns2) | ns1 `intersect` ns2 == [] =
 combine _ _ = Nothing
 
 isPatR1 :: R1 AlphaD b -> b -> Maybe [AnyName]
-isPatR1 (Data1 dt cons) = \ d ->
+isPatR1 (Data1 _dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids ->
+     Val _c rec kids ->
        foldl_l (\ c b a -> combine (isPatD c a) b) (Just []) rec kids
-isPatR1 _ = \ d -> Just []
+isPatR1 _ = \ _ -> Just []
 
 isTermR1 :: R1 AlphaD b -> b -> Bool
-isTermR1 (Data1 dt cons) = \ d ->
+isTermR1 (Data1 _dt cons) = \ d ->
    case findCon cons d of
-     Val c rec kids -> foldl_l (\ c b a -> isTermD c a && b) True rec kids
-isTermR1 _ = \ d -> True
+     Val _c rec kids -> foldl_l (\ c b a -> isTermD c a && b) True rec kids
+isTermR1 _ = \ _ -> True
 
 -- Exactly like the generic Ord instance defined in Generics.RepLib.PreludeLib,
 -- except that the comparison operation takes an AlphaCtx
 
 acompareR1 :: R1 AlphaD a -> AlphaCtx -> a -> a -> Ordering
-acompareR1 Int1  c = \x y -> compare x y
-acompareR1 Char1 c = \x y -> compare x y
-acompareR1 (Data1 str cons) c = \x y ->
+acompareR1 Int1  _ = \x y -> compare x y
+acompareR1 Char1 _ = \x y -> compare x y
+acompareR1 (Data1 _ cons) c = \x y ->
              let loop (Con emb rec : rest) =
                      case (from emb x, from emb y) of
                         (Just t1, Just t2) -> compareTupM rec c t1 t2
-                        (Just t1, Nothing) -> LT
-                        (Nothing, Just t2) -> GT
+                        (Just _ , Nothing) -> LT
+                        (Nothing, Just _ ) -> GT
                         (Nothing, Nothing) -> loop rest
+                 loop [] = error "acompareR1 found no constructors! Please report this as a bug."
              in loop cons
-acompareR1 r1 c = error ("compareR1 not supported for " ++ show r1)
-
-lexord         :: Ordering -> Ordering -> Ordering
-lexord LT ord  =  LT
-lexord EQ ord  =  ord
-lexord GT ord  =  GT
+acompareR1 r1 _ = error ("compareR1 not supported for " ++ show r1)
 
 compareTupM :: MTup AlphaD l -> AlphaCtx -> l -> l -> Ordering
-compareTupM MNil c Nil Nil = EQ
+compareTupM MNil _ Nil Nil = EQ
 compareTupM (x :+: xs) c (y :*: ys) (z :*: zs) =
-   lexord (acompareD x c y z) (compareTupM xs c ys zs)
+   mappend (acompareD x c y z) (compareTupM xs c ys zs)
 
 
 ------------------------------------------------------------
@@ -553,10 +549,11 @@ instance Rep a => Alpha (Name a) where
                          case gcastR (getR y) (getR x) y of
                            Just y' -> y'
                            Nothing -> error "Internal error in swaps': sort mismatch"
-  swaps' c p x | mode c == Pat  = x
+  swaps' _ _ x = x
 
   aeq' c x y   | mode c == Term = x == y
-  aeq' c _ _   | mode c == Pat  = True
+
+  aeq' _ _ _   = True
 
 {-
   match' _ x  y   | x == y         = Just empty
@@ -566,7 +563,8 @@ instance Rep a => Alpha (Name a) where
 
   freshen' c nm | mode c == Pat  = do x <- fresh nm
                                       return (x, single (AnyName nm) (AnyName x))
-  freshen' c nm | mode c == Term = error "freshen' on Name in Term mode"
+
+  freshen' _ _ = error "freshen' on Name in Term mode"
 
   lfreshen' c nm f = case mode c of
      Pat  -> do x <- lfresh nm
@@ -580,7 +578,7 @@ instance Rep a => Alpha (Name a) where
         Nothing  -> error "Internal error in open: sort mismatch"
   open _ _ n = n
 
-  close c a nm@(Nm r n) | mode c == Term =
+  close c a nm@(Nm r _) | mode c == Term =
       case findpat a (AnyName nm) of
         Just x  -> Bn r (level c) x
         Nothing -> nm
@@ -594,14 +592,15 @@ instance Rep a => Alpha (Name a) where
   nthpatrec = nthName . AnyName
 
   acompare' c (Nm r1 n1)    (Nm r2 n2)
-    | mode c == Term = lexord (compare r1 r2) (compare n1 n2)
+    | mode c == Term = mconcat [compare r1 r2, compare n1 n2]
 
   acompare' c (Bn r1 m1 n1) (Bn r2 m2 n2)
-    | mode c == Term = lexord (compare r1 r2) (lexord (compare m1 m2) (compare n1 n2))
+    | mode c == Term = mconcat [compare r1 r2, compare m1 m2, compare n1 n2]
 
   acompare' c (Nm _ _)   (Bn _ _ _) | mode c == Term = LT
   acompare' c (Bn _ _ _) (Nm _ _)   | mode c == Term = GT
-  acompare' c _          _          | mode c == Pat = EQ
+
+  acompare' _ _          _                           = EQ
 
 instance Alpha AnyName  where
 
@@ -619,7 +618,8 @@ instance Alpha AnyName  where
 
   aeq' _ x y | x == y         = True
   aeq' c _ _ | mode c == Term = False
-  aeq' c _ _ | mode c == Pat  = True
+
+  aeq' _ _ _                  = True
 
 {-
   match' _ x y | x == y          = Just empty
@@ -638,9 +638,8 @@ instance Alpha AnyName  where
        EQ ->  case gcastR (getR n1) (getR n2) n1 of
           Just n1' -> acompare' c n1' n2
           Nothing  -> error "impossible"
-       otherwise -> otherwise
-  acompare' c _ _           | mode c == Pat   = EQ
-
+       neq -> neq
+  acompare' _ _ _           = EQ
 
   freshen' c (AnyName nm) = case mode c of
      Pat  -> do x <- fresh nm
@@ -655,7 +654,7 @@ instance Alpha AnyName  where
   open c a (AnyName (Bn _ j x)) | level c == j = nthpat a x
   open _ _ n = n
 
-  close c a nm@(AnyName (Nm r n)) =
+  close c a nm@(AnyName (Nm r _)) =
     case findpat a nm of
       Just x  -> AnyName (Bn r (level c) x)
       Nothing -> nm
@@ -705,7 +704,7 @@ instance (Alpha p, Alpha t) => Alpha (Bind p t) where
 
     --  Comparing two binding terms.
     acompare' c (B p1 t1) (B p2 t2) =
-      lexord (acompare' (pat c) p1 p2) (acompare' (incr c) t1 t2)
+      mappend (acompare' (pat c) p1 p2) (acompare' (incr c) t1 t2)
 
     findpatrec _ b = error $ "Binding " ++ show b ++ " used as a pattern"
     nthpatrec    b = error $ "Binding " ++ show b ++ " used as a pattern"
@@ -743,7 +742,7 @@ instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
 -}
 
   acompare' c (R a1 a2) (R b1 b2) =
-      lexord (acompare' c a1 b1) (acompare' (incr c) a2 b2)
+      mappend (acompare' c a1 b1) (acompare' (incr c) a2 b2)
 
 
   open c a (R p q)  = R (open c a p) (open (incr c) a q)
@@ -777,14 +776,18 @@ instance Alpha p => Alpha (Rec p) where
 -- and we generally should treat the annots as constants
 instance Alpha t => Alpha (Embed t) where
    isPat (Embed t)   = if (isTerm t) then Just [] else Nothing
-   isTerm t          = False
+   isTerm _          = False
    isEmbed (Embed t) = isTerm t
 
-   swaps' c pm (Embed t) | mode c == Pat  = Embed (swaps' (term c) pm t)
-   swaps' c pm (Embed t) | mode c == Term = Embed t
+   swaps' c pm (Embed t) =
+     case mode c of
+       Pat  -> Embed (swaps' (term c) pm t)
+       Term -> Embed t
 
-   fv' c (Embed t) | mode c == Pat  = fv' (term c) t
-   fv' c _         | mode c == Term = emptyC
+   fv' c (Embed t) =
+     case mode c of
+       Pat  -> fv' (term c) t
+       Term -> emptyC
 
    freshen' c p | mode c == Term = error "freshen' called on a term"
                 | otherwise      = return (p, empty)
@@ -804,11 +807,13 @@ instance Alpha t => Alpha (Embed t) where
                                     else Nothing
 -}
 
-   close c b (Embed x) | mode c == Pat  = Embed (close (term c) b x)
-                       | mode c == Term = error "close on Embed"
+   close c b (Embed x) = case mode c of
+     Pat  -> Embed (close (term c) b x)
+     Term -> error "close on Embed"
 
-   open c b (Embed x) | mode c == Pat  = Embed (open (term c) b x)
-                      | mode c == Term = error "open on Embed"
+   open c b (Embed x) = case mode c of
+     Pat  -> Embed (open (term c) b x)
+     Term -> error "open on Embed"
 
    findpatrec _ _ = mempty
    nthpatrec _    = mempty
@@ -823,7 +828,7 @@ instance Alpha a => Alpha (Shift a) where
 
   -- The contents of Shift may only be an Embed or another Shift.
   isPat (Shift a)   = if (isEmbed a) then Just [] else Nothing
-  isTerm a          = False
+  isTerm _          = False
   isEmbed (Shift a) = isEmbed a
 
   close c b (Shift x) = Shift (close (decr c) b x)
