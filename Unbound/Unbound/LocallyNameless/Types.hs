@@ -120,7 +120,7 @@ instance Show a => Show (TRec a) where
 newtype Embed t = Embed t deriving Eq
 
 instance Show a => Show (Embed a) where
-  showsPrec p (Embed a) = showString "{" . showsPrec 0 a . showString "}"
+  showsPrec _ (Embed a) = showString "{" . showsPrec 0 a . showString "}"
 
 -- Shift
 --------------------------------------------------
@@ -129,7 +129,7 @@ instance Show a => Show (Embed a) where
 newtype Shift p = Shift p deriving Eq
 
 instance Show a => Show (Shift a) where
-  showsPrec p (Shift a) = showString "{" . showsPrec 0 a . showString "}"
+  showsPrec _ (Shift a) = showString "{" . showsPrec 0 a . showString "}"
 
 -- Pay no attention...
 

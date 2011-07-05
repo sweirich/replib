@@ -25,14 +25,14 @@ module Unbound.LocallyNameless.Fresh
 
     Fresh(..),
 
-    FreshM(..), runFreshM, contFreshM,
+    FreshM, runFreshM, contFreshM,
     FreshMT(..), runFreshMT, contFreshMT,
 
     -- * The 'LFresh' class
 
     LFresh(..),
 
-    LFreshM(..), runLFreshM, contLFreshM, getAvoids,
+    LFreshM, runLFreshM, contLFreshM, getAvoids,
     LFreshMT(..), runLFreshMT, contLFreshMT
 
   ) where
@@ -55,7 +55,6 @@ import Control.Monad.Trans.Error
 import Control.Monad.Trans.Identity
 import Control.Monad.Trans.List
 import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Reader (ReaderT)
 import Control.Monad.Trans.State.Lazy as Lazy
 import Control.Monad.Trans.State.Strict as Strict
 import Control.Monad.Trans.Writer.Lazy as Lazy
@@ -65,7 +64,6 @@ import qualified Control.Monad.Cont.Class as CC
 import qualified Control.Monad.Error.Class as EC
 import qualified Control.Monad.State.Class as StC
 import qualified Control.Monad.Reader.Class as RC
-import qualified Control.Monad.IO.Class as IC
 
 ------------------------------------------------------------
 -- Fresh
@@ -98,6 +96,8 @@ instance Monad m => Fresh (FreshMT m) where
     n <- St.get
     St.put (n+1)
     return $ Nm r (s,n)
+
+  fresh (Bn {}) = error "fresh encountered bound name! Please report this as a bug."
 
 -- | A convenient monad which is an instance of 'Fresh'.  It keeps
 --   track of a global index used for generating fresh names, which is
