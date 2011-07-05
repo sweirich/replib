@@ -147,11 +147,11 @@ incS k (S s) = S (s * (1+k))
 --
 -- finally, we define generalized versions of fold left and
 -- fold right for the Tree type constructor.
-instance Fold Tree where
-  foldRight op = rreduceR1 (rTree1 (RreduceD { rreduceD = op })
-                                   (RreduceD { rreduceD = foldRight op}))
-  foldLeft  op = lreduceR1 (rTree1 (LreduceD { lreduceD = op })
-                                   (LreduceD { lreduceD = foldLeft op }))
+-- instance Fold Tree where
+--   foldRight op = rreduceR1 (rTree1 ( RreduceD { rreduceD = op }
+--                                    , RreduceD { rreduceD = foldRight op}))
+--   foldLeft  op = lreduceR1 (rTree1 ( LreduceD { lreduceD = op }
+--                                    , LreduceD { lreduceD = foldLeft op }))
 
 assert :: String -> Bool -> IO ()
 assert s True  = return ()
@@ -172,13 +172,13 @@ main = do
 
 --
    assert "s1" (subtrees t1 == [Node (Leaf 3) (Leaf 4),Node (Leaf 5) (Leaf 6)])
-   assert "s2" (gsum t1 == 18)
-   assert "s3" (gsum t2 == 27)
+--   assert "s2" (gsum t1 == 18)
+--   assert "s3" (gsum t2 == 27)
 --
    assert "i1" (increase 0.1 s1 == C [D "Types" (M (E (P "Stephanie") (S 1100.0))) [PU (E (P "Michael") (S 55.0)),PU (E (P "Samuel") (S 55.0)),PU (E (P "Theodore") (S 55.0))],D "Terms" (M (E (P "Stephanie") (S 220.0))) [DU (D "Shipping" (M (E (P "Alice") (S 3300.0))) [])]])
 
    assert "i2" (s1 < (increase 0.2 s1))
 --
-   assert "f1" (gproduct t1 == 360)
-   assert "f2" (count t1 == 4)
+--   assert "f1" (gproduct t1 == 360)
+--   assert "f2" (count t1 == 4)
 
