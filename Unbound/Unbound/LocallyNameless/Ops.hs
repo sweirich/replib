@@ -1,4 +1,4 @@
-
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Unbound.LocallyNameless.Ops
