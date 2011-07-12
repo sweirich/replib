@@ -10,17 +10,14 @@
 ----------------------------------------------------------------------
 
 module Unbound.PermM (
-    Perm, single, compose, apply, support, isid, join, empty, restrict, mkPerm
+    Perm(..), single, compose, apply, support, isid, join, empty, restrict, mkPerm
   ) where
 
 import Data.Monoid
 import Data.List
 import Data.Map (Map)
+import Data.Function (on)
 import qualified Data.Map as Map
-import System.IO.Unsafe
-
-(<>) :: Monoid m => m -> m -> m
-(<>) = mappend
 
 -- | A /permutation/ is a bijective function from names to names
 --   which is the identity on all but a finite set of names.  They
@@ -91,52 +88,10 @@ restrict (Perm p) l = Perm (foldl' (\p' k -> Map.delete k p') p l)
 --   can only happen if @l1@ or @l2@ have repeated elements).
 mkPerm :: Ord a => [a] -> [a] -> Maybe (Perm a)
 mkPerm xs ys
-  | length xs == length ys = foldl' (\mp p -> mp >>= join p)
-                                    (Just empty)
-                                    (zipWith single xs ys)
-  | otherwise = Nothing
-
----------------------------------------------------------------------
-seteq :: Ord a => [a] -> [a] -> Bool
-seteq x y = nub (sort x) == nub (sort y)
-
-
-assert :: String -> Bool -> IO ()
-assert s True = return ()
-assert s False = print ("Assertion " ++ s ++ " failed")
-
-do_tests :: ()
-do_tests =
-   unsafePerformIO $ do
-     tests_apply
-     tests_isid
-     tests_support
-     tests_join
-
-tests_join = do
-  assert "j1" $ join empty (empty :: Perm Int) == Just empty
-  assert "j2" $ join (single 1 2) empty == Just (single 1 2)
-  assert "j3" $ join (single 1 2) (single 2 1) == Just (single 1 2)
-  assert "j4" $ join (single 1 2) (single 1 3) == Nothing
-
-tests_apply = do
-  assert "a1" $ apply empty 1 == 1
-  assert "a2" $ apply (single 1 2) 1 == 2
-  assert "a3" $ apply (single 2 1) 1 == 2
-  assert "a4" $ apply ((single 1 2) <> (single 2 1)) 1 == 1
-
-tests_isid = do
-  assert "i1" $ isid (empty :: Perm Int) == True
-  assert "i2" $ isid (single 1 2) == False
-  assert "i3" $ isid (single 1 1) == True
-  assert "i4" $ isid ((single 1 2) <> (single 1 2)) == True
-  assert "i5" $ isid ((single 1 2) <> (single 2 1)) == True
-  assert "i6" $ isid ((single 1 2) <> (single 3 2)) == False
-
-tests_support = do
-  assert "s1" $ support (empty :: Perm Int) `seteq` []
-  assert "s2" $ support (single 1 2) `seteq` [1,2]
-  assert "s3" $ support (single 1 1) `seteq` []
-  assert "s4" $ support ((single 1 2) <> (single 1 2)) `seteq` []
-  assert "s5" $ support ((single 1 2) <> (single 2 1)) `seteq` []
-  assert "s6" $ support ((single 1 2) <> (single 3 2)) `seteq` [1,2,3]
+  | inconsistent xs ys     = Nothing
+  | otherwise              = Just . mconcat $ zipWith single xs ys
+  where inconsistent xs ys = length xs /= length ys ||
+          (any (not . repeated) . (map . map) snd . groupBy ((==) `on` fst) . sort $ zip xs ys)
+        repeated = singletonList . group
+        singletonList [_] = True
+        singletonList _   = False
