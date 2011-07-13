@@ -1,5 +1,5 @@
 name:           unbound
-version:        0.3
+version:        0.2.4
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
