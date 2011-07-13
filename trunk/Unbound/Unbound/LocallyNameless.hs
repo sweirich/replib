@@ -37,8 +37,8 @@
 -- of the library source package: @cabal unpack unbound@) and the
 -- examples in the @example@ directory.
 --
--- See also: Stephanie Weirich, Brent Yorgey, and Tim Sheard.
--- /Binders Unbound/. Submitted, March 2011. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
+-- See also: Stephanie Weirich, Brent A. Yorgey, and Tim Sheard.
+-- /Binders Unbound/. To appear in ICFP'11, September 2011, Tokyo, Japan. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
 ----------------------------------------------------------------------
 
 module Unbound.LocallyNameless
