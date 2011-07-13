@@ -24,6 +24,10 @@ description:    Specify the binding structure of your data type with an
                 alpha-equivalence, free variable calculation,
                 capture-avoiding substitution, and more. See
                 "Unbound.LocallyNameless" to get started.
+source-repository head
+  type:     svn
+  location: https://replib.googlecode.com/svn/trunk/
+
 Library
   build-depends: base >= 4.3 && < 5,
                  RepLib >= 0.4.0,
