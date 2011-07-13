@@ -223,7 +223,7 @@ unbind (B p t) = do
 unbind2 :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
             Bind p1 t1 -> Bind p2 t2 -> m (Maybe (p1,t1,p2,t2))
 unbind2 (B p1 t1) (B p2 t2) = do
-      case mkPerm (fvAny p1) (fvAny p2) of
+      case mkPerm (fvAny p2) (fvAny p1) of
          Just pm -> do
            (p1', pm') <- freshen p1
            return $ Just (p1', openT p1' t1,
@@ -236,8 +236,8 @@ unbind2 (B p1 t1) (B p2 t2) = do
 unbind3 :: (Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
             Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->  m (Maybe (p1,t1,p2,t2,p3,t3))
 unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
-      case ( mkPerm (fvAny p1) (fvAny p2)
-           , mkPerm (fvAny p1) (fvAny p3) ) of
+      case ( mkPerm (fvAny p2) (fvAny p1)
+           , mkPerm (fvAny p3) (fvAny p1) ) of
          (Just pm12, Just pm13) -> do
            (p1', p') <- freshen p1
            return $ Just (p1', openT p1' t1,
@@ -264,7 +264,7 @@ lunbind (B p t) g =
 lunbind2  :: (LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
             Bind p1 t1 -> Bind p2 t2 -> (Maybe (p1,t1,p2,t2) -> m r) -> m r
 lunbind2 (B p1 t1) (B p2 t2) g =
-  case mkPerm (fvAny p1) (fvAny p2) of
+  case mkPerm (fvAny p2) (fvAny p1) of
     Just pm1 ->
       lfreshen p1 (\p1' pm2 -> g $ Just (p1', openT p1' t1,
                                          swaps (pm2 <> pm1) p2, openT p1' t2))
@@ -278,8 +278,8 @@ lunbind3 :: (LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t
             (Maybe (p1,t1,p2,t2,p3,t3) -> m r) ->
             m r
 lunbind3 (B p1 t1) (B p2 t2) (B p3 t3) g =
-  case ( mkPerm (fvAny p1) (fvAny p2)
-       , mkPerm (fvAny p1) (fvAny p3) ) of
+  case ( mkPerm (fvAny p2) (fvAny p1)
+       , mkPerm (fvAny p3) (fvAny p1) ) of
          (Just pm12, Just pm13) ->
            lfreshen p1 (\p1' pm' -> g $ Just (p1', openT p1' t1,
                                               swaps (pm' <> pm12) p2, openT p1' t2,
