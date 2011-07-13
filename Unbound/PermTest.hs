@@ -85,3 +85,9 @@ prop_mkPerm_perm xs ys | Just p <- mkPerm xs ys = map (apply p) xs == ys
 
 prop_mkPerm_fail :: [Int] -> [Int] -> Property
 prop_mkPerm_fail xs ys = length xs == length ys && nub xs == xs && nub ys == ys ==> isJust (mkPerm xs ys)
+
+prop_mkPerm_valid :: [Int] -> [Int] -> Bool
+prop_mkPerm_valid xs ys = maybe True permValid (mkPerm xs ys)
+
+prop_valid :: Perm Int -> Bool
+prop_valid = permValid
