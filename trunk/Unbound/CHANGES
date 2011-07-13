@@ -26,3 +26,5 @@ Version 0.2.4: 13 July 2011
     dealing with binders with non-disjoint sets of names.
 
     Thanks to Sean Leather for the report.
+
+  * Clean up some compiler warnings.
