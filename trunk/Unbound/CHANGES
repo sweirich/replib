@@ -19,3 +19,10 @@ Version 0.2.3: 20 April 2011
     - examples/STLC.hs
 
     Thanks to Ki Yung Ahn for the reports.
+
+Version 0.2.4: 13 July 2011
+
+  * Fix bug in mkPerm which caused unbind2 to unexpectedly fail when
+    dealing with binders with non-disjoint sets of names.
+
+    Thanks to Sean Leather for the report.
