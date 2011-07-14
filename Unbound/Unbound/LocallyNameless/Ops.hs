@@ -19,6 +19,9 @@ import Unbound.LocallyNameless.Fresh
 import Unbound.Util
 import Unbound.PermM
 
+import Data.Maybe as Maybe
+import Data.List  as List
+
 import Control.Monad (liftM)
 import qualified Text.Read as R
 
@@ -49,6 +52,46 @@ instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
 
          readListPrec = R.readListPrecDefault
 
+----------------------------------------------------------
+-- Set Binding operations
+----------------------------------------------------------
+
+permCloseAny :: (Alpha t) => [AnyName] -> t -> ([AnyName],t)
+permCloseAny ns t = (ns', closeT ns' t) where
+        -- find where the names occur in the body of the term
+        list   = map (\n -> (n, findpat t n)) ns
+        -- remove unused names
+        list'  = filter (\(n,posn) -> Maybe.isJust posn) list
+        -- sort by position
+        list'' :: [(AnyName, Maybe Integer)]
+        list'' = List.sortBy (\(n1,Just p1) (n2,Just p2) -> compare p1 p2) list'
+        -- new names
+        ns'    = map fst list''
+
+permClose :: (Alpha a, Alpha t) => [Name a] -> t -> ([Name a],t)
+permClose ns t = (ns', closeT ns' t) where
+        -- find where the names occur in the body of the term
+        list   = map (\n -> (n, findpat t (AnyName n))) ns
+        -- remove unused names
+        list'  = filter (\(n,posn) -> Maybe.isJust posn) list
+        -- sort by position
+        list'' = List.sortBy (\(n1,Just p1) (n2,Just p2) -> compare p1 p2) list'
+        -- new names
+        ns'    = map fst list''
+
+
+permbind :: (Alpha p, Alpha t) => p -> t -> Bind p t
+permbind p t = B p t' where
+         (ns, t') = permCloseAny (bindersAny p) t
+
+setbindAny :: (Alpha t) => [AnyName] -> t -> Bind [AnyName] t
+setbindAny p t = B ns t' where
+         (ns, t') = permCloseAny (bindersAny p) t
+           
+setbind ::(Alpha a, Alpha t) => [Name a] -> t -> Bind [Name a] t
+setbind p t = B ns t' where
+         (ns, t') = permClose (binders p) t
+ 
 ----------------------------------------------------------
 -- Rebinding operations
 ----------------------------------------------------------
