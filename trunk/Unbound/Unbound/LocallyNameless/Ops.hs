@@ -68,6 +68,16 @@ permCloseAny ns t = (ns', closeT ns' t) where
         -- new names
         ns'    = map fst list''
 
+-- Given a list of names and a term, close the term with those names
+-- where the indices of the bound variables occur in sequential order
+-- and return the equivalent ordering of the names, dropping those 
+-- that do not occur in the term at all
+-- For example:
+--    permClose [b,c]    (b,c)   =  ([b,c], (0,1))    -- standard close
+--    permClose [b,c]    (c,b)   =  ([c,b], (0,1))    -- vars reordered
+--    permClose [a,b,c]  (c,b)   =  ([c,b], (0,1))    -- var dropped
+--    permClose [a,b,c]  (c,b,c) =  ([c,b], (0,1,0))  -- additional occurrence ok
+
 permClose :: (Alpha a, Alpha t) => [Name a] -> t -> ([Name a],t)
 permClose ns t = (ns', closeT ns' t) where
         -- find where the names occur in the body of the term
@@ -79,18 +89,35 @@ permClose ns t = (ns', closeT ns' t) where
         -- new names
         ns'    = map fst list''
 
-
+-- | Bind the pattern in the term "up-to-permutation" of bound variables.
+-- For example, the following 4 terms are *all* alpha-equivalent
+--     permbind [a,b] (a,b)
+--     permbind [a,b] (b,a)
+--     permbind [b,a] (a,b)
+--     permbind [b,a] (b,a)
+-- None of these terms is equivalent to a term with a redundant pattern
+--     permbind [a,b,c] (a,b)
 permbind :: (Alpha p, Alpha t) => p -> t -> Bind p t
 permbind p t = B p t' where
          (ns, t') = permCloseAny (bindersAny p) t
+
+-- | Bind the list of names in the term "up-to" permutation and dropping
+-- of unused variables.
+-- For example, the following 5 terms are *all* alpha-equivalent
+--     setbind [a,b] (a,b)
+--     setbind [a,b] (b,a)
+--     setbind [b,a] (a,b)
+--     setbind [b,a] (b,a)
+--     setbind [a,b,c] (a,b)
+setbind ::(Alpha a, Alpha t) => [Name a] -> t -> Bind [Name a] t
+setbind p t = B ns t' where
+         (ns, t') = permClose (binders p) t
 
 setbindAny :: (Alpha t) => [AnyName] -> t -> Bind [AnyName] t
 setbindAny p t = B ns t' where
          (ns, t') = permCloseAny (bindersAny p) t
            
-setbind ::(Alpha a, Alpha t) => [Name a] -> t -> Bind [Name a] t
-setbind p t = B ns t' where
-         (ns, t') = permClose (binders p) t
+
  
 ----------------------------------------------------------
 -- Rebinding operations
