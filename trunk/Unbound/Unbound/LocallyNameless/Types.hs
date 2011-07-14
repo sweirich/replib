@@ -59,6 +59,7 @@ instance (Show a, Show b) => Show (Bind a b) where
 
 -- XXX todo: make sure everything has write Read and Eq instances?
 
+
 -- Rebind
 --------------------------------------------------
 
