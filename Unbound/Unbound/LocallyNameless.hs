@@ -100,12 +100,12 @@ module Unbound.LocallyNameless
 
     Bind,
 
-    -- *** Bind constructor
+    -- *** Bind constructors
     bind,
-    setbind, 
+    permbind,
+    setbind,
     setbindAny,
-    permbind, 
-     
+
 
     -- *** Bind destructors
 
