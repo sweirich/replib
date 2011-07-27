@@ -3,6 +3,7 @@
            , FlexibleInstances
            , FlexibleContexts
            , MultiParamTypeClasses
+           , EmptyDataDecls
   #-}
 
 ----------------------------------------------------------------------
@@ -18,7 +19,7 @@
 ----------------------------------------------------------------------
 
 module Unbound.LocallyNameless.Types
-       ( Bind(..)
+       ( GenBind(..), Bind, SetBind, SetPlusBind
        , Rebind(..)
        , Rec(..)
        , TRec(..)
@@ -32,7 +33,7 @@ module Unbound.LocallyNameless.Types
        --   referenced by auto-generated code.  Please pretend they do not
        --   exist.
 
-       , rBind, rRebind, rEmbed, rRec, rShift
+       , rGenBind, rRebind, rEmbed, rRec, rShift
        ) where
 
 import Generics.RepLib
@@ -42,18 +43,29 @@ import Unbound.LocallyNameless.Name
 -- Basic types
 ------------------------------------------------------------
 
+data RelaxedOrder
+data StrictOrder
+
+data RelaxedCard
+data StrictCard
+
 -- Bind
 --------------------------------------------------
 
+-- XXX update documentation
 -- | The most fundamental combinator for expressing binding structure
 --   is 'Bind'.  The /term type/ @Bind p t@ represents a pattern @p@
 --   paired with a term @t@, where names in @p@ are bound within @t@.
 --
 --   Like 'Name', 'Bind' is also abstract. You can create bindings
 --   using 'bind' and take them apart with 'unbind' and friends.
-data Bind p t = B p t
+data GenBind order card p t = B p t
 
-instance (Show a, Show b) => Show (Bind a b) where
+type Bind p t        = GenBind StrictOrder StrictCard p t
+type SetBind p t     = GenBind RelaxedOrder StrictCard p t
+type SetPlusBind p t = GenBind RelaxedOrder RelaxedCard p t
+
+instance (Show a, Show b) => Show (GenBind order card a b) where
   showsPrec p (B a b) = showParen (p>0)
       (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
 
@@ -134,5 +146,7 @@ instance Show a => Show (Shift a) where
 
 -- Pay no attention...
 
-$(derive [''Bind, ''Embed, ''Rebind, ''Rec, ''Shift])
+$(derive [''GenBind, ''Embed, ''Rebind, ''Rec, ''Shift])
+
+$(derive [''RelaxedOrder, ''StrictOrder, ''RelaxedCard, ''StrictCard])
 
