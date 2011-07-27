@@ -254,7 +254,7 @@ module Unbound.LocallyNameless
     -- | These type representation objects are exported so they can be
     --   referenced by auto-generated code.  Please pretend they do not
     --   exist.
-    rName, rBind, rRebind, rEmbed, rRec, rShift
+    rName, rGenBind, rRebind, rEmbed, rRec, rShift
 ) where
 
 import Unbound.LocallyNameless.Name

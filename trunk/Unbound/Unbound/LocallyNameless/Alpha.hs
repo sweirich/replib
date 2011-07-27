@@ -666,7 +666,7 @@ instance Alpha AnyName  where
 
   nthpatrec = nthName
 
-instance (Alpha p, Alpha t) => Alpha (Bind p t) where
+instance (Rep order, Rep card, Alpha p, Alpha t) => Alpha (GenBind order card p t) where
     isPat _ = Nothing
     isTerm (B p t) = isJust (isPat p) && isTerm t
 

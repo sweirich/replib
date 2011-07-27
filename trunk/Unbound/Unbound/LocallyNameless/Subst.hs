@@ -117,8 +117,8 @@ instance (Subst c a) => Subst c [a]
 instance (Subst c a) => Subst c (Maybe a)
 instance (Subst c a, Subst c b) => Subst c (Either a b)
 
-instance (Subst c b, Subst c a, Alpha a,Alpha b) =>
-    Subst c (Bind a b)
+instance (Rep order, Rep card, Subst c b, Subst c a, Alpha a,Alpha b) =>
+    Subst c (GenBind order card a b)
 instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b)
 

@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 ----------------------------------------------------------------------
 -- |
@@ -38,7 +39,7 @@ bind p t = B p (closeT p t)
 
 -- | A destructor for binders that does /not/ guarantee fresh
 --   names for the binders.
-unsafeUnbind :: (Alpha a, Alpha b) => Bind a b -> (a,b)
+unsafeUnbind :: (Alpha a, Alpha b) => GenBind order card a b -> (a,b)
 unsafeUnbind (B a b) = (a, openT a b)
 
 instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
@@ -104,7 +105,7 @@ permClose ns t = (ns', closeT ns' t) where
 --
 --   For binding constructors which /do/ render these equivalent,
 --   see 'setbind' and 'setbindAny'.
-permbind :: (Alpha p, Alpha t) => p -> t -> Bind p t
+permbind :: (Alpha p, Alpha t) => p -> t -> SetBind p t
 permbind p t = B p (snd $ permCloseAny (bindersAny p) t)
 
 -- | Bind the list of names in the term up to permutation and dropping
@@ -119,13 +120,13 @@ permbind p t = B p (snd $ permCloseAny (bindersAny p) t)
 --   > setbind [a,b,c] (a,b)
 --
 --   There is also a variant, 'setbindAny', which ignores name sorts.
-setbind ::(Alpha a, Alpha t) => [Name a] -> t -> Bind [Name a] t
+setbind ::(Alpha a, Alpha t) => [Name a] -> t -> SetPlusBind [Name a] t
 setbind p t = B ns t' where
          (ns, t') = permClose (binders p) t
 
 -- | Bind the list of (any-sorted) names in the term up to permutation
 --   and dropping of unused variables.  See 'setbind'.
-setbindAny :: (Alpha t) => [AnyName] -> t -> Bind [AnyName] t
+setbindAny :: (Alpha t) => [AnyName] -> t -> SetPlusBind [AnyName] t
 setbindAny p t = B ns t' where
          (ns, t') = permCloseAny (bindersAny p) t
 
@@ -292,7 +293,7 @@ matchBinders = match' initial
 --   bindings. It ensures that the names in the binding are globally
 --   fresh, using a monad which is an instance of the 'Fresh' type
 --   class.
-unbind :: (Fresh m, Alpha p, Alpha t) => Bind p t -> m (p,t)
+unbind :: (Fresh m, Alpha p, Alpha t) => GenBind order card p t -> m (p,t)
 unbind (B p t) = do
       (p', _) <- freshen p
       return (p', openT p' t)
@@ -303,7 +304,7 @@ unbind (B p t) = do
 --   @Nothing@.  Otherwise, return the renamed patterns and the
 --   associated terms.
 unbind2 :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
-            Bind p1 t1 -> Bind p2 t2 -> m (Maybe (p1,t1,p2,t2))
+            GenBind order card p1 t1 -> GenBind order card p2 t2 -> m (Maybe (p1,t1,p2,t2))
 unbind2 (B p1 t1) (B p2 t2) = do
       case mkPerm (fvAny p2) (fvAny p1) of
          Just pm -> do
@@ -316,7 +317,7 @@ unbind2 (B p1 t1) (B p2 t2) = do
 --   binders have the same number of binding variables.  See the
 --   documentation for 'unbind2' for more details.
 unbind3 :: (Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
-            Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->  m (Maybe (p1,t1,p2,t2,p3,t3))
+            GenBind order card p1 t1 -> GenBind order card p2 t2 -> GenBind order card p3 t3 ->  m (Maybe (p1,t1,p2,t2,p3,t3))
 unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
       case ( mkPerm (fvAny p2) (fvAny p1)
            , mkPerm (fvAny p3) (fvAny p1) ) of
@@ -335,7 +336,7 @@ unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
 --
 --   For more information, see the documentation for the 'LFresh' type
 --   class.
-lunbind :: (LFresh m, Alpha p, Alpha t) => Bind p t -> ((p, t) -> m c) -> m c
+lunbind :: (LFresh m, Alpha p, Alpha t) => GenBind order card p t -> ((p, t) -> m c) -> m c
 lunbind (B p t) g =
   lfreshen p (\x _ -> g (x, openT x t))
 
@@ -344,7 +345,7 @@ lunbind (B p t) g =
 --   patterns have the same number of binding variables.  See the
 --   documentation for 'unbind2' and 'lunbind' for more details.
 lunbind2  :: (LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
-            Bind p1 t1 -> Bind p2 t2 -> (Maybe (p1,t1,p2,t2) -> m r) -> m r
+            GenBind order card p1 t1 -> GenBind order card p2 t2 -> (Maybe (p1,t1,p2,t2) -> m r) -> m r
 lunbind2 (B p1 t1) (B p2 t2) g =
   case mkPerm (fvAny p2) (fvAny p1) of
     Just pm1 ->
@@ -356,7 +357,7 @@ lunbind2 (B p1 t1) (B p2 t2) g =
 --   the binders have the same number of binding variables.  See the
 --   documentation for 'unbind2' and 'lunbind' for more details.
 lunbind3 :: (LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
-            Bind p1 t1 -> Bind p2 t2 -> Bind p3 t3 ->
+            GenBind order card p1 t1 -> GenBind order card p2 t2 -> GenBind order card p3 t3 ->
             (Maybe (p1,t1,p2,t2,p3,t3) -> m r) ->
             m r
 lunbind3 (B p1 t1) (B p2 t2) (B p3 t3) g =
