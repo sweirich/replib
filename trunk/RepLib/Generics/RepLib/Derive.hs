@@ -2,6 +2,7 @@
            , UndecidableInstances
            , TypeOperators
            , ScopedTypeVariables
+           , GADTs
   #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
@@ -30,15 +31,18 @@ module Generics.RepLib.Derive (
 
 import Generics.RepLib.R
 import Generics.RepLib.R1
-import Language.Haskell.TH
+import Language.Haskell.TH hiding (Con)
+import qualified Language.Haskell.TH as TH (Con)
 import Data.List (foldl', nub)
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
 
-import Control.Monad (replicateM, zipWithM)
+import Control.Monad (replicateM, zipWithM, liftM)
 import Control.Arrow ((***), second)
 import Control.Applicative ((<$>))
+
+import Unsafe.Coerce
 
 -- | Given a type, produce its representation.
 repty :: Type -> Exp
@@ -543,3 +547,117 @@ simpleName nm =
 tyVarBndrName :: TyVarBndr -> Name
 tyVarBndrName (PlainTV n) = n
 tyVarBndrName (KindedTV n _) = n
+
+
+----------------------------------------------------------------
+--  Generating ResN types with associated destructor functions
+----------------------------------------------------------------
+
+{- Derive declarations of the form
+
+data Res2 c2 a where
+  Result2   :: (Rep d, Rep e) => a :=: (c2 d e) -> Res2 c2 a
+  NoResult2 :: Res2 c2 a
+
+destr2 :: R a -> R (c2 d e) -> Res2 c2 a
+destr2 (Data (DT s1 ((rd :: R d) :+: (re :: R e) :+: MNil)) _)
+       (Data (DT s2 _) _)
+  | s1 == s2  = Result2 (unsafeCoerce Refl :: a :=: (c2 d e))
+  | otherwise = NoResult2
+destr2 _ _ = NoResult2
+
+   for taking apart applications of type constructors of arity n.
+-}
+
+deriveRes :: Int -> Q [Dec]
+deriveRes n | n < 0 = error "deriveRes should only be called with positive arguments"
+deriveRes n = do
+  c  <- newName "c"
+  a  <- newName "a"
+  bs <- replicateM n (newName "b")
+  liftM (deriveResData n c a bs:) (deriveResDestr n c a bs)
+
+deriveResData :: Int -> Name -> Name -> [Name] -> Dec
+deriveResData n c a bs =
+  DataD [] (mkName $ "Res" ++ show n) (map PlainTV [c,a])
+        [deriveResultCon n c a bs, deriveNoResultCon n] []
+
+deriveResultCon :: Int -> Name -> Name -> [Name] -> TH.Con
+deriveResultCon n c a bs =
+    ForallC
+      (map PlainTV bs)
+      (map (ClassP ''Rep . (:[]) . VarT) bs)
+      (NormalC (mkName $ "Result" ++ show n)
+        [(NotStrict, deriveResultEq c a bs)]
+      )
+
+deriveResultEq :: Name     -- Tyvar representing the type to be deconstructed
+               -> Name     -- Constructor tyvar
+               -> [Name]   -- Argument tyvars
+               -> Type
+deriveResultEq c a bs = AppT (AppT (ConT (mkName ":=:")) (VarT a))
+                             (appsT (VarT c) bs)
+
+deriveNoResultCon :: Int -> TH.Con
+deriveNoResultCon n = NormalC (mkName $ "NoResult" ++ show n) []
+
+deriveResDestr :: Int -> Name -> Name -> [Name] -> Q [Dec]
+deriveResDestr n c a bs = do
+  let sig = deriveResDestrSig n c a bs
+  decl <- deriveResDestrDecl n c a bs
+  return [sig, decl]
+
+deriveResDestrSig :: Int -> Name -> Name -> [Name] -> Dec
+deriveResDestrSig n c a bs =
+  SigD (mkName $ "destr" ++ show n)
+       ((AppT (ConT ''R) (VarT a)) `arr`
+        (AppT (ConT ''R) (appsT (VarT c) bs)) `arr`
+        (AppT (AppT (ConT (mkName $ "Res" ++ show n)) (VarT c)) (VarT a)))
+
+deriveResDestrDecl :: Int -> Name -> Name -> [Name] -> Q Dec
+deriveResDestrDecl n c a bs = do
+  [s1, s2] <- replicateM 2 (newName "s")
+  return $
+    FunD
+      (mkName $ "destr" ++ show n)
+      [ Clause
+          [ deriveResDestrLPat s1 bs
+          , deriveResDestrRPat s2
+          ]
+          (GuardedB
+             [ ( NormalG (AppE (AppE (VarE '(==)) (VarE s1)) (VarE s2))
+               , AppE (ConE (mkName $ "Result" ++ show n))
+                      (SigE (AppE (VarE 'unsafeCoerce) (ConE 'Refl))
+                            (deriveResultEq c a bs)
+                      )
+               )
+             , ( NormalG (VarE 'otherwise)
+               , ConE (mkName $ "NoResult" ++ show n)
+               )
+             ]
+          )
+          []
+      , Clause
+          [ WildP, WildP ]
+          (NormalB (ConE (mkName $ "NoResult" ++ show n)))
+          []
+      ]
+
+-- XXX
+-- (Data (DT s1 ((_ :: R b1) :+: (_ :: R b2) :+: MNil)) _)
+deriveResDestrLPat :: Name -> [Name] -> Pat
+deriveResDestrLPat s1 bs = undefined
+
+-- XXX
+-- (Data (DT s2 _) _)
+deriveResDestrRPat :: Name -> Pat
+deriveResDestrRPat s2 = undefined
+
+infixr 5 `arr`
+arr :: Type -> Type -> Type
+arr t1 t2 = AppT (AppT ArrowT t1) t2
+
+appsT :: Type -> [Name] -> Type
+appsT t []     = t
+appsT t (n:ns) = appsT (AppT t (VarT n)) ns
+
