@@ -21,7 +21,7 @@
 -----------------------------------------------------------------------------
 module Generics.RepLib.RepAux (
   -- ** Casting operations
-  eqT, eqR, cast, castR, gcast, gcastR,
+  eqR, cast, castR, gcast, gcastR,
 
   -- ** Comparison
   compareR,

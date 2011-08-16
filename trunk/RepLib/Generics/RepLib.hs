@@ -35,7 +35,9 @@ module Generics.RepLib (
  -- ** Library of generic operations
  module Generics.RepLib.Lib,
  -- ** Derivable type classes written as generic operations
- module Generics.RepLib.PreludeLib
+ module Generics.RepLib.PreludeLib,
+
+ module Data.Type.Equality
 ) where
 
 
@@ -48,5 +50,6 @@ import Generics.RepLib.SYB.Aliases
 import Generics.RepLib.SYB.Schemes
 import Generics.RepLib.Lib
 import Generics.RepLib.PreludeLib
+import Data.Type.Equality
 -----------------------------------------------------------------------------
 
