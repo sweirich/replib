@@ -3,6 +3,7 @@
            , TypeOperators
            , ScopedTypeVariables
            , GADTs
+           , GeneralizedNewtypeDeriving
   #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
@@ -33,12 +34,14 @@ import Generics.RepLib.R
 import Generics.RepLib.R1
 import Language.Haskell.TH hiding (Con)
 import qualified Language.Haskell.TH as TH (Con)
+import Language.Haskell.TH.Syntax (Quasi(..))
 import Data.List (foldl', nub)
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
 
-import Control.Monad (replicateM, zipWithM, liftM)
+import Control.Monad (replicateM, zipWithM, liftM, liftM2)
+import Control.Monad.Writer (WriterT, MonadWriter(..), runWriterT, lift)
 import Control.Arrow ((***), second)
 import Control.Applicative ((<$>))
 
@@ -70,7 +73,30 @@ rName1 n =
     "(,)" -> mkName ("rTup2_1")
     c      -> mkName ("r" ++ c ++ "1")
 
--------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------
+
+-- Q-like monad which also remembers a Set of Int values.  We use this
+-- to keep track of which Res/destr definitions we end up needing
+-- while generating constructor representations.
+
+newtype QN a = QN { unQN :: WriterT (S.Set Int) Q a }
+  deriving (Functor, Monad, MonadWriter (S.Set Int))
+
+liftQN :: Q a -> QN a
+liftQN = QN . lift
+
+runQN :: QN a -> Q (a, S.Set Int)
+runQN = runWriterT . unQN
+
+instance Quasi QN where
+  qNewName s            = liftQN $ qNewName s
+  qReport b s           = liftQN $ qReport b s
+  qRecover              = error "qRecover not implemented for QN"
+  qReify n              = liftQN $ qReify n
+  qClassInstances n tys = liftQN $ qClassInstances n tys
+  qLocation             = liftQN qLocation
+  qRunIO io             = liftQN $ qRunIO io                       
+
 -- Generate the representation for a data constructor.
 -- As our representation of data constructors evolves, so must this definition.
 --    Currently, we don't handle data constructors with record components.
@@ -78,28 +104,25 @@ rName1 n =
 -- | Generate an R-type constructor representation.
 repcon :: TypeInfo ->     -- information about the type
           ConstrInfo ->   -- information about the constructor
-          Q Exp
+          QN Exp
 repcon info constr
-  | null (constrCxt constr) = [| Just $con |]
+  | null (constrCxt constr) = liftQN [| Just $con |]
   | otherwise               = gadtCase (typeParams info) constr con
   where args = map (return . repty . fieldType) . constrFields $ constr
         mtup = foldr (\ t tl -> [| $(t) :+: $(tl) |]) [| MNil |] args
         con  = [| Con $(remb constr) $(mtup) |]
 
-gadtCase :: [TyVarBndr] -> ConstrInfo -> Q Exp -> Q Exp
+gadtCase :: [TyVarBndr] -> ConstrInfo -> Q Exp -> QN Exp
 gadtCase tyVars constr conQ = do
-  con      <- [| Just $conQ |]
+  con      <- liftQN [| Just $conQ |]
   (m, pat) <- typeRefinements tyVars constr
-  n        <- [| Nothing |]
+  n        <- liftQN [| Nothing |]
   return $ CaseE m
     [ Match pat (NormalB con) []
     , Match WildP (NormalB n) []
     ]
 
-      -- have to do the above in this long annoying explicit way
-      -- because splicing patterns is not supported.
-
-typeRefinements :: [TyVarBndr] -> ConstrInfo -> Q (Exp, Pat)
+typeRefinements :: [TyVarBndr] -> ConstrInfo -> QN (Exp, Pat)
 typeRefinements tyVars constr =
       fmap ((TupE *** TupP) . unzip)
     . sequence
@@ -122,10 +145,13 @@ extractParamEqualities tyVars = filterWith extractLHSVars
         filterWith :: (a -> Maybe b) -> [a] -> [b]
         filterWith f = catMaybes . map f
 
-genRefinement :: (Name, Type) -> Q (Exp, Pat)
+-- The third result is the arity of the type constructor, hence the N
+-- of the required ResN/destrN declarations.
+genRefinement :: (Name, Type) -> QN (Exp, Pat)
 genRefinement (n, ty) = do
   let (con, args) = decomposeTy ty
-  case args of
+  tell $ S.singleton (length args)
+  liftQN $ case args of
     [] -> do e <- [| eqT (rep :: R $(varT n)) $(return $ repty ty) |]
              p <- [p| Just Refl |]
              return (e,p)
@@ -214,7 +240,8 @@ repr f n = do info' <- reify n
                   let ty = foldl' (\x p -> x `AppT` (VarT p)) baseT paramNames
                   -- the representations of the paramters, as a list
                   -- representations of the data constructors
-                  rcons <- mapM (repcon dInfo) constrs
+                  (rcons, ks) <- runQN $ mapM (repcon dInfo) constrs
+                  ress <- deriveRess ks
                   body  <- case f of
                      Conc -> [| Data $(repDT nm paramNames)
                                      (catMaybes $(return (ListE rcons))) |]
@@ -231,7 +258,7 @@ repr f n = do info' <- reify n
                   let inst  = InstanceD ctx ((ConT (mkName "Rep")) `AppT` ty)
                                  [ValD (VarP (mkName "rep")) (NormalB (VarE rTypeName)) []]
 
-                  return [rSig, rType, inst]
+                  return $ ress ++ [rSig, rType, inst]
 
 reprs :: Flag -> [Name] -> Q [Dec]
 reprs f ns = concat <$> mapM (repr f) ns
@@ -331,7 +358,7 @@ repcon1 info ctxParam constr = do
       con     = [| Con $(remb constr) $(mtup) |]
   case (null (constrCxt constr)) of
     True -> [| Just $conBody |]
-    _    -> gadtCase (typeParams info) constr conBody
+    _    -> fst <$> (runQN $ gadtCase (typeParams info) constr conBody)
 
 -- | Apply a context parameter to the right number of equality proofs
 --   to get out the promised context.
@@ -451,7 +478,7 @@ repr1s :: Flag -> [Name] -> Q [Dec]
 repr1s f ns = concat <$> mapM (repr1 f) ns
 
 -- | Generate representations (both basic and parameterized) for a list of
--- types.
+--   types.
 derive :: [Name] -> Q [Dec]
 derive = repr1s Conc
 
@@ -569,6 +596,14 @@ destr2 _ _ = NoResult2
    for taking apart applications of type constructors of arity n.
 -}
 
+deriveRess :: S.Set Int -> Q [Dec]
+deriveRess = S.fold (liftM2 (++) . deriveResMaybe) (return [])
+
+deriveResMaybe :: Int -> Q [Dec]
+deriveResMaybe n = recover 
+                     (deriveRes n) 
+                     (reify (mkName $ "Res" ++ show n) >> return [])
+
 deriveRes :: Int -> Q [Dec]
 deriveRes n | n < 0 = error "deriveRes should only be called with positive arguments"
 deriveRes n = do
@@ -643,15 +678,25 @@ deriveResDestrDecl n c a bs = do
           []
       ]
 
--- XXX
 -- (Data (DT s1 ((_ :: R b1) :+: (_ :: R b2) :+: MNil)) _)
 deriveResDestrLPat :: Name -> [Name] -> Pat
-deriveResDestrLPat s1 bs = undefined
+deriveResDestrLPat s1 bs = 
+  ConP 'Data
+  [ ConP 'DT
+    [ VarP s1
+    , foldr (\p l -> InfixP p '(:+:) l) (ConP 'MNil [])
+            (map (SigP WildP . AppT (ConT ''R) . VarT) bs)
+    ]
+  , WildP
+  ]
 
--- XXX
 -- (Data (DT s2 _) _)
 deriveResDestrRPat :: Name -> Pat
-deriveResDestrRPat s2 = undefined
+deriveResDestrRPat s2 = 
+  ConP 'Data
+  [ ConP 'DT [ VarP s2, WildP ]
+  , WildP
+  ]
 
 infixr 5 `arr`
 arr :: Type -> Type -> Type
