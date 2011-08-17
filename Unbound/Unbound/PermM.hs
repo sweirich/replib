@@ -17,7 +17,6 @@ module Unbound.PermM (
 import Data.Monoid
 import Data.List
 import Data.Map (Map)
-import Data.Function (on)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Arrow ((&&&))
