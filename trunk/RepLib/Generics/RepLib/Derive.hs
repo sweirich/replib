@@ -400,7 +400,7 @@ genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
                          []
                    ]
 
-  nms <- replicateM (length eqs) (newName "a")
+  nms <- replicateM (length tvs) (newName "a")
   err <- [| error "Impossible Sat instance!" |]
 
   let defSatInst = InstanceD [] (foldl' AppT (ConT satNm) (map VarT (ctx : nms)))
