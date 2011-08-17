@@ -69,9 +69,6 @@ instance (Show a, Show b) => Show (GenBind order card a b) where
   showsPrec p (B a b) = showParen (p>0)
       (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
 
--- XXX todo: make sure everything has write Read and Eq instances?
-
-
 -- Rebind
 --------------------------------------------------
 
