@@ -37,7 +37,7 @@ module Generics.RepLib (
  -- ** Derivable type classes written as generic operations
  module Generics.RepLib.PreludeLib,
 
- module Data.Type.Equality
+ (:=:)(..), EqT(..)
 ) where
 
 

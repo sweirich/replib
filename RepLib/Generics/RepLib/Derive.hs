@@ -40,7 +40,7 @@ import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Type.Equality
 
-import Control.Monad (replicateM, zipWithM, liftM, liftM2)
+import Control.Monad (replicateM, zipWithM, liftM, liftM2, when)
 import Control.Monad.Writer (WriterT, MonadWriter(..), runWriterT, lift)
 import Control.Arrow ((***), second)
 import Control.Applicative ((<$>))
@@ -150,7 +150,7 @@ extractParamEqualities tyVars = filterWith extractLHSVars
 genRefinement :: (Name, Type) -> QN (Exp, Pat)
 genRefinement (n, ty) = do
   let (con, args) = decomposeTy ty
-  tell $ S.singleton (length args)
+  when (not (null args)) $ tell $ S.singleton (length args)
   liftQN $ case args of
     [] -> do e <- [| eqT (rep :: R $(varT n)) $(return $ repty ty) |]
              p <- [p| Just Refl |]
@@ -241,7 +241,10 @@ repr f n = do info' <- reify n
                   -- the representations of the paramters, as a list
                   -- representations of the data constructors
                   (rcons, ks) <- runQN $ mapM (repcon dInfo) constrs
-                  ress <- deriveRess ks
+
+                  ress <- case f of
+                            Conc -> deriveRess ks
+                            Abs  -> return []
                   body  <- case f of
                      Conc -> [| Data $(repDT nm paramNames)
                                      (catMaybes $(return (ListE rcons))) |]
@@ -639,19 +642,23 @@ deriveNoResultCon n = NormalC (mkName $ "NoResult" ++ show n) []
 deriveResDestr :: Int -> Name -> Name -> [Name] -> Q [Dec]
 deriveResDestr n c a bs = do
   let sig = deriveResDestrSig n c a bs
-  decl <- deriveResDestrDecl n c a bs
+  decl <- deriveResDestrDecl n c a (length bs)
   return [sig, decl]
 
 deriveResDestrSig :: Int -> Name -> Name -> [Name] -> Dec
 deriveResDestrSig n c a bs =
   SigD (mkName $ "destr" ++ show n)
-       ((AppT (ConT ''R) (VarT a)) `arr`
-        (AppT (ConT ''R) (appsT (VarT c) bs)) `arr`
-        (AppT (AppT (ConT (mkName $ "Res" ++ show n)) (VarT c)) (VarT a)))
+       (ForallT (map PlainTV $ [c,a] ++ bs) []
+         ( (AppT (ConT ''R) (VarT a)) `arr`
+           (AppT (ConT ''R) (appsT (VarT c) bs)) `arr`
+           (AppT (AppT (ConT (mkName $ "Res" ++ show n)) (VarT c)) (VarT a))
+         )
+       )
 
-deriveResDestrDecl :: Int -> Name -> Name -> [Name] -> Q Dec
-deriveResDestrDecl n c a bs = do
+deriveResDestrDecl :: Int -> Name -> Name -> Int -> Q Dec
+deriveResDestrDecl n c a bNum = do
   [s1, s2] <- replicateM 2 (newName "s")
+  bs <- replicateM bNum (newName "b")
   return $
     FunD
       (mkName $ "destr" ++ show n)
@@ -678,7 +685,7 @@ deriveResDestrDecl n c a bs = do
           []
       ]
 
--- (Data (DT s1 ((_ :: R b1) :+: (_ :: R b2) :+: MNil)) _)
+-- (Data (DT s1 ((_ :: R b1') :+: (_ :: R b2') :+: MNil)) _)
 deriveResDestrLPat :: Name -> [Name] -> Pat
 deriveResDestrLPat s1 bs = 
   ConP 'Data
