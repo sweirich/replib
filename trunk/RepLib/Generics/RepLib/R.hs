@@ -76,7 +76,7 @@ data MTup r l where
 
 infixr 7 :+:
 
--- | A Class of representatble types
+-- | A class of representable types
 class Rep a where rep :: R a
 
 ------ Showing representations  (rewrite this with showsPrec?)
