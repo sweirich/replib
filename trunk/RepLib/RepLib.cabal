@@ -16,6 +16,10 @@ synopsis:       Generic programming library with representation types
 description:    Generic programming library providing structural
                 polymorphism and other features.
 
+Source-repository head
+  type: svn
+  location: http://replib.googlecode.com/svn/trunk/
+
 Library
   build-depends: base >= 4.3 && < 5, 
                  template-haskell >= 2.4 && < 2.6, 
