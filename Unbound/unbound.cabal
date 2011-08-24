@@ -1,5 +1,5 @@
 name:           unbound
-version:        0.2.5
+version:        0.3
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -30,7 +30,7 @@ source-repository head
 
 Library
   build-depends: base >= 4.3 && < 5,
-                 RepLib >= 0.4.0,
+                 RepLib >= 0.5,
                  mtl >= 2.0 && < 2.1, transformers >= 0.2.2.0 && < 0.2.3,
                  containers >= 0.3 && < 0.5
   exposed-modules:
