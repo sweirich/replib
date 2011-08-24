@@ -29,7 +29,7 @@ Version 0.2.5: 13 July 2011
 
   * Clean up some compiler warnings.
 
-Version 0.2.6: 24 August 2011
+Version 0.3: 24 August 2011
 
   * New permutation- and set-binding functions, for creating binders
     which don't care about the order of multiple bound names, and/or
