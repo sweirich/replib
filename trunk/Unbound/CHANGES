@@ -28,3 +28,12 @@ Version 0.2.5: 13 July 2011
     Thanks to Sean Leather for the report.
 
   * Clean up some compiler warnings.
+
+Version 0.2.6: 24 August 2011
+
+  * New permutation- and set-binding functions, for creating binders
+    which don't care about the order of multiple bound names, and/or
+    about unused bound names.
+
+  * Bump RepLib dependency to 0.5, which now has support for GADTs
+    without existential type variables.
