@@ -297,7 +297,7 @@ reprs f ns = concat <$> mapM (repr f) ns
 data CtxParam = CtxParam { cpName    :: Name            -- The argument name
                          , cpType    :: Type            -- The argument type
                          , cpEqs     :: [(Name, Type)]  -- Required equality proofs
-                         , cpTyVars  :: [Name]          -- *All* type variable arguments to the type
+                         , cpTyVars  :: [Name]          -- /All/ type variable arguments to the type
                                                         -- (not just ones requiring equality proofs);
                                                         -- needed when generating special Sat classes
                          , cpPayload :: Type            -- What you get after supplying
