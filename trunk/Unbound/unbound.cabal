@@ -1,10 +1,10 @@
 name:           unbound
-version:        0.3
+version:        0.3.1
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.6
-tested-with:    GHC == 7.0.1, GHC == 7.0.3
+tested-with:    GHC == 7.0.1, GHC == 7.0.3, GHC == 7.0.4, GHC == 7.2.1
 author:         Stephanie Weirich
 maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
                 Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -30,7 +30,7 @@ source-repository head
 
 Library
   build-depends: base >= 4.3 && < 5,
-                 RepLib >= 0.5,
+                 RepLib >= 0.5.1 && < 0.6,
                  mtl >= 2.0 && < 2.1, transformers >= 0.2.2.0 && < 0.2.3,
                  containers >= 0.3 && < 0.5
   exposed-modules:
