@@ -8,7 +8,7 @@
   #-}
 ----------------------------------------------------------------------
 -- |
--- Module      :  Unbound.LocallyNameless.Fresh
+-- Module      :  Unbound.Fresh
 -- License     :  BSD-like (see LICENSE)
 --
 -- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
@@ -99,14 +99,6 @@ instance Monad m => Fresh (FreshMT m) where
      St.put (n+1)
      return $ renumber n nm
 
-{-
-instance Monad m => Fresh (FreshMT m) where
-  fresh (Nm r (s,_)) = FreshMT $ do
-    n <- St.get
-    St.put (n+1)
-    return $ Nm r (s,n)
--}
-
 -- | A convenient monad which is an instance of 'Fresh'.  It keeps
 --   track of a global index used for generating fresh names, which is
 --   incremented every time 'fresh' is called.
@@ -177,41 +169,55 @@ instance RC.MonadReader r m => RC.MonadReader r (FreshMT m) where
 ---------------------------------------------------
 
 -- | This is the class of monads that support freshness in an
---   (implicit) local scope.  Generated names are fresh for the current
---   local scope, not necessarily globally fresh.
+--   (implicit) local scope.  Generated names are fresh for the
+--   current local scope, not necessarily globally fresh.
+
 class Monad m => LFresh m where
   -- | Pick a new name that is fresh for the current (implicit) scope.
   lfresh  :: AName a => a -> m a
+
   -- | Avoid the given names when freshening in the subcomputation,
   --   that is, add the given names to the in-scope set.
   avoid   :: [AnyName] -> m a -> m a
 
+  -- | Is the current name currently in the local scope?
+  inScope :: AName a => a -> m Bool
+
+  -- | Pop the outermost scope of names
+  shift   :: m a -> m a
+
 -- | The LFresh monad transformer.  Keeps track of a set of names to
 -- avoid, and when asked for a fresh one will choose the first numeric
 -- prefix of the given name which is currently unused.
-newtype LFreshMT m a = LFreshMT { unLFreshMT :: ReaderT (Set AnyName) m a }
-  deriving (Functor, Applicative, Monad, MonadReader (Set AnyName), MonadIO, MonadPlus, MonadFix)
+newtype LFreshMT m a = LFreshMT { unLFreshMT :: ReaderT ([Set AnyName]) m a }
+  deriving (Functor, Applicative, Monad, MonadReader ([Set AnyName]), MonadIO, MonadPlus, MonadFix)
 
 -- | Run an 'LFreshMT' computation in an empty context.
 runLFreshMT :: LFreshMT m a -> m a
-runLFreshMT m = contLFreshMT m S.empty
+runLFreshMT m = contLFreshMT m []
 
 -- | Run an 'LFreshMT' computation given a set of names to avoid.
-contLFreshMT :: LFreshMT m a -> Set AnyName -> m a
+contLFreshMT :: LFreshMT m a -> [Set AnyName] -> m a
 contLFreshMT (LFreshMT m) = runReaderT m
 
 -- | Get the set of names currently being avoided.
-getAvoids :: Monad m => LFreshMT m (Set AnyName)
+getAvoids :: Monad m => LFreshMT m ([Set AnyName])
 getAvoids = LFreshMT ask
 
 instance Monad m => LFresh (LFreshMT m) where
   lfresh nm = LFreshMT $ do
-    let s = name2String nm
     used <- ask
-    return $ head (filter (\x -> not (S.member (AnyName x) used))
+    return $ head (filter (\x -> not (any (S.member (AnyName x)) used))
                           (map (\j -> renumber j nm) [0..]))
-  avoid names = LFreshMT . local (S.union (S.fromList names)) . unLFreshMT
+  avoid names = LFreshMT . local (\ s -> (S.fromList names) : s) . unLFreshMT
 
+  inScope nm = LFreshMT $ do 
+       used <- ask     
+       return (any (S.member (AnyName nm)) used)
+
+  shift = LFreshMT . local ( \ ( x : s ) -> s ) . unLFreshMT
+       
+  
 -- | A convenient monad which is an instance of 'LFresh'.  It keeps
 --   track of a set of names to avoid, and when asked for a fresh one
 --   will choose the first unused numerical name.
@@ -222,48 +228,68 @@ runLFreshM :: LFreshM a -> a
 runLFreshM = runIdentity . runLFreshMT
 
 -- | Run a LFreshM computation given a set of names to avoid.
-contLFreshM :: LFreshM a -> Set AnyName -> a
+contLFreshM :: LFreshM a -> [Set AnyName] -> a
 contLFreshM m = runIdentity . contLFreshMT m
 
 instance LFresh m => LFresh (ContT r m) where
   lfresh = lift . lfresh
   avoid  = mapContT . avoid
+  inScope = lift . inScope
+  shift  = mapContT shift
 
 instance (Error e, LFresh m) => LFresh (ErrorT e m) where
   lfresh = lift . lfresh
   avoid  = mapErrorT . avoid
+  inScope = lift . inScope
+  shift  = mapErrorT shift
 
 instance LFresh m => LFresh (IdentityT m) where
   lfresh = lift . lfresh
   avoid  = mapIdentityT . avoid
+  inScope = lift . inScope
+  shift  = mapIdentityT shift
 
 instance LFresh m => LFresh (ListT m) where
   lfresh = lift . lfresh
   avoid  = mapListT . avoid
+  inScope = lift . inScope
+  shift = mapListT shift
 
 instance LFresh m => LFresh (MaybeT m) where
   lfresh = lift . lfresh
   avoid  = mapMaybeT . avoid
+  inScope = lift . inScope
+  shift = mapMaybeT shift
 
 instance LFresh m => LFresh (ReaderT r m) where
   lfresh = lift . lfresh
   avoid  = mapReaderT . avoid
+  inScope = lift . inScope
+  shift = mapReaderT shift 
 
 instance LFresh m => LFresh (Lazy.StateT s m) where
   lfresh = lift . lfresh
   avoid  = Lazy.mapStateT . avoid
+  inScope = lift . inScope
+  shift = Lazy.mapStateT shift
 
 instance LFresh m => LFresh (Strict.StateT s m) where
   lfresh = lift . lfresh
   avoid  = Strict.mapStateT . avoid
+  inScope = lift . inScope
+  shift = Strict.mapStateT shift
 
 instance (Monoid w, LFresh m) => LFresh (Lazy.WriterT w m) where
   lfresh = lift . lfresh
   avoid  = Lazy.mapWriterT . avoid
+  inScope = lift . inScope
+  shift = Lazy.mapWriterT shift
 
 instance (Monoid w, LFresh m) => LFresh (Strict.WriterT w m) where
   lfresh = lift . lfresh
   avoid  = Strict.mapWriterT . avoid
+  inScope = lift . inScope
+  shift = Strict.mapWriterT shift
 
 -- Instances for applying LFreshMT to other monads
 

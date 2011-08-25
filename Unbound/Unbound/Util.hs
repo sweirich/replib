@@ -91,3 +91,6 @@ instance Collection S.Set where
   union     = S.union
   cmap      = S.map
 
+disjoint :: Ord a => S.Set a -> S.Set a -> Bool
+disjoint s1 s2 = S.null( S.intersection s1 s2 )
+
