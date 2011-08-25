@@ -340,17 +340,16 @@ data AlphaD a = AlphaD {
   freshenD  :: Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
   lfreshenD :: LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
   aeqD      :: AlphaCtx -> a -> a -> Bool,
-  -- matchD    :: AlphaCtx -> a -> a -> Maybe (Perm AnyName),
+  acompareD :: AlphaCtx -> a -> a -> Ordering,
   closeD    :: Alpha b => AlphaCtx -> b -> a -> a,
   openD     :: Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> AnyName -> FindResult,
-  nthpatD   :: a -> NthCont,
-  acompareD :: AlphaCtx -> a -> a -> Ordering
+  nthpatD   :: a -> NthCont
   }
 
 instance Alpha a => Sat (AlphaD a) where
   dict = AlphaD isPat isTerm isEmbed swaps' fv' freshen' lfreshen' aeq' -- match'
-           close open findpatrec nthpatrec acompare'
+          acompare' close open findpatrec nthpatrec 
 
 ----------------------------------------------------------------------
 -- Generic definitions for 'Alpha' methods.  (Note that all functions
@@ -773,7 +772,7 @@ instance Alpha p => Alpha (Rec p) where
 
 -- note: for Embeds, when the mode is "term" then we are
 -- implementing the "binding" version of the function
--- and we generally should treat the annots as constants
+-- and we generally should treat the embeds as constants
 instance Alpha t => Alpha (Embed t) where
    isPat (Embed t)   = if (isTerm t) then Just [] else Nothing
    isTerm _          = False
