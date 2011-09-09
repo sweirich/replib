@@ -43,6 +43,14 @@ import Generics.RepLib.R
 import Generics.RepLib.R1
 import Generics.RepLib.RepAux
 import Generics.RepLib.PreludeReps()
+import Generics.RepLib.AbstractReps()
+
+import Data.List (inits)
+
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 ------------------- Subtrees --------------------------
 -- there is no point in using R1 for subtrees
@@ -50,11 +58,11 @@ import Generics.RepLib.PreludeReps()
 -- overloading and higher-order polymorphism
 -- Also the same function as "children" from SYB III
 
--- | Produce all children of a datastructure with the same type.
--- Note that subtrees is available for all representable types. For those that
--- are not recursive datatypes, subtrees will always return the
--- empty list. But, these trivial instances are convenient to have
--- for the Shrink operation below.
+-- | Produce all children of a datastructure with the same type.  Note
+-- that subtrees is available for all representable types. For those
+-- that are not recursive datatypes, subtrees will always return the
+-- empty list. But, these trivial instances are convenient to have for
+-- the Shrink operation below.
 
 subtrees :: forall a. Rep a => a -> [a]
 subtrees x = [y | Just y <- gmapQ (cast :: Query (Maybe a)) x]
@@ -125,6 +133,10 @@ instance GSum Double
 instance (GSum a, GSum b) => GSum (a,b)
 instance (GSum a) => GSum [a]
 
+instance (Rep k, GSum a) => GSum (Map k a) where
+  gsum = gsum . Map.elems
+instance GSum a => GSum (Set a) where
+  gsum = gsum . Set.elems
 -------------------- Zero ------------------------------
 -- | Create a zero element of a type
 -- @
@@ -164,6 +176,12 @@ instance Zero Bool
 instance (Zero a, Zero b) => Zero (a,b)
 instance Zero a => Zero [a]
 
+instance (Rep k, Rep a) => Zero (Map k a) where
+  zero = Map.empty
+  
+instance (Rep a) => Zero (Set a) where
+  zero = Set.empty
+
 ---------- Generate ------------------------------
 
 data GenerateD a = GenerateD { generateD :: Int -> [a] }
@@ -202,6 +220,14 @@ instance Generate ()
 instance (Generate a, Generate b) => Generate (a,b)
 instance Generate a => Generate [a]
 
+instance (Ord a, Generate a) => Generate (Set a) where
+  generate i = map Set.fromList (generate i)
+
+instance (Ord k, Generate k, Generate a) => Generate (Map k a) where
+  generate 0 = []
+  generate i = map Map.fromList 
+                 (inits [ (k, v) | k <- generate (i-1), v <- generate (i-1)])
+
 ------------ Enumerate -------------------------------
 -- note that this is not the same as the Enum class in the standard prelude
 
@@ -222,8 +248,28 @@ enumerateR1 (Data1 _ cons) = enumerateCons cons
 enumerateR1 r1 = error ("No way to enumerate type: " ++ show r1)
 
 enumerateCons :: [Con EnumerateD a] -> [a]
-enumerateCons (Con emb rec:rest) = (map (to emb) (fromTupM enumerateD rec)) ++ (enumerateCons rest)
+enumerateCons (Con emb rec:rest) = 
+  (map (to emb) (fromTupM enumerateD rec)) ++ (enumerateCons rest)
 enumerateCons [] = []
+
+instance Enumerate Int
+instance Enumerate Char
+instance Enumerate Integer
+instance Enumerate Float
+instance Enumerate Double
+instance Enumerate Bool
+
+instance Enumerate ()
+instance (Enumerate a, Enumerate b) => Enumerate (a,b)
+
+-- doesn't really work for infinite types.
+instance Enumerate a => Enumerate [a]
+
+instance (Ord a, Enumerate a) => Enumerate (Set a) where
+   enumerate = map Set.fromList enumerate
+instance (Ord k, Enumerate k, Enumerate a) => Enumerate (Map k a) where
+   enumerate = map Map.fromList 
+                 (inits [ (k, v) | k <- enumerate, v <- enumerate])
 
 ----------------- Shrink (from SYB III) -------------------------------
 
@@ -256,6 +302,12 @@ instance Shrink a => Shrink [a]
 instance Shrink Char
 instance Shrink ()
 instance (Shrink a, Shrink b) => Shrink (a,b)
+
+instance (Ord a, Shrink a) => Shrink (Set a) where
+  shrink x = map Set.fromList (shrink (Set.toList x))
+  
+instance (Ord k, Shrink k, Shrink a)  => Shrink (Map k a) where
+  shrink m = map Map.fromList (shrink (Map.toList m))
 
 ------------ Reduce -------------------------------
 
@@ -303,12 +355,18 @@ instance Lreduce b Bool
 instance (Lreduce c a, Lreduce c b) => Lreduce c (a,b)
 instance Lreduce c a => Lreduce c[a]
 
+instance (Ord a, Lreduce b a) => Lreduce b (Set a) where
+  lreduce b a =  (lreduce b (Set.toList a))
+
 instance Rreduce b Int
 instance Rreduce b ()
 instance Rreduce b Char
 instance Rreduce b Bool
 instance (Rreduce c a, Rreduce c b) => Rreduce c (a,b)
 instance Rreduce c a => Rreduce c[a]
+
+instance (Ord a, Rreduce b a) => Rreduce b (Set a) where
+  rreduce a b =  (rreduce (Set.toList a) b)
 
 -------------------- Fold -------------------------------
 -- | All of the functions below are defined using instances
@@ -369,3 +427,10 @@ instance Fold [] where
 	 foldLeft op = lreduceR1 (rList1 (LreduceD  { lreduceD = op })
 					 (LreduceD { lreduceD = foldLeft op }))
 
+instance Fold Set where
+	 foldRight op x b = foldRight op (Set.toList x) b
+	 foldLeft op b x = foldLeft op b (Set.toList x)
+
+instance Fold (Map k) where
+  foldRight op x b = foldRight op (Map.elems x) b
+  foldLeft op b x = foldLeft op b (Map.elems x)
