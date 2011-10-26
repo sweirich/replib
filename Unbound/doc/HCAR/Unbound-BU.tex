@@ -1,11 +1,11 @@
 % Unbound-BU.tex
-\begin{hcarentry}[new]{Unbound}
+\begin{hcarentry}[updated]{Unbound}
 \report{Brent Yorgey}%05/11
-\status{active development}
+\status{actively maintained}
 \participants{Stephanie Weirich, Tim Sheard}
 \makeheader
 
-Unbound is a new domain-specific language and library for working with
+Unbound is a domain-specific language and library for working with
 binding structure.  Implemented on top of the RepLib generic
 programming framework, it automatically provides operations such as
 alpha equivalence, capture-avoiding substitution, and free variable
@@ -15,11 +15,14 @@ combinator language for binding specifications, including support for
 pattern binding, type annotations, recursive binding, nested binding,
 and multiple atom types.
 
-Work is ongoing to extend Unbound with support for generalized
-abstract data types (GADTs) and other features.
+Since the last HCAR, a new version of Unbound has been released,
+adding support for several set-like binding strategies (where the
+order of bound variables does not matter) and for GADTs which do
+not use existential quantification.
 
 \FurtherReading
 \begin{compactitem}
+\item \url{http://byorgey.wordpress.com/2011/08/24/unbound-now-supports-set-binders-and-gadts/}
 \item \url{http://byorgey.wordpress.com/2011/03/28/binders-unbound/}
 \item \url{http://hackage.haskell.org/package/unbound}
 \item \url{http://code.google.com/p/replib/}
