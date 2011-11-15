@@ -30,6 +30,10 @@ import Unbound.LocallyNameless.Alpha
 -- | See 'isvar'.
 data SubstName a b where
   SubstName :: (a ~ b) => Name a -> SubstName a b
+  
+-- | See 'isCoerceVar'  
+data SubstCoerce a b where  
+  SubstCoerce :: Name b -> (b -> Maybe a) -> SubstCoerce a b
 
 -- | The @Subst@ class governs capture-avoiding substitution.  To
 --   derive this class, you only need to indicate where the variables
@@ -43,6 +47,13 @@ class (Rep1 (SubstD b) a) => Subst b a where
   --   returns 'Nothing'.
   isvar :: a -> Maybe (SubstName a b)
   isvar _ = Nothing
+  
+  -- | This is an alternative version to 'isvar', useable in the case 
+  --   that the substituted argument doesn't have *exactly* the same type
+  --   as the term it should be substituted into.
+  --   The default implementation always returns 'Nothing'.
+  isCoerceVar :: a -> Maybe (SubstCoerce a b)
+  isCoerceVar _ = Nothing
 
   -- | @'subst' nm sub tm@ substitutes @sub@ for @nm@ in @tm@.  It has
   --   a default generic implementation in terms of @isvar@.
@@ -50,7 +61,9 @@ class (Rep1 (SubstD b) a) => Subst b a where
   subst n u x | isFree n =
      case (isvar x :: Maybe (SubstName a b)) of
         Just (SubstName m) -> if  m == n then u else x
-        Nothing -> substR1 rep1 n u x
+        Nothing -> case (isCoerceVar x :: Maybe (SubstCoerce a b)) of 
+           Just (SubstCoerce m f) -> if m == n then maybe x id (f u) else x
+           Nothing -> substR1 rep1 n u x
   subst m _ _ = error $ "Cannot substitute for bound variable " ++ show m
 
   -- | Perform several simultaneous substitutions.  This method also
@@ -63,7 +76,12 @@ class (Rep1 (SubstD b) a) => Subst b a where
           case find ((==m) . fst) ss of
             Just (_, u) -> u
             Nothing     -> x
-        Nothing -> substsR1 rep1 ss x
+        Nothing -> case isCoerceVar x :: Maybe (SubstCoerce a b) of 
+            Just (SubstCoerce m f) ->
+              case find ((==m) . fst) ss of 
+                  Just (_, u) -> maybe x id (f u)
+                  Nothing -> x
+            Nothing -> substsR1 rep1 ss x
     | otherwise =
       error $ "Cannot substitute for bound variable in: " ++ show (map fst ss)
 
