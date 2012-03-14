@@ -4,6 +4,7 @@
            , ScopedTypeVariables
            , GADTs
            , GeneralizedNewtypeDeriving
+			  , CPP
   #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
@@ -43,7 +44,11 @@ import Data.Type.Equality
 import Control.Monad (replicateM, zipWithM, liftM, liftM2, when)
 import Control.Monad.Writer (WriterT, MonadWriter(..), runWriterT, lift)
 import Control.Arrow ((***), second)
+#if MIN_VERSION_template_haskell(2,7,0)
+import Control.Applicative ((<$>), Applicative)
+#else
 import Control.Applicative ((<$>))
+#endif
 
 import Unsafe.Coerce
 
@@ -80,7 +85,12 @@ rName1 n =
 -- while generating constructor representations.
 
 newtype QN a = QN { unQN :: WriterT (S.Set Int) Q a }
+#if MIN_VERSION_template_haskell(2,7,0)
+  deriving (Applicative, Functor, Monad, MonadWriter (S.Set Int))
+#else    
   deriving (Functor, Monad, MonadWriter (S.Set Int))
+#endif
+
 
 liftQN :: Q a -> QN a
 liftQN = QN . lift
@@ -93,9 +103,17 @@ instance Quasi QN where
   qReport b s           = liftQN $ qReport b s
   qRecover              = error "qRecover not implemented for QN"
   qReify n              = liftQN $ qReify n
+#if MIN_VERSION_template_haskell(2,7,0)
+  qReifyInstances n tys = liftQN $ qReifyInstances n tys
+#else
   qClassInstances n tys = liftQN $ qClassInstances n tys
+#endif
   qLocation             = liftQN qLocation
   qRunIO io             = liftQN $ qRunIO io                       
+#if MIN_VERSION_template_haskell(2,7,0)
+  qLookupName ns s      = liftQN $ qLookupName ns s
+  qAddDependentFile fp  = liftQN $ qAddDependentFile fp
+#endif
 
 -- Generate the representation for a data constructor.
 -- As our representation of data constructors evolves, so must this definition.
