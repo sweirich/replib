@@ -1,5 +1,5 @@
-{-# LANGUAGE TemplateHaskell
-           , UndecidableInstances
+{-# LANGUAGE 
+             UndecidableInstances
            , GADTs
            , ScopedTypeVariables
            , MultiParamTypeClasses
