@@ -22,7 +22,7 @@ Source-repository head
 
 Library
   build-depends: base >= 4.3 && < 5, 
-                 template-haskell >= 2.4 && < 2.7, 
+                 template-haskell >= 2.4 && < 2.8, 
                  mtl >= 2.0 && < 2.1,
                  type-equality >= 0.1.0.2 && < 0.2,
                  containers >= 0.4 && < 0.5
