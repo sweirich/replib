@@ -1,5 +1,5 @@
 name:           RepLib
-version:        0.5.1
+version:        0.5.2
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -37,5 +37,6 @@ Library
     Generics.RepLib.Derive,
     Generics.RepLib.SYB.Aliases,
     Generics.RepLib.SYB.Schemes,
-    Generics.RepLib.Unify
+    Generics.RepLib.Unify,
+    Generics.RepLib.AbstractReps
   extensions: GADTs
