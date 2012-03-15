@@ -4,7 +4,7 @@
            , ScopedTypeVariables
            , GADTs
            , GeneralizedNewtypeDeriving
-			  , CPP
+           , CPP
   #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
@@ -44,11 +44,7 @@ import Data.Type.Equality
 import Control.Monad (replicateM, zipWithM, liftM, liftM2, when)
 import Control.Monad.Writer (WriterT, MonadWriter(..), runWriterT, lift)
 import Control.Arrow ((***), second)
-#if MIN_VERSION_template_haskell(2,7,0)
 import Control.Applicative ((<$>), Applicative)
-#else
-import Control.Applicative ((<$>))
-#endif
 
 import Unsafe.Coerce
 
