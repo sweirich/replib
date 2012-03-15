@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Unbound.Util
@@ -21,8 +23,13 @@ import qualified Data.Map as M
 -- Convenient Monoid syntax
 ------------------------------------------------------------
 
+-- As of base-4.5, (<>) is exported by Data.Monoid.
+
+#if MIN_VERSION_base(4,5,0)
+#else
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
+#endif
 
 ------------------------------------------------------------
 -- Collections

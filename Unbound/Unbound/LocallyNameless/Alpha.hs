@@ -24,7 +24,7 @@ import Unbound.Util
 import Data.List (intersect)
 import Data.Maybe (isJust)
 
-import Data.Monoid hiding ((<>))
+import Data.Monoid
 
 ------------------------------------------------------------
 -- Overview

@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeSynonymInstances
            , FlexibleInstances
+           , CPP
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 ----------------------------------------------------------------------
@@ -25,6 +26,10 @@ import Unbound.PermM
 import Data.Maybe (catMaybes)
 import Data.List  (sortBy)
 import Data.Ord   (comparing)
+
+#if MIN_VERSION_base(4,5,0)
+import Data.Monoid
+#endif
 
 import Control.Monad (liftM)
 import qualified Text.Read as R

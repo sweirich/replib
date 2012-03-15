@@ -41,3 +41,11 @@ Version 0.3: 24 August 2011
 Version 0.3.1: 25 August 2011
 
   * Update to build on GHC 7.2.1
+
+Version 0.4: 15 March 2012
+
+  * Update to build on GHC 7.4.1
+  
+  * add MonadWriter instances for FreshMT and LFreshMT
+
+  * Make 'getAvoids' function into a method of the LFresh class
