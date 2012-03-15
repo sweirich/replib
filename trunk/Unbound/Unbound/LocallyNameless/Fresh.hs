@@ -32,7 +32,7 @@ module Unbound.LocallyNameless.Fresh
 
     LFresh(..),
 
-    LFreshM, runLFreshM, contLFreshM, getAvoids,
+    LFreshM, runLFreshM, contLFreshM,
     LFreshMT(..), runLFreshMT, contLFreshMT
 
   ) where
@@ -64,6 +64,7 @@ import qualified Control.Monad.Cont.Class as CC
 import qualified Control.Monad.Error.Class as EC
 import qualified Control.Monad.State.Class as StC
 import qualified Control.Monad.Reader.Class as RC
+import qualified Control.Monad.Writer.Class as WC
 
 ------------------------------------------------------------
 -- Fresh
@@ -164,8 +165,11 @@ instance RC.MonadReader r m => RC.MonadReader r (FreshMT m) where
   ask   = lift RC.ask
   local f = FreshMT . RC.local f . unFreshMT
 
----------------------------------------------------
--- LFresh
+instance WC.MonadWriter w m => WC.MonadWriter w (FreshMT m) where
+  tell   = lift . WC.tell
+  listen = FreshMT . WC.listen . unFreshMT
+  pass   = FreshMT . WC.pass . unFreshMT
+
 ---------------------------------------------------
 
 -- | This is the class of monads that support freshness in an
@@ -177,6 +181,8 @@ class Monad m => LFresh m where
   -- | Avoid the given names when freshening in the subcomputation,
   --   that is, add the given names to the in-scope set.
   avoid   :: [AnyName] -> m a -> m a
+  -- | Get the set of names currently being avoided.
+  getAvoids :: m (Set AnyName)
 
 -- | The LFresh monad transformer.  Keeps track of a set of names to
 -- avoid, and when asked for a fresh one will choose the first numeric
@@ -192,10 +198,6 @@ runLFreshMT m = contLFreshMT m S.empty
 contLFreshMT :: LFreshMT m a -> Set AnyName -> m a
 contLFreshMT (LFreshMT m) = runReaderT m
 
--- | Get the set of names currently being avoided.
-getAvoids :: Monad m => LFreshMT m (Set AnyName)
-getAvoids = LFreshMT ask
-
 instance Monad m => LFresh (LFreshMT m) where
   lfresh nm = LFreshMT $ do
     let s = name2String nm
@@ -203,6 +205,8 @@ instance Monad m => LFresh (LFreshMT m) where
     return $ head (filter (\x -> not (S.member (AnyName x) used))
                           (map (makeName s) [0..]))
   avoid names = LFreshMT . local (S.union (S.fromList names)) . unLFreshMT
+
+  getAvoids = LFreshMT ask
 
 -- | A convenient monad which is an instance of 'LFresh'.  It keeps
 --   track of a set of names to avoid, and when asked for a fresh one
@@ -220,42 +224,52 @@ contLFreshM m = runIdentity . contLFreshMT m
 instance LFresh m => LFresh (ContT r m) where
   lfresh = lift . lfresh
   avoid  = mapContT . avoid
+  getAvoids = lift getAvoids
 
 instance (Error e, LFresh m) => LFresh (ErrorT e m) where
   lfresh = lift . lfresh
   avoid  = mapErrorT . avoid
+  getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (IdentityT m) where
   lfresh = lift . lfresh
   avoid  = mapIdentityT . avoid
+  getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (ListT m) where
   lfresh = lift . lfresh
   avoid  = mapListT . avoid
+  getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (MaybeT m) where
   lfresh = lift . lfresh
   avoid  = mapMaybeT . avoid
+  getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (ReaderT r m) where
   lfresh = lift . lfresh
   avoid  = mapReaderT . avoid
+  getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (Lazy.StateT s m) where
   lfresh = lift . lfresh
   avoid  = Lazy.mapStateT . avoid
+  getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (Strict.StateT s m) where
   lfresh = lift . lfresh
   avoid  = Strict.mapStateT . avoid
+  getAvoids = lift getAvoids
 
 instance (Monoid w, LFresh m) => LFresh (Lazy.WriterT w m) where
   lfresh = lift . lfresh
   avoid  = Lazy.mapWriterT . avoid
+  getAvoids = lift getAvoids
 
 instance (Monoid w, LFresh m) => LFresh (Strict.WriterT w m) where
   lfresh = lift . lfresh
   avoid  = Strict.mapWriterT . avoid
+  getAvoids = lift getAvoids
 
 -- Instances for applying LFreshMT to other monads
 
@@ -276,3 +290,8 @@ instance StC.MonadState s m => StC.MonadState s (LFreshMT m) where
 instance RC.MonadReader r m => RC.MonadReader r (LFreshMT m) where
   ask   = lift RC.ask
   local f = LFreshMT . mapReaderT (RC.local f) . unLFreshMT
+
+instance WC.MonadWriter w m => WC.MonadWriter w (LFreshMT m) where
+  tell   = lift . WC.tell
+  listen = LFreshMT . WC.listen . unLFreshMT
+  pass   = LFreshMT . WC.pass . unLFreshMT

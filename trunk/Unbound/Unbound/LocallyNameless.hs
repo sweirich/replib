@@ -239,7 +239,7 @@ module Unbound.LocallyNameless
     --   can be freely combined with other standard monads and monad
     --   transformers from the @transformers@ library.
 
-    LFreshM, runLFreshM, getAvoids,
+    LFreshM, runLFreshM,
     LFreshMT, runLFreshMT,
 
     -- * The @Alpha@ class
