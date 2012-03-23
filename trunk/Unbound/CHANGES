@@ -49,3 +49,7 @@ Version 0.4: 15 March 2012
   * add MonadWriter instances for FreshMT and LFreshMT
 
   * Make 'getAvoids' function into a method of the LFresh class
+
+Version 0.4.0.1: 23 March 2012
+
+  * Remove broken links from documentation
