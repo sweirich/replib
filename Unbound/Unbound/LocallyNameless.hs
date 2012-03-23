@@ -10,16 +10,15 @@
 -- A generic implementation of standard functions dealing with names
 -- and binding structure (alpha equivalence, free variable
 -- calculation, capture-avoiding substitution, name permutation, ...)
--- using a locally nameless representation. (See "Unbound.Nominal" for
--- a nominal implementation of the same interface.)
+-- using a locally nameless representation.
 --
--- Normal users of this library should only need to import this module
--- (or "Unbound.Nominal").  In particular, this module is careful to
--- export only an abstract interface with various safety guarantees.
--- Power users who wish to have access to the internals of the library
--- (at the risk of shooting oneself in the foot) can directly import
--- the various implementation modules such as
--- "Unbound.LocallyNameless.Name" and so on.
+-- Normal users of this library should only need to import this
+-- module.  In particular, this module is careful to export only an
+-- abstract interface with various safety guarantees.  Power users who
+-- wish to have access to the internals of the library (at the risk of
+-- shooting oneself in the foot) can directly import the various
+-- implementation modules such as "Unbound.LocallyNameless.Name" and
+-- so on.
 --
 -- /Ten-second tutorial/: use the type combinators 'Bind', 'Embed',
 -- 'Rebind', 'Rec', 'TRec', and 'Shift' to specify the binding
@@ -38,7 +37,7 @@
 -- examples in the @example@ directory.
 --
 -- See also: Stephanie Weirich, Brent A. Yorgey, and Tim Sheard.
--- /Binders Unbound/. To appear in ICFP'11, September 2011, Tokyo, Japan. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
+-- /Binders Unbound/. ICFP'11, September 2011, Tokyo, Japan. <http://www.cis.upenn.edu/~byorgey/papers/binders-unbound.pdf>.
 ----------------------------------------------------------------------
 
 module Unbound.LocallyNameless
