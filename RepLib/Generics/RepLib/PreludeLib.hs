@@ -116,6 +116,7 @@ compareR1 (Data1 _ cons) = \ x y ->
                         (Nothing, Just _ ) -> GT
                         (Nothing, Nothing) -> loop rest
              in loop cons
+compareR1 (Abstract1 _) = \_ _ -> EQ
 compareR1 r1 = error ("compareR1 not supported for " ++ show r1)
 
 compareTup :: MTup OrdD l -> l -> l -> Ordering
