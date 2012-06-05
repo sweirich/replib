@@ -514,7 +514,8 @@ acompareR1 (Data1 _ cons) c = \x y ->
                         (Nothing, Nothing) -> loop rest
                  loop [] = error "acompareR1 found no constructors! Please report this as a bug."
              in loop cons
-acompareR1 r1 _ = error ("compareR1 not supported for " ++ show r1)
+acompareR1 (Abstract1 _) _ = \_ _ -> EQ           
+acompareR1 r1 _ = error ("acompareR1 not supported for " ++ show r1)
 
 compareTupM :: MTup AlphaD l -> AlphaCtx -> l -> l -> Ordering
 compareTupM MNil _ Nil Nil = EQ
