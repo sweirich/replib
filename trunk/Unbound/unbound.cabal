@@ -3,14 +3,14 @@ version:        0.4.1
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
-cabal-version:  >= 1.6
+cabal-version:  >= 1.10
 tested-with:    GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1
 author:         Stephanie Weirich
 maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
                 Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       http://code.google.com/p/replib/
 category:       Language, Generics, Compilers/Interpreters
-extra-source-files: README, 
+extra-source-files: README,
                     CHANGES,
                     examples/*.hs,
                     tutorial/Makefile,
@@ -43,3 +43,19 @@ Library
     Unbound.LocallyNameless.Ops,
     Unbound.PermM,
     Unbound.Util
+  other-extensions: CPP
+                    EmptyDataDecls
+                    ExistentialQuantification
+                    FlexibleContexts
+                    FlexibleInstances
+                    GADTs
+                    MultiParamTypeClasses
+                    PatternGuards
+                    RankNTypes
+                    ScopedTypeVariables
+                    StandaloneDeriving
+                    TemplateHaskell
+                    TypeOperators
+                    TypeSynonymInstances
+                    UndecidableInstances
+  default-language: Haskell2010
