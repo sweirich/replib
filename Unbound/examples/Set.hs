@@ -5,22 +5,20 @@
 
 module Set where
 
-import Generics.RepLib
 import Unbound.LocallyNameless
+import Unbound.LocallyNameless.Types
 import Data.List
 import Data.Set
 
-data Ty = All (Bind [Name Ty] Ty)
+data Ty = All (SetPlusBind [Name Ty] Ty)
         | Var (Name Ty)
         | Arr Ty Ty deriving Show
 
 $(derive [''Ty])
 
-$(derive_abstract [''Set])
-
 instance Alpha Ty
 
-a, b, c :: Name Ty
+a, b, c :: Rep a => Name a
 a = s2n "a"
 b = s2n "b"
 c = s2n "c"
@@ -35,17 +33,24 @@ s4 = sall [b, a] (Arr (Var b) (Var a))
 s5 = sall [b, a, c] (Arr (Var b) (Var a))
 s6 = sall [a, c] (Arr (Var a) (Var c))
 
-pall :: [Name Ty] -> Ty -> Ty
-pall ns t = All (permbind ns t)
 
-p1 = pall [a, b] (Arr (Var a) (Var b))
-p2 = pall [a, b] (Arr (Var b) (Var a))
-p3 = pall [b, a] (Arr (Var a) (Var b))
-p4 = pall [b, a] (Arr (Var b) (Var a))
-p5 = pall [b, a, c] (Arr (Var b) (Var a))
-p6 = pall [a, c] (Arr (Var a) (Var c))
+data E =
+  L (Bind (Name E) E)
+  | V (Name E)
+  | A E E
+  | C Int
+  | LR (SetBind (Rec [(Name E,Embed E)]) E)
+  deriving Show
+           
+$(derive [''E])           
+ 
+instance Alpha E  
+  
+letrec :: [(Name E, Embed E)] -> E -> E
+letrec ns t = LR (permbind (Rec ns) t)
 
-
+p1 = letrec [(a, Embed (V a)), (b, Embed (C 2))] (A (V a) (V b))
+p2 = letrec [(b, Embed (V 2)), (a, Embed (V a))] (A (V a) (V b))
 
 assert :: String -> Bool -> IO ()
 assert s True  = return ()
@@ -59,9 +64,6 @@ main = do
   assert "s4" $ s1 `aeq` s5
   assert "s5" $ s1 `aeq` s6
 
+  -- NOTE: this assertion fails. This is a bug. Perm binds don't do what we want. 
   assert "a11" $ p1 `aeq` p2
-  assert "a12" $ p1 `aeq` p3
-  assert "a13" $ p1 `aeq` p4
-  assert "a14" $ not (p1 `aeq` p5)
-  assert "a15" $ p1 `aeq` p6
 
