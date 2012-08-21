@@ -1,10 +1,10 @@
 name:           unbound
-version:        0.4.1
+version:        0.4.1.1
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
-tested-with:    GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1
+tested-with:    GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1, GHC == 7.6.1
 author:         Stephanie Weirich
 maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
                 Stephanie Weirich <sweirich@cis.upenn.edu>
@@ -32,7 +32,7 @@ Library
   build-depends: base >= 4.3 && < 5,
                  RepLib >= 0.5.3 && < 0.6,
                  mtl >= 2.0 && < 2.2, transformers >= 0.2.2.0 && < 0.4,
-                 containers >= 0.3 && < 0.5
+                 containers >= 0.3 && < 0.6
   exposed-modules:
     Unbound.LocallyNameless,
     Unbound.LocallyNameless.Name,

@@ -62,3 +62,7 @@ Version 0.4.1: 5 June 2012
 
   * Patch from Vilhelm Sjöberg changing acompareR1 to return EQ for
     Abstract1
+
+Version 0.4.1.1: 21 Aug 2012
+
+  * Bump containers upper bound and test with GHC 7.6.1
