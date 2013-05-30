@@ -31,7 +31,7 @@ import Data.Ord   (comparing)
 import Data.Monoid
 #endif
 
-import Control.Monad (liftM)
+import Control.Monad (liftM, MonadPlus(..))
 import qualified Text.Read as R
 
 ----------------------------------------------------------
@@ -301,13 +301,14 @@ unbind (B p t) = do
       (p', _) <- freshen p
       return (p', openT p' t)
 
--- | Unbind two terms with the /same/ fresh names, provided the
---   binders have the same number of binding variables.  If the
---   patterns have different numbers of binding variables, return
---   @Nothing@.  Otherwise, return the renamed patterns and the
---   associated terms.
+-- | Unbind two terms with the /same/ fresh names, provided the binders have
+--   the same binding variables (both number and sort).  If the patterns have
+--   different binding variables, return @Nothing@.  Otherwise, return the
+--   renamed patterns and the associated terms.
+      
 unbind2 :: (Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
-            GenBind order card p1 t1 -> GenBind order card p2 t2 -> m (Maybe (p1,t1,p2,t2))
+            GenBind order card p1 t1 -> GenBind order card p2 t2 
+            -> m (Maybe (p1,t1,p2,t2))
 unbind2 (B p1 t1) (B p2 t2) = do
       case mkPerm (fvAny p2) (fvAny p1) of
          Just pm -> do
@@ -315,6 +316,8 @@ unbind2 (B p1 t1) (B p2 t2) = do
            return $ Just (p1', openT p1' t1,
                           swaps (pm' <> pm) p2, openT p1' t2)
          Nothing -> return Nothing
+         
+         
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders have the same number of binding variables.  See the
@@ -330,6 +333,7 @@ unbind3 (B p1 t1) (B p2 t2) (B p3 t3) = do
                           swaps (p' <> pm12) p2, openT p1' t2,
                           swaps (p' <> pm13) p3, openT p1' t3)
          _ -> return Nothing
+
 
 -- | @lunbind@ opens a binding in an 'LFresh' monad, ensuring that the
 --   names chosen for the binders are /locally/ fresh.  The components
@@ -371,3 +375,31 @@ lunbind3 (B p1 t1) (B p2 t2) (B p3 t3) g =
                                               swaps (pm' <> pm12) p2, openT p1' t2,
                                               swaps (pm' <> pm13) p3, openT p1' t3))
          _ -> g Nothing
+
+
+--  A few extra simultaneous l/unbinds, specialized to MonadPlus monads.
+
+
+unbind2Plus :: (MonadPlus m, Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2)
+         => GenBind order card p1 t1
+         -> GenBind order card p2 t2
+         -> m (p1, t1, p2, t2)
+unbind2Plus bnd bnd' = maybe mzero return =<< unbind2 bnd bnd'
+
+unbind3Plus :: (MonadPlus m, Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
+            GenBind order card p1 t1 -> GenBind order card p2 t2 
+            -> GenBind order card p3 t3 ->  m (p1,t1,p2,t2,p3,t3)
+unbind3Plus b1 b2 b3 = maybe mzero return =<< unbind3 b1 b2 b3            
+
+lunbind2Plus :: (MonadPlus m, LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2)
+         => GenBind order card p1 t1
+         -> GenBind order card p2 t2
+         -> ((p1, t1, p2, t2) -> m r) -> m r
+lunbind2Plus bnd bnd' k =          
+  lunbind2 bnd bnd' $ maybe mzero k 
+  
+lunbind3Plus :: (MonadPlus m, LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
+            GenBind order card p1 t1 -> GenBind order card p2 t2 -> GenBind order card p3 t3 ->
+            ((p1,t1,p2,t2,p3,t3) -> m r) ->
+            m r
+lunbind3Plus b1 b2 b3 = lunbind3 b1 b2 b3 . maybe mzero

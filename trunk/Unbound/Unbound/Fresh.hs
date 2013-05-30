@@ -82,7 +82,7 @@ class Monad m => Fresh m where
 --   still globally unused, and increments the index every time it is
 --   asked for a fresh name.
 newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT Integer m a }
-  deriving (Functor, Applicative, Monad, St.MonadState Integer, MonadPlus, MonadIO, MonadFix)
+  deriving (Functor, Applicative, Monad, MonadPlus, MonadIO, MonadFix)
 
 -- | Run a 'FreshMT' computation (with the global index starting at zero).
 runFreshMT :: Monad m => FreshMT m a -> m a
@@ -190,7 +190,7 @@ class Monad m => LFresh m where
 -- avoid, and when asked for a fresh one will choose the first numeric
 -- prefix of the given name which is currently unused.
 newtype LFreshMT m a = LFreshMT { unLFreshMT :: ReaderT ([Set AnyName]) m a }
-  deriving (Functor, Applicative, Monad, MonadReader ([Set AnyName]), MonadIO, MonadPlus, MonadFix)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadPlus, MonadFix)
 
 -- | Run an 'LFreshMT' computation in an empty context.
 runLFreshMT :: LFreshMT m a -> m a

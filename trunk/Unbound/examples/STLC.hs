@@ -37,12 +37,19 @@ $(derive [''Ty,''Exp])
 -- With representation types, default implementations of these
 -- classes are available.
 instance Alpha Ty where
+  
+-- aeq :: Alpha a => a -> a -> Bool  
+  
 instance Alpha Exp where
 
 instance Subst Exp Ty where
 instance Subst Exp Exp where
    isvar (Var x) = Just (SubstName x)
    isvar _       = Nothing
+
+-- class Subst a b where
+--   subst :: Name b -> a -> b -> a
+--   isvar ::
 
 type Ctx = [(Name Exp, Ty)]
 
@@ -55,9 +62,9 @@ tc g (Var n) ty =
     Just ty' -> return (ty == ty')
     Nothing  -> return False
 tc g (Lam bnd) (Arr t1 t2) = do
-  lunbind bnd $ \ (x , e) ->
-    tc ((x,t1) : g) e t2
-tc g (App e1 t1 e2) t2= do
+  lunbind bnd ( \ (x , e) ->
+    tc ((x,t1) : g) e t2)
+tc g (App e1 t1 e2) t2 = do
   b1 <- tc g e1 (Arr t1 t2)
   b2 <- tc g e2 t1
   return $ b1 && b2
