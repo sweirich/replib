@@ -135,6 +135,9 @@ module Unbound.LocallyNameless
     unbind2, unbind3,
     lunbind2, lunbind3,
 
+    unbind2Plus, unbind3Plus,
+    lunbind2Plus, lunbind3Plus,
+
     -- ** Embed
 
     Embed(..),

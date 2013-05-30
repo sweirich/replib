@@ -117,6 +117,7 @@ data Exp = EVar (Name Exp)
          | EApp Exp [Exp]
          | EPi (Bind Tele Exp)
          | ETyCon (Name TyCon)
+         | ELet (Bind Lets Exp)
          | EDataCon (Name DataCon)
          | ECase Exp Exp (Bind (Name Exp)
                     [(Name DataCon,Bind [Name Exp] Exp)])
