@@ -42,7 +42,7 @@
 
 module Unbound.LocallyNameless
   ( -- * Names
-    Name, AnyName(..),
+    Name, AnyName(..),   
 
     -- ** Constructing and destructing free names
     integer2Name, string2Name, s2n, makeName,
