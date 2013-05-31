@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances
            , FlexibleInstances
            , CPP
+           , ScopedTypeVariables
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 ----------------------------------------------------------------------
@@ -317,7 +318,28 @@ unbind2 (B p1 t1) (B p2 t2) = do
                           swaps (pm' <> pm) p2, openT p1' t2)
          Nothing -> return Nothing
          
-         
+{-         
+unbind2translate :: (Fresh m, MonadPlus m, Alpha p1, Alpha p2, Alpha t1, Alpha t2) =>
+            GenBind order card p1 t1 -> GenBind order card p2 t2 
+            -> m (p1,t1,p2,t2)
+unbind2translate (B p1 t1) (B p2 t2) = do
+      do fv2' <- translates fv1 fv2 
+         pm   <- mkPerm fv2' fv1 
+         (p1', pm') <- freshen p1
+           return $ Just (p1', openT p1' t1,
+                          swaps (pm' <> pm) p2, openT p1' t2)
+         Nothing -> return Nothing         
+       where fv1 = fvAny p1  
+             fv2 = fvAny p2
+
+translates :: MonadPlus m => [AnyName] -> [AnyName] -> m [AnyName]
+translates ((AnyName (n1 :: Name a)):n1s) ((AnyName n2):n2s) = 
+  liftM (AnyName n2 :) (translates n1s n2s) where
+      n2' :: Name a
+      n2' = translate n2
+translates [] [] = return []      
+translates _ _   = mzero
+-}
 
 -- | Unbind three terms with the same fresh names, provided the
 --   binders have the same number of binding variables.  See the
