@@ -39,6 +39,9 @@ module Unbound.LocallyNameless.Types
 import Generics.RepLib
 import Unbound.LocallyNameless.Name
 
+import Data.Binary
+import Control.Applicative (pure, (<$>), (<*>))
+
 ------------------------------------------------------------
 -- Basic types
 ------------------------------------------------------------
@@ -147,3 +150,31 @@ $(derive [''GenBind, ''Embed, ''Rebind, ''Rec, ''Shift])
 
 $(derive [''RelaxedOrder, ''StrictOrder, ''RelaxedCard, ''StrictCard])
 
+
+-- Data.Binary instances for Name and Bind
+----------------------------------------------------
+
+instance Rep a => Binary (Name a) where
+  put (Nm _ (s,i)) = do put (0 :: Word8)
+                        put s
+                        put i
+  put (Bn _ i j)   = do put (1 :: Word8)
+                        put i
+                        put j
+  
+  get = do tag <- getWord8
+           case tag of
+              0 -> Nm <$> pure rep <*> get
+              1 -> Bn <$> pure rep <*> get <*> get
+
+instance (Binary p, Binary t) => Binary (GenBind order card p t) where
+  put (B p t) = do put p ; put t
+  get = B <$> get <*> get
+
+instance (Binary p1, Binary p2) => Binary (Rebind p1 p2) where
+  put (R p1 p2) = do put p1 ; put p2
+  get = R <$> get <*> get
+  
+instance (Binary p) => Binary (Embed p) where
+  put (Embed p) = put p
+  get = Embed <$> get
