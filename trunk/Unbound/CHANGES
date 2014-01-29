@@ -76,3 +76,11 @@ Version 0.4.2: 15 July 2013
 
   * added unbind variants [l]unbind{23}Plus for conveniently unbinding
     in a MonadPlus context.
+
+Version 0.4.3: 29 January 2014
+
+  * Add Binary instances for Name, GenBind, Rebind, and Embed.
+
+    Note that although the PVP requires a major version bump for added
+    instances, it was impossible to write these instances outside of
+    the package, so there is no danger of breakage.
