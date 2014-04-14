@@ -5,6 +5,7 @@
            , GADTs
            , Rank2Types
            , TypeOperators
+           , CPP
   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -----------------------------------------------------------------------------
@@ -44,14 +45,25 @@ module Generics.RepLib.RepAux (
 import Generics.RepLib.R
 import Generics.RepLib.R1
 import GHC.Base (unsafeCoerce#)
+#if MIN_VERSION_base(4,7,0)
+import Data.Type.Equality (TestEquality(..), (:~:)(..))
+#else
 import Data.Type.Equality (EqT(..), (:=:)(..))
+#endif
 
 ------ Casting
 
+#if MIN_VERSION_base(4,7,0)
+instance TestEquality R where
+  -- testEquality :: R a -> R b -> Maybe (a :~: b)
+  testEquality ra rb =
+     if eqR ra rb then Just (unsafeCoerce# Refl) else Nothing
+#else
 instance EqT R where
   -- eqT :: R a -> R b -> Maybe (a :=: b)
   eqT ra rb =
      if eqR ra rb then Just (unsafeCoerce# Refl) else Nothing
+#endif
 
 -- | Determine if two reps are for the same type
 eqR :: R a -> R b -> Bool
@@ -83,7 +95,11 @@ eqRTup _ _                       = False
 -- | The type-safe cast operation, explicit arguments
 castR :: R a -> R b -> a -> Maybe b
 castR ra rb a =
+#if MIN_VERSION_base(4,7,0)
+      case testEquality ra rb of
+#else
       case eqT ra rb of
+#endif
          Just Refl -> Just a
          Nothing   -> Nothing
 
@@ -94,7 +110,11 @@ cast x = castR rep rep x
 
 -- | Leibniz equality between types, explicit representations
 gcastR :: forall a b c. R a -> R b -> c a -> Maybe (c b)
+#if MIN_VERSION_base(4,7,0)
+gcastR ra rb x = case testEquality ra rb of
+#else
 gcastR ra rb x = case eqT ra rb of
+#endif
                     Just Refl -> Just x
                     Nothing   -> Nothing
 

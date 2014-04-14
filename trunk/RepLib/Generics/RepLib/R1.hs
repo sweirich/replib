@@ -1,4 +1,4 @@
-{-# LANGUAGE 
+{-# LANGUAGE
              UndecidableInstances
            , GADTs
            , ScopedTypeVariables
@@ -6,6 +6,7 @@
            , FlexibleInstances
            , TypeSynonymInstances
            , TypeOperators
+           , CPP
  #-}
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
@@ -41,7 +42,12 @@ data R1 ctx a where
     Arrow1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a -> b)
     Data1     :: DT -> [Con ctx a] -> R1 ctx a
     Abstract1 :: DT -> R1 ctx a
+#if MIN_VERSION_base(4,7,0)
+    Equal1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a :~: b)
+#else
     Equal1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a :=: b)
+#endif
+
 class Sat a where dict :: a
 
 class Rep a => Rep1 ctx a where rep1 :: R1 ctx a
@@ -98,7 +104,11 @@ instance (Rep a, Rep b, Sat (ctx a), Sat (ctx b)) =>
          Rep1 ctx (a -> b) where rep1 = Arrow1 dict dict
 
 instance (Rep a, Rep b, Sat (ctx a), Sat (ctx b)) =>
+#if MIN_VERSION_base(4,7,0)
+         Rep1 ctx (a :~: b) where rep1 = Equal1 dict dict
+#else
          Rep1 ctx (a :=: b) where rep1 = Equal1 dict dict
+#endif
 
 -- Data structures
 

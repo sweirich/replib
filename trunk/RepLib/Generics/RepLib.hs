@@ -1,5 +1,5 @@
 -- OPTIONS -fglasgow-exts -fth -fallow-undecidable-instances
-{-# LANGUAGE TemplateHaskell, UndecidableInstances #-}
+{-# LANGUAGE TemplateHaskell, UndecidableInstances, CPP #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -37,7 +37,11 @@ module Generics.RepLib (
  -- ** Derivable type classes written as generic operations
  module Generics.RepLib.PreludeLib,
 
+#if MIN_VERSION_base(4,7,0)
+ (:~:)(..), TestEquality(..)
+#else
  (:=:)(..), EqT(..)
+#endif
 ) where
 
 
