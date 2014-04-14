@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ExistentialQuantification,
     TypeOperators, GADTs, TypeSynonymInstances, FlexibleInstances,
-    ScopedTypeVariables
+    ScopedTypeVariables, CPP
  #-}
 -----------------------------------------------------------------------------
 -- |
@@ -32,7 +32,11 @@ data R a where
    Arrow    :: (Rep a, Rep b) => R a -> R b -> R (a -> b)
    Data     :: DT -> [Con R a] -> R a
    Abstract :: DT -> R a
+#if MIN_VERSION_base(4,7,0)
+   Equal    :: (Rep a, Rep b) => R a -> R b -> R (a :~: b)
+#else
    Equal    :: (Rep a, Rep b) => R a -> R b -> R (a :=: b)
+#endif
 
 -- | Representation of a data constructor includes an
 -- embedding between the datatype and a list of other types
@@ -124,7 +128,11 @@ instance Rep Rational where rep = Rational
 instance Rep IOError where rep = IOError
 instance Rep a => Rep (IO a) where rep = IO rep
 instance (Rep a, Rep b) => Rep (a -> b) where rep = Arrow rep rep
+#if MIN_VERSION_base(4,7,0)
+instance (Rep a, Rep b) => Rep (a :~: b) where rep = Equal rep rep
+#else
 instance (Rep a, Rep b) => Rep (a :=: b) where rep = Equal rep rep
+#endif
 
 -- Unit
 

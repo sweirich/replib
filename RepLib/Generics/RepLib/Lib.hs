@@ -45,6 +45,9 @@ import Generics.RepLib.RepAux
 import Generics.RepLib.PreludeReps()
 import Generics.RepLib.AbstractReps()
 
+import Control.Applicative (Applicative (..))
+import Control.Monad (ap,liftM)
+
 import Data.List (inits)
 
 import Data.Set (Set)
@@ -178,7 +181,7 @@ instance Zero a => Zero [a]
 
 instance (Rep k, Rep a) => Zero (Map k a) where
   zero = Map.empty
-  
+
 instance (Rep a) => Zero (Set a) where
   zero = Set.empty
 
@@ -225,7 +228,7 @@ instance (Ord a, Generate a) => Generate (Set a) where
 
 instance (Ord k, Generate k, Generate a) => Generate (Map k a) where
   generate 0 = []
-  generate i = map Map.fromList 
+  generate i = map Map.fromList
                  (inits [ (k, v) | k <- generate (i-1), v <- generate (i-1)])
 
 ------------ Enumerate -------------------------------
@@ -248,7 +251,7 @@ enumerateR1 (Data1 _ cons) = enumerateCons cons
 enumerateR1 r1 = error ("No way to enumerate type: " ++ show r1)
 
 enumerateCons :: [Con EnumerateD a] -> [a]
-enumerateCons (Con emb rec:rest) = 
+enumerateCons (Con emb rec:rest) =
   (map (to emb) (fromTupM enumerateD rec)) ++ (enumerateCons rest)
 enumerateCons [] = []
 
@@ -268,7 +271,7 @@ instance Enumerate a => Enumerate [a]
 instance (Ord a, Enumerate a) => Enumerate (Set a) where
    enumerate = map Set.fromList enumerate
 instance (Ord k, Enumerate k, Enumerate a) => Enumerate (Map k a) where
-   enumerate = map Map.fromList 
+   enumerate = map Map.fromList
                  (inits [ (k, v) | k <- enumerate, v <- enumerate])
 
 ----------------- Shrink (from SYB III) -------------------------------
@@ -290,6 +293,13 @@ class (Rep1 ShrinkD a) => Shrink a where
 
 data M a = M a [a]
 
+instance Functor M where
+  fmap = liftM
+
+instance Applicative M where
+  pure x = M x []
+  (<*>)  = ap
+
 instance Monad M where
  return x = M x []
  (M x xs) >>= k = M r (rs1 ++ rs2)
@@ -305,7 +315,7 @@ instance (Shrink a, Shrink b) => Shrink (a,b)
 
 instance (Ord a, Shrink a) => Shrink (Set a) where
   shrink x = map Set.fromList (shrink (Set.toList x))
-  
+
 instance (Ord k, Shrink k, Shrink a)  => Shrink (Map k a) where
   shrink m = map Map.fromList (shrink (Map.toList m))
 

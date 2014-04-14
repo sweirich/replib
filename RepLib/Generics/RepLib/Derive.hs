@@ -83,7 +83,7 @@ rName1 n =
 newtype QN a = QN { unQN :: WriterT (S.Set Int) Q a }
 #if MIN_VERSION_template_haskell(2,7,0)
   deriving (Applicative, Functor, Monad, MonadWriter (S.Set Int))
-#else    
+#else
   deriving (Functor, Monad, MonadWriter (S.Set Int))
 #endif
 
@@ -105,10 +105,19 @@ instance Quasi QN where
   qClassInstances n tys = liftQN $ qClassInstances n tys
 #endif
   qLocation             = liftQN qLocation
-  qRunIO io             = liftQN $ qRunIO io                       
+  qRunIO io             = liftQN $ qRunIO io
 #if MIN_VERSION_template_haskell(2,7,0)
   qLookupName ns s      = liftQN $ qLookupName ns s
   qAddDependentFile fp  = liftQN $ qAddDependentFile fp
+#endif
+#if MIN_VERSION_template_haskell(2,9,0)
+  qReifyRoles n         = liftQN $ qReifyRoles n
+  qReifyAnnotations al  = liftQN $ qReifyAnnotations al
+  qReifyModule m        = liftQN $ qReifyModule m
+  qAddTopDecls ds       = liftQN $ qAddTopDecls ds
+  qAddModFinalizer q    = liftQN $ qAddModFinalizer q
+  qGetQ                 = liftQN $ qGetQ
+  qPutQ a               = liftQN $ qPutQ a
 #endif
 
 -- Generate the representation for a data constructor.
@@ -166,7 +175,11 @@ genRefinement (n, ty) = do
   let (con, args) = decomposeTy ty
   when (not (null args)) $ tell $ S.singleton (length args)
   liftQN $ case args of
+#if MIN_VERSION_base(4,7,0)
+    [] -> do e <- [| testEquality (rep :: R $(varT n)) $(return $ repty ty) |]
+#else
     [] -> do e <- [| eqT (rep :: R $(varT n)) $(return $ repty ty) |]
+#endif
              p <- [p| Just Refl |]
              return (e,p)
     _  -> do e <- [| $(varE (mkName $ "destr" ++ show (length args)))
@@ -174,7 +187,11 @@ genRefinement (n, ty) = do
                      (rep :: R $(appUnits con (length args)))
                   |]
              p <- conP (mkName $ "Result" ++ show (length args))
+#if MIN_VERSION_base(4,7,0)
+                       [sigP [p| Refl |] [t| $(varT n) :~: $(return ty) |] ]
+#else
                        [sigP [p| Refl |] [t| $(varT n) :=: $(return ty) |] ]
+#endif
              return (e,p)
 
 -- | Decompose a type into a constructor and a list of arguments.
@@ -617,8 +634,8 @@ deriveRess :: S.Set Int -> Q [Dec]
 deriveRess = S.fold (liftM2 (++) . deriveResMaybe) (return [])
 
 deriveResMaybe :: Int -> Q [Dec]
-deriveResMaybe n = recover 
-                     (deriveRes n) 
+deriveResMaybe n = recover
+                     (deriveRes n)
                      (reify (mkName $ "Res" ++ show n) >> return [])
 
 deriveRes :: Int -> Q [Dec]
@@ -701,7 +718,7 @@ deriveResDestrDecl n c a bNum = do
 
 -- (Data (DT s1 ((_ :: R b1') :+: (_ :: R b2') :+: MNil)) _)
 deriveResDestrLPat :: Name -> [Name] -> Pat
-deriveResDestrLPat s1 bs = 
+deriveResDestrLPat s1 bs =
   ConP 'Data
   [ ConP 'DT
     [ VarP s1
@@ -713,7 +730,7 @@ deriveResDestrLPat s1 bs =
 
 -- (Data (DT s2 _) _)
 deriveResDestrRPat :: Name -> Pat
-deriveResDestrRPat s2 = 
+deriveResDestrRPat s2 =
   ConP 'Data
   [ ConP 'DT [ VarP s2, WildP ]
   , WildP
