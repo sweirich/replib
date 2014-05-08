@@ -1,5 +1,5 @@
 name:           RepLib
-version:        0.5.3.2
+version:        0.5.3.3
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -27,7 +27,7 @@ Source-repository head
 Library
   build-depends: base >= 4.3 && < 5,
                  template-haskell >= 2.4 && < 2.10,
-                 mtl >= 2.0 && < 2.2,
+                 mtl >= 2.0 && < 2.3,
                  containers >= 0.4 && < 0.6
 
   if impl(ghc < 7.8)

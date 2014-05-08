@@ -84,3 +84,7 @@ Version 0.4.3: 29 January 2014
     Note that although the PVP requires a major version bump for added
     instances, it was impossible to write these instances outside of
     the package, so there is no danger of breakage.
+
+Version 0.4.3.1: 8 May 2014
+
+  * Allow transformers-0.4 and mtl-2.2
