@@ -336,13 +336,13 @@ data AlphaD a = AlphaD {
   isTermD   :: a -> Bool,
   isEmbedD  :: a -> Bool,
   swapsD    :: AlphaCtx -> Perm AnyName -> a -> a,
-  fvD       :: Collection f => AlphaCtx -> a -> f AnyName,
-  freshenD  :: Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
-  lfreshenD :: LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
+  fvD       :: forall f. Collection f => AlphaCtx -> a -> f AnyName,
+  freshenD  :: forall m. Fresh m => AlphaCtx -> a -> m (a, Perm AnyName),
+  lfreshenD :: forall m b. LFresh m => AlphaCtx -> a -> (a -> Perm AnyName -> m b) -> m b,
   aeqD      :: AlphaCtx -> a -> a -> Bool,
   acompareD :: AlphaCtx -> a -> a -> Ordering,
-  closeD    :: Alpha b => AlphaCtx -> b -> a -> a,
-  openD     :: Alpha b => AlphaCtx -> b -> a -> a,
+  closeD    :: forall b. Alpha b => AlphaCtx -> b -> a -> a,
+  openD     :: forall b. Alpha b => AlphaCtx -> b -> a -> a,
   findpatD  :: a -> AnyName -> FindResult,
   nthpatD   :: a -> NthCont
   }
