@@ -8,12 +8,11 @@ tested-with:    GHC == 7.0.4,
                 GHC == 7.2.1,
                 GHC == 7.4.1,
                 GHC == 7.6.1,
-                GHC == 7.8.1
+                GHC == 7.8.1,
+                GHC == 7.8.3
 author:         Stephanie Weirich
-maintainer:     Brent Yorgey <byorgey@cis.upenn.edu>
-                Chris Casinghino <ccasin@cis.upenn.edu>
-                Stephanie Weirich <sweirich@cis.upenn.edu>
-homepage:       http://code.google.com/p/replib/
+maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>
+homepage:       https://github.com/sweirich/replib
 category:       Generics
 extra-source-files: README
 synopsis:       Generic programming library with representation types
@@ -21,8 +20,8 @@ description:    Generic programming library providing structural
                 polymorphism and other features.
 
 Source-repository head
-  type: svn
-  location: http://replib.googlecode.com/svn/trunk/
+  type: git
+  location: https://github.com/sweirich/replib
 
 Library
   build-depends: base >= 4.3 && < 5,

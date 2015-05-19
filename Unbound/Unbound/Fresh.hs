@@ -11,7 +11,7 @@
 -- Module      :  Unbound.Fresh
 -- License     :  BSD-like (see LICENSE)
 --
--- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Maintainer  :  Stephanie Weirich (sweirich@cis.upenn.edu)
 -- Stability   :  experimental
 -- Portability :  unportable (GHC 7 only)
 --
