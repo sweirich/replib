@@ -296,8 +296,9 @@ incr :: AlphaCtx -> AlphaCtx
 incr c = c { level = level c + 1 }
 
 decr :: AlphaCtx -> AlphaCtx
-decr c = if level c == 0 then error "Too many outers"
-         else c { level = level c - 1 }
+decr c = -- if level c == 0 then error "Too many outers"
+         -- else
+         c { level = level c - 1 }
 
 
 pat  :: AlphaCtx -> AlphaCtx
@@ -578,7 +579,7 @@ instance Rep a => Alpha (Name a) where
         Nothing  -> error "Internal error in open: sort mismatch"
   open _ _ n = n
 
-  close c a nm@(Nm r _) | mode c == Term =
+  close c a nm@(Nm r _) | mode c == Term && level c >= 0 =
       case findpat a (AnyName nm) of
         Just x  -> Bn r (level c) x
         Nothing -> nm
