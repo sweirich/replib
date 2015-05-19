@@ -10,7 +10,6 @@
 -- License     :  BSD
 --
 -- Maintainer  :  sweirich@cis.upenn.edu
--- Stability   :  experimental
 -- Portability :  non-portable
 --
 -- A library of type-indexed functions
@@ -336,10 +335,10 @@ class Rep1 (LreduceD b) a => Lreduce b a where
 
 -- For example
 -- @ instance Fold [] where
---	 foldRight op = rreduceR1 (rList1 (RreduceD { rreduceD = op })
---					  (RreduceD { rreduceD = foldRight op }))
---	 foldLeft op = lreduceR1 (rList1 (LreduceD  { lreduceD = op })
---					 (LreduceD { lreduceD = foldLeft op }))
+--    foldRight op = rreduceR1 (rList1 (RreduceD { rreduceD = op })
+--                             (RreduceD { rreduceD = foldRight op }))
+--    foldLeft op = lreduceR1 (rList1 (LreduceD  { lreduceD = op })
+--                            (LreduceD { lreduceD = foldLeft op }))
 -- @
 
 instance Rreduce b a => Sat (RreduceD b a) where
@@ -382,8 +381,8 @@ instance (Ord a, Rreduce b a) => Rreduce b (Set a) where
 -- | All of the functions below are defined using instances
 -- of the following class
 class Fold f where
-	 foldRight :: Rep a => (a -> b -> b) -> f a -> b -> b
-	 foldLeft  :: Rep a => (b -> a -> b) -> b -> f a -> b
+  foldRight :: Rep a => (a -> b -> b) -> f a -> b -> b
+  foldLeft  :: Rep a => (b -> a -> b) -> b -> f a -> b
 
 -- | Fold a bindary operation left over a datastructure
 crush      :: (Rep a, Fold t) => (a -> a -> a) -> a -> t a -> a
@@ -432,14 +431,14 @@ gelem x t  = foldRight (\a b -> a == x || b) t False
 
 
 instance Fold [] where
-	 foldRight op = rreduceR1 (rList1 (RreduceD { rreduceD = op })
-					  (RreduceD { rreduceD = foldRight op }))
-	 foldLeft op = lreduceR1 (rList1 (LreduceD  { lreduceD = op })
-					 (LreduceD { lreduceD = foldLeft op }))
+  foldRight op = rreduceR1 (rList1 (RreduceD { rreduceD = op })
+                           (RreduceD { rreduceD = foldRight op }))
+  foldLeft op = lreduceR1 (rList1 (LreduceD  { lreduceD = op })
+                          (LreduceD { lreduceD = foldLeft op }))
 
 instance Fold Set where
-	 foldRight op x b = foldRight op (Set.toList x) b
-	 foldLeft op b x = foldLeft op b (Set.toList x)
+  foldRight op x b = foldRight op (Set.toList x) b
+  foldLeft op b x = foldLeft op b (Set.toList x)
 
 instance Fold (Map k) where
   foldRight op x b = foldRight op (Map.elems x) b

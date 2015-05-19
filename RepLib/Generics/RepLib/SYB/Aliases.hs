@@ -19,36 +19,36 @@
 -----------------------------------------------------------------------------
 module Generics.RepLib.SYB.Aliases (
 
-	-- * Combinators to \"make\" generic functions via cast
-	mkT, mkQ, mkM, mkMp, mkR,
-	ext0, extT, extQ, extM, extMp, extB, extR,
+   -- * Combinators to \"make\" generic functions via cast
+   mkT, mkQ, mkM, mkMp, mkR,
+   ext0, extT, extQ, extM, extMp, extB, extR,
 
-	-- * Type synonyms for generic function types
-	GenericT,
-	GenericQ,
-	GenericM,
-	GenericB,
-	GenericR,
+   -- * Type synonyms for generic function types
+   GenericT,
+   GenericQ,
+   GenericM,
+   GenericB,
+   GenericR,
    Generic,
    Generic'(..),
    GenericT'(..),
    GenericQ'(..),
    GenericM'(..),
 
-	-- * Inredients of generic functions
-	orElse,
+   -- * Inredients of generic functions
+   orElse,
 
-	-- * Function combinators on generic functions
-	recoverMp,
-	recoverQ,
-	choiceMp,
-	choiceQ
+   -- * Function combinators on generic functions
+   recoverMp,
+   recoverQ,
+   choiceMp,
+   choiceQ
 
-	-- * Type extension for unary type constructors
---	ext1T,
---	ext1M,
---	ext1Q,
---	ext1R
+   -- * Type extension for unary type constructors
+-- ext1T,
+-- ext1M,
+-- ext1Q,
+-- ext1R
 
   ) where
 
@@ -62,8 +62,8 @@ import Generics.RepLib.RepAux
 
 ------------------------------------------------------------------------------
 --
---	Combinators to "make" generic functions
---	We use type-safe cast in a number of ways to make generic functions.
+-- Combinators to "make" generic functions
+-- We use type-safe cast in a number of ways to make generic functions.
 --
 ------------------------------------------------------------------------------
 
@@ -209,7 +209,7 @@ extR def ext = unR ((R def) `ext0` (R ext))
 
 ------------------------------------------------------------------------------
 --
---	Type synonyms for generic function types
+-- Type synonyms for generic function types
 --
 ------------------------------------------------------------------------------
 
@@ -258,9 +258,9 @@ data Generic' c = Generic' { unGeneric' :: Generic c }
 
 
 -- | Other first-class polymorphic wrappers
-newtype GenericT'   = GT { unGT :: Rep a => a -> a }
+newtype GenericT'   = GT { unGT :: forall a. Rep a => a -> a }
 newtype GenericQ' r = GQ { unGQ :: GenericQ r }
-newtype GenericM' m = GM { unGM :: Rep a => a -> m a }
+newtype GenericM' m = GM { unGM :: forall a. Rep a => a -> m a }
 
 
 -- | Left-biased choice on maybies
@@ -305,7 +305,7 @@ recoverQ r f = f `choiceQ` const (return r)
 
 ------------------------------------------------------------------------------
 --
---	Type extension for unary type constructors
+-- Type extension for unary type constructors
 --
 ------------------------------------------------------------------------------
 
@@ -355,7 +355,7 @@ ext1R def ext = unR ((R def) `ext1` (R ext))
 
 ------------------------------------------------------------------------------
 --
---	Type constructors for type-level lambdas
+-- Type constructors for type-level lambdas
 --
 ------------------------------------------------------------------------------
 

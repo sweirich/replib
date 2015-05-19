@@ -139,7 +139,7 @@ instance (Rep a, Rep b) => Rep (a :=: b) where rep = Equal rep rep
 rUnitEmb :: Emb Nil ()
 rUnitEmb = Emb { to = \Nil -> (),
                  from = \() -> Just Nil,
-			        labels = Nothing,
+                 labels = Nothing,
                  name = "()",
                  fixity = Nonfix }
 
@@ -156,7 +156,7 @@ instance (Rep a, Rep b) => Rep (a,b) where
 
 rTup2 :: forall a b. (Rep a, Rep b) => R (a,b)
 rTup2 = let args =  ((rep :: R a) :+: (rep :: R b) :+: MNil) in
-			Data (DT "(,)" args) [ Con rPairEmb args ]
+            Data (DT "(,)" args) [ Con rPairEmb args ]
 
 rPairEmb :: Emb (a :*: b :*: Nil) (a,b)
 rPairEmb =
@@ -179,7 +179,7 @@ rNilEmb = Emb {   to   = \Nil -> [],
                            []    -> Just Nil,
                   labels = Nothing,
                   name = "[]",
-		  fixity = Nonfix
+                  fixity = Nonfix
                  }
 
 rConsEmb :: Emb (a :*: [a] :*: Nil) [a]
@@ -191,7 +191,7 @@ rConsEmb =
                     []        -> Nothing,
             labels = Nothing,
             name = ":",
-	    fixity = Nonfix -- ???
+            fixity = Nonfix -- ???
           }
 
 instance Rep a => Rep [a] where
