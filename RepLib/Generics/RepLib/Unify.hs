@@ -1,7 +1,11 @@
-{-# LANGUAGE UndecidableInstances, OverlappingInstances, IncoherentInstances,
+{-# LANGUAGE UndecidableInstances, IncoherentInstances,
     ExistentialQuantification, ScopedTypeVariables, EmptyDataDecls,
-    MultiParamTypeClasses, FlexibleInstances, FlexibleContexts
+    MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, CPP
   #-}
+#if MIN_VERSION_template_haskell(2,10,0)
+#else
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 {-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 
 -----------------------------------------------------------------------------
@@ -27,7 +31,11 @@ import Generics.RepLib.R1
 import Generics.RepLib.RepAux
 import Generics.RepLib.PreludeReps()
 import Control.Monad.State
+#if MIN_VERSION_transformers(0,4,0)
+import Control.Monad.Except
+#else
 import Control.Monad.Error
+#endif
 
 data Proxy a
 
@@ -47,12 +55,16 @@ type UnifyError = String
 
 
 -- Error/State monad for unification. This version does not abstract the monad.
+#if MIN_VERSION_transformers(0,4,0)
+type UM n a b = ExceptT UnifyError (State (UnificationState n a)) b
+#else
 type UM n a b = ErrorT UnifyError (State (UnificationState n a)) b
+#endif
 
 
 data UnifySubD n a b = UnifySubD { unifyStepD :: Proxy (n, a) -> b -> b -> UM n a (),
-				   substD:: n -> a -> b -> b,
-				   occursCheckD :: n -> Proxy a -> b -> Bool}
+                                   substD:: n -> a -> b -> b,
+                                   occursCheckD :: n -> Proxy a -> b -> Bool}
 
 instance (Unify n a b, Subst n a b, Occurs n a b) => Sat (UnifySubD n a b) where
     dict = UnifySubD {unifyStepD = unifyStep, substD = subst, occursCheckD = occursCheck}
@@ -60,7 +72,7 @@ instance (Unify n a b, Subst n a b, Occurs n a b) => Sat (UnifySubD n a b) where
 
 data UConstraint n a = forall b. UC (UnifySubD n a b) b b
 data UnificationState n a = UState {uConstraints :: [UConstraint n a],
-				    uSubst :: [(n, a)]}
+                                    uSubst :: [(n, a)]}
 
 
 
@@ -85,11 +97,11 @@ unifyStepR1 (Data1 _ cons) dum =
     \ x y ->
        let loop (Con rcd rec : rest) =
               case (from rcd x, from rcd y) of
-	         (Just p1, Just p2) -> addConstraintsRL1 rec dum p1 p2
-		 (Nothing, Nothing) -> loop rest
-		 (_,_) -> throwError (strMsg $ "constructor mismatch when trying to match " ++ show x ++ " = " ++ show y)
-	   in loop cons
-unifyStepR1 _ _ = \_ _ -> throwError (strMsg ("unifyStepR1 unhandled generic type constructor"))
+               (Just p1, Just p2) -> addConstraintsRL1 rec dum p1 p2
+               (Nothing, Nothing) -> loop rest
+               (_,_) -> throwError ("constructor mismatch when trying to match " ++ show x ++ " = " ++ show y)
+        in loop cons
+unifyStepR1 _ _ = \_ _ -> throwError ("unifyStepR1 unhandled generic type constructor")
 
 
 
@@ -101,29 +113,29 @@ addConstraintsRL1 (r :+: rl) (dum :: Proxy (n, a)) (p1 :*: t1) (p2 :*: t2) =
 
 unifyStepEq :: (Eq b, Show b) => b -> b -> UM n a ()
 unifyStepEq x y = if x == y
-		    then return ()
-		    else throwError $ strMsg ("unify failed when testing equality for " ++ show x ++ " = " ++ show y)    -- " show x ++ " /= " ++ show y)
+                   then return ()
+                   else throwError $ "unify failed when testing equality for " ++ show x ++ " = " ++ show y    -- " show x ++ " /= " ++ show y
 
 
 -- a a instance
 instance (Eq n, Show n, Show a, HasVar n a, Rep1 (UnifySubD n a) a) => Unify n a a where
     unifyStep (dum :: Proxy (n, a)) (a1::a) a2 =
-	case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
-	    (Just n1, Just n2) ->  if n1 == n2
-				     then return ()
-				     else addSub n1 ((var n2) :: a);
-	    (Just n1, _) -> addSub n1 a2
-	    (_, Just n2) ->  addSub n2 a1
-	    (_, _) -> unifyStepR1 rep1 dum a1 a2
-	where
+     case ((is_var a1) :: Maybe n, (is_var a2) :: Maybe n) of
+      (Just n1, Just n2) ->  if n1 == n2
+                              then return ()
+                              else addSub n1 ((var n2) :: a);
+      (Just n1, _) -> addSub n1 a2
+      (_, Just n2) ->  addSub n2 a1
+      (_, _) -> unifyStepR1 rep1 dum a1 a2
+     where
         addSub n t = extendSubstitution (n, t)
 
 
 dequeueConstraint :: UM n a (Maybe (UConstraint n a))
 dequeueConstraint = do s <- get
-		       case s of (UState [] _) -> return Nothing
-				 (UState (x : xs) sub) -> do put $ UState xs sub
-							     return $ Just x
+                       case s of (UState [] _) -> return Nothing
+                                 (UState (x : xs) sub) -> do put $ UState xs sub
+                                                             return $ Just x
 
 queueConstraint ::  UConstraint n a -> UM n a ()
 queueConstraint eq = modify (\ (UState xs sub) -> (UState (eq : xs) sub))
@@ -151,7 +163,7 @@ extendSubstitution asgn@((n :: n), (a :: a)) =
     if (occursCheck n (undefined :: Proxy a) a)
        then throwError $ "occurs check failed when extending sub with " ++ (show n) ++ " = " ++ (show a)
        else do (UState xs sub) <- get
- 	       let sub' = [(n', subst n a a') | (n', a') <- sub]                            -- these might have side effects if we want to handle binding via freshmonad.
+               let sub' = [(n', subst n a a') | (n', a') <- sub]                            -- these might have side effects if we want to handle binding via freshmonad.
                let xs' = [UC d (substD d n a b1) (substD d n a b2) | (UC d b1 b2) <- xs]
                put (UState xs' (asgn : sub'))
 
@@ -164,15 +176,15 @@ extendSubstitution asgn@((n :: n), (a :: a)) =
 solveUnification :: (HasVar n a, Eq n, Show n, Show a, Rep1 (UnifySubD n a) a) => [(a, a)] -> Maybe [(n, a)]
 solveUnification (eqs :: [(a, a)]) =
     case r of Left e -> error e
-	      Right _ -> Just $ uSubst final
+              Right _ -> Just $ uSubst final
     where
-    (r, final) = runState (runErrorT rwConstraints) (UState cs [])
+    (r, final) = runState (runExceptT rwConstraints) (UState cs [])
     cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
     rwConstraints :: UM n a ()
     rwConstraints = do c <- dequeueConstraint
-		       case c of Just (UC d a1 a2) -> do _ <- unifyStepD d (undefined :: Proxy (n, a)) a1 a2
-							 rwConstraints
-				 Nothing -> return ()
+                       case c of Just (UC d a1 a2) -> do _ <- unifyStepD d (undefined :: Proxy (n, a)) a1 a2
+                                                         rwConstraints
+                                 Nothing -> return ()
 
 
 
@@ -184,15 +196,15 @@ solveUnification (eqs :: [(a, a)]) =
 solveUnification' :: (HasVar n a, Eq n, Show n, Show a, Show b, Rep1 (UnifySubD n a) b) => Proxy (n, a) -> [(b, b)] -> Maybe [(n, a)]
 solveUnification' (dum :: Proxy (n, a)) (eqs :: [(b, b)]) =
     case r of Left e -> error e
-	      Right _ -> Just $ uSubst final
+              Right _ -> Just $ uSubst final
     where
-    (r, final) = runState (runErrorT rwConstraints) (UState cs [])
+    (r, final) = runState (runExceptT rwConstraints) (UState cs [])
     cs = [(UC dict a1 a2) | (a1, a2) <- eqs]
     rwConstraints :: UM n a ()
     rwConstraints = do c <- dequeueConstraint
-		       case c of Just (UC d a1 a2) -> do _ <- unifyStepD d dum a1 a2
-							 rwConstraints
-				 Nothing -> return ()
+                       case c of Just (UC d a1 a2) -> do _ <- unifyStepD d dum a1 a2
+                                                         rwConstraints
+                                 Nothing -> return ()
 
 
 
@@ -219,8 +231,8 @@ substR1 _ (a::a) (t::t) t' = gmapT1 (\cb b -> substD cb a t b) t'
 -- a a instance
 instance (Eq a, HasVar a t, Rep1 (UnifySubD a t) t) => Subst a t t where
     subst a t t' = if is_var t' == Just a
-		  then t
-		  else gmapT1 (\cb b -> substD cb a t b) t'
+                    then t
+                    else gmapT1 (\cb b -> substD cb a t b) t'
 
 
 -- Generic Occurs checking
@@ -238,7 +250,7 @@ occursCheckR1 _ (n::n) pa b = or $ gmapQ1 (\cb b' -> occursCheckD cb n pa b') b
 -- a a instance.
 instance (Eq n, HasVar n a, Rep1 (UnifySubD n a) a) => Occurs n a a where
     occursCheck n pa a = if is_var a == Just n
-		  then True
-		  else or $ gmapQ1 (\cb b -> occursCheckD cb n pa b) a
+                          then True
+                          else or $ gmapQ1 (\cb b -> occursCheckD cb n pa b) a
 
 

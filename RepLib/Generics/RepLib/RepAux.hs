@@ -280,8 +280,9 @@ type Query r = forall a. Rep a => a -> r
 gmapQ :: forall a r. Rep a => Query r -> a -> [r]
 gmapQ q =
   case (rep :: R a) of
-    (Data _ cons) -> \x -> case (findCon cons x) of
-		Val _ reps ys -> mapQ_l (const q) reps ys
+    (Data _ cons) -> \x ->
+      case (findCon cons x) of
+       Val _ reps ys -> mapQ_l (const q) reps ys
     _ -> const []
 
 
@@ -290,9 +291,10 @@ type MapM m = forall a. Rep a => a -> m a
 
 gmapM   :: forall a m. (Rep a, Monad m) => MapM m -> a -> m a
 gmapM m = case (rep :: R a) of
-   (Data _ cons) -> \x -> case (findCon cons x) of
-     Val emb reps ys -> do l <- mapM_l (const m) reps ys
-                           return (to emb l)
+   (Data _ cons) -> \x ->
+     case (findCon cons x) of
+      Val emb reps ys -> do l <- mapM_l (const m) reps ys
+                            return (to emb l)
    _ -> return
 
 
@@ -311,16 +313,18 @@ type Query1 ctx r = forall a. Rep a => ctx a -> a -> r
 gmapQ1 :: forall a ctx r. (Rep1 ctx a) => Query1 ctx r -> a -> [r]
 gmapQ1 q  =
   case (rep1 :: R1 ctx a) of
-    (Data1 _ cons) -> \x -> case (findCon cons x) of
-		Val _ recs kids -> mapQ_l q recs kids
+    (Data1 _ cons) -> \x ->
+      case (findCon cons x) of
+       Val _ recs kids -> mapQ_l q recs kids
     _ -> const []
 
 type MapM1 ctx m = forall a. Rep a => ctx a -> a -> m a
 gmapM1  :: forall a ctx m. (Rep1 ctx a, Monad m) => MapM1 ctx m -> a -> m a
 gmapM1 m = case (rep1 :: R1 ctx a) of
-   (Data1 _ cons) -> \x -> case (findCon cons x) of
-     Val emb rec ys -> do l <- mapM_l m rec ys
-                          return (to emb l)
+   (Data1 _ cons) -> \x ->
+     case (findCon cons x) of
+      Val emb rec ys -> do l <- mapM_l m rec ys
+                           return (to emb l)
    _ -> return
 
 -------------- Spine from SYB Reloaded ---------------------------
@@ -329,20 +333,20 @@ data Typed a = a ::: R a
 infixr 7 :::
 
 data Spine a where
-	 Constr :: a -> Spine a
-	 (:<>)  :: Spine (a -> b) -> Typed a -> Spine b
+  Constr :: a -> Spine a
+  (:<>)  :: Spine (a -> b) -> Typed a -> Spine b
 
 toSpineR :: R a -> a -> Spine a
 toSpineR (Data _ cons) a =
-	 case (findCon cons a) of
-	    Val emb reps kids -> toSpineRl reps kids (to emb)
+  case (findCon cons a) of
+   Val emb reps kids -> toSpineRl reps kids (to emb)
 toSpineR _ a = Constr a
 
 toSpineRl :: MTup R l -> l -> (l -> a) -> Spine a
 toSpineRl MNil Nil into = Constr (into Nil)
 toSpineRl (ra :+: rs) (a :*: l) into =
-	 (toSpineRl rs l into') :<> (a ::: ra)
-		  where into' tl1 x1 = into (x1 :*: tl1)
+  (toSpineRl rs l into') :<> (a ::: ra)
+   where into' tl1 x1 = into (x1 :*: tl1)
 
 toSpine :: Rep a => a -> Spine a
 toSpine = toSpineR rep

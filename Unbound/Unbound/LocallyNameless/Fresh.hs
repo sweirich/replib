@@ -2,10 +2,13 @@
            , FlexibleInstances
            , FlexibleContexts
            , GeneralizedNewtypeDeriving
-           , OverlappingInstances
            , MultiParamTypeClasses
            , UndecidableInstances
+           , CPP
   #-}
+#if __GLASGOW_HASKELL__ < 710
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 ----------------------------------------------------------------------
 -- |
 -- Module      :  Unbound.LocallyNameless.Fresh
@@ -48,10 +51,14 @@ import Data.Monoid
 import Control.Monad.Reader
 import qualified Control.Monad.State as St
 import Control.Monad.Identity
-import Control.Applicative (Applicative)
+import Control.Applicative (Applicative, Alternative)
 
 import Control.Monad.Trans.Cont
+#if MIN_VERSION_transformers(0,4,0)
+import Control.Monad.Trans.Except
+#else
 import Control.Monad.Trans.Error
+#endif
 import Control.Monad.Trans.Identity
 import Control.Monad.Trans.List
 import Control.Monad.Trans.Maybe
@@ -81,7 +88,11 @@ class Monad m => Fresh m where
 --   still globally unused, and increments the index every time it is
 --   asked for a fresh name.
 newtype FreshMT m a = FreshMT { unFreshMT :: St.StateT Integer m a }
+#if __GLASGOW_HASKELL__ >= 710
+  deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadIO, MonadFix)
+#else
   deriving (Functor, Applicative, Monad, MonadPlus, MonadIO, MonadFix)
+#endif
 
 -- | Run a 'FreshMT' computation (with the global index starting at zero).
 runFreshMT :: Monad m => FreshMT m a -> m a
@@ -118,8 +129,13 @@ contFreshM m = runIdentity . contFreshMT m
 instance Fresh m => Fresh (ContT r m) where
   fresh = lift . fresh
 
+#if MIN_VERSION_transformers(0,4,0)
+instance Fresh m => Fresh (ExceptT e m) where
+  fresh = lift . fresh
+#else
 instance (Error e, Fresh m) => Fresh (ErrorT e m) where
   fresh = lift . fresh
+#endif
 
 instance Fresh m => Fresh (IdentityT m) where
   fresh = lift . fresh
@@ -188,7 +204,11 @@ class Monad m => LFresh m where
 -- avoid, and when asked for a fresh one will choose the first numeric
 -- prefix of the given name which is currently unused.
 newtype LFreshMT m a = LFreshMT { unLFreshMT :: ReaderT (Set AnyName) m a }
+#if __GLASGOW_HASKELL__ >= 710
+  deriving (Functor, Applicative, Alternative, Monad, MonadIO, MonadPlus, MonadFix)
+#else
   deriving (Functor, Applicative, Monad, MonadIO, MonadPlus, MonadFix)
+#endif
 
 -- | Run an 'LFreshMT' computation in an empty context.
 runLFreshMT :: LFreshMT m a -> m a
@@ -226,10 +246,17 @@ instance LFresh m => LFresh (ContT r m) where
   avoid  = mapContT . avoid
   getAvoids = lift getAvoids
 
+#if MIN_VERSION_transformers(0,4,0)
+instance LFresh m => LFresh (ExceptT e m) where
+  lfresh = lift . lfresh
+  avoid  = mapExceptT . avoid
+  getAvoids = lift getAvoids
+#else
 instance (Error e, LFresh m) => LFresh (ErrorT e m) where
   lfresh = lift . lfresh
   avoid  = mapErrorT . avoid
   getAvoids = lift getAvoids
+#endif
 
 instance LFresh m => LFresh (IdentityT m) where
   lfresh = lift . lfresh

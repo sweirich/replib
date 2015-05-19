@@ -28,7 +28,7 @@
 
 
 module Generics.RepLib.Derive (
-	derive, derive_abstract
+  derive, derive_abstract
 ) where
 
 import Generics.RepLib.R
@@ -157,9 +157,12 @@ extractParamEqualities :: [TyVarBndr] -> Cxt -> [(Name, Type)]
 extractParamEqualities tyVars = filterWith extractLHSVars
                               . filterWith extractEq
   where extractEq :: Pred -> Maybe (Type, Type)
-        extractEq (EqualP ty1 ty2)  = Just (ty1, ty2)
-        extractEq _                 = Nothing
-
+#if MIN_VERSION_template_haskell(2,10,0)
+        extractEq (AppT (AppT EqualityT ty1) ty2) = Just (ty1, ty2)
+#else
+        extractEq (EqualP ty1 ty2)                = Just (ty1, ty2)
+#endif
+        extractEq _                               = Nothing
         extractLHSVars (VarT n, t2) | any ((==n) . tyVarBndrName) tyVars = Just (n,t2)
         extractLHSVars _            = Nothing
         -- Note, assuming here that equalities involving type parameters
@@ -280,13 +283,17 @@ repr f n = do info' <- reify n
                      Conc -> [| Data $(repDT nm paramNames)
                                      (catMaybes $(return (ListE rcons))) |]
                      Abs  -> [| Abstract $(repDT nm paramNames) |]
+#if MIN_VERSION_template_haskell(2,10,0)
+                  let ctx = map (\p -> AppT (ConT (mkName "Rep")) (VarT p)) paramNames
+#else
                   let ctx = map (\p -> ClassP (mkName "Rep") [VarT p]) paramNames
+#endif
                   let rTypeName :: Name
                       rTypeName = rName n
                       rSig :: Dec
                       rSig = SigD rTypeName (ForallT (map PlainTV paramNames)
                                                      ctx ((ConT (mkName "R"))
-         	                                          `AppT` ty))
+                                                          `AppT` ty))
                       rType :: Dec
                       rType = ValD (VarP rTypeName) (NormalB body) []
                   let inst  = InstanceD ctx ((ConT (mkName "Rep")) `AppT` ty)
@@ -418,7 +425,11 @@ genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
                        Nothing -> VarT a
 
       satInst  = InstanceD
+#if MIN_VERSION_template_haskell(2,10,0)
+                   (map (\x -> AppT (ConT ''Sat) x) (cpPayloadElts ctxParam))
+#else
                    (map (ClassP ''Sat . (:[])) (cpPayloadElts ctxParam))
+#endif
                    satInstHead
                    [ValD (VarP dictNm)
                          (NormalB (LamE (replicate (length eqs) (ConP 'Refl []))
@@ -469,7 +480,11 @@ repr1 f n = do
                        Abs  -> return []
 
      r1Ty <- [t| $(conT $ ''R1) $(varT ctx) $(return ty) |]
+#if MIN_VERSION_template_haskell(2,10,0)
+     let ctxRep = map (\p -> AppT (ConT ''Rep) (VarT p)) paramNames
+#else
      let ctxRep = map (\p -> ClassP (''Rep) [VarT p]) paramNames
+#endif
          rSig = SigD rTypeName
                   (ForallT
                     (map PlainTV (ctx : paramNames))
@@ -491,8 +506,13 @@ repr1 f n = do
      -- equality proofs
      (ctxParams', satClasses) <- genSatClasses ctxParams
      let mkCtxRec c = case cpSat c of
+#if MIN_VERSION_template_haskell(2,10,0)
+                        Nothing    -> map (\x -> AppT (ConT ''Sat) x) (cpPayloadElts c)
+                        Just (s,_) -> [foldl AppT (ConT s) (map VarT (cpCtxName c : paramNames))]
+#else
                         Nothing    -> map (ClassP ''Sat . (:[])) (cpPayloadElts c)
                         Just (s,_) -> [ClassP s (map VarT (cpCtxName c : paramNames))]
+#endif
          ctxRec = nub $ concatMap mkCtxRec ctxParams'
          mkDictArg c = case cpSat c of
                          Just (_,dn) -> VarE dn
@@ -655,7 +675,11 @@ deriveResultCon :: Int -> Name -> Name -> [Name] -> TH.Con
 deriveResultCon n c a bs =
     ForallC
       (map PlainTV bs)
+#if MIN_VERSION_template_haskell(2,10,0)
+      (map (\x -> AppT (ConT ''Rep) (VarT x)) bs)
+#else
       (map (ClassP ''Rep . (:[]) . VarT) bs)
+#endif
       (NormalC (mkName $ "Result" ++ show n)
         [(NotStrict, deriveResultEq c a bs)]
       )

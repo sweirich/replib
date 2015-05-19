@@ -36,7 +36,7 @@
 --   >
 --   > instance Show T where
 --   >   showsPrec = showsPrecR1 rep1   -- showsPrecR1 is defined in this module
-													 --
+--
 --  * This library also serves as a model for generic functions that are
 -- slight modifications to these prelude operations. For example, if you
 -- wanted to define reverse lexicographic ordering or an XML pretty
@@ -153,14 +153,14 @@ maxBoundR1 r1     = error ("maxBoundR1 not supported for " ++ show r1)
 data ShowD a = ShowD { showsPrecD :: Int -> a -> ShowS }
 
 instance Show a => Sat (ShowD a) where
-	 dict = ShowD { showsPrecD = showsPrec }
+  dict = ShowD { showsPrecD = showsPrec }
 
 getFixity :: Emb a b -> Int
 getFixity c = case fixity c of
-				    Nonfix   -> 0
-				    Infix  i -> i
-				    Infixl i -> i
-				    Infixr i -> i
+               Nonfix   -> 0
+               Infix  i -> i
+               Infixl i -> i
+               Infixr i -> i
 
 -- | Minimal completion of the show class
 showsPrecR1 :: R1 ShowD a ->
@@ -168,13 +168,13 @@ showsPrecR1 :: R1 ShowD a ->
                a    -> -- value to be shown
                ShowS
 showsPrecR1 (Data1 (DT _ _) cons) = \p v ->
-	case (findCon cons v) of
+    case (findCon cons v) of
       Val c rec kids ->
           case (labels c) of
             Just labs -> par $ showString (name c) .
                                showString "{" .
-	 		       showRecord rec kids labs .
-			       showString "}"
+                               showRecord rec kids labs .
+                               showString "}"
             Nothing   -> par $ showString (name c) .
                                maybespace .
                                showKids rec kids
@@ -191,7 +191,7 @@ showsPrecR1 (Data1 (DT _ _) cons) = \p v ->
                 showRecord (r :+: rs) (a :*: aa) (l : ls) =
                     showString l . ('=':) . showKid r a . showString (", ") . showRecord rs aa ls
                 showRecord _ _ _ = error ("Incorrect representation: " ++
-				          "wrong number of labels in record type")
+                                          "wrong number of labels in record type")
 
                 showKids :: MTup ShowD l -> l -> ShowS
                 showKids MNil Nil = id

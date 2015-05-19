@@ -26,17 +26,17 @@ module Generics.RepLib.SYB.Schemes (
    everywhereBut,
    everywhereM,
 --   somewhere,
-	everything,
-	listify,
+   everything,
+   listify,
    something,
-	synthesize,
-	gsize,
-	glength,
-	gdepth,
-	gcount,
-	gnodecount,
-	gtypecount,
-	gfindtype
+   synthesize,
+   gsize,
+   glength,
+   gdepth,
+   gcount,
+   gnodecount,
+   gtypecount,
+   gfindtype
 
  ) where
 
