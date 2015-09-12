@@ -4,7 +4,7 @@
 -- |
 -- Module      :  Unbound.Util
 -- License     :  BSD-like (see LICENSE)
--- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>, Stephanie Weirich <sweirich@cis.upenn.edu>
 -- Portability :  GHC only (-XKitchenSink)
 --
 -- Various utilities for the Unbound library.

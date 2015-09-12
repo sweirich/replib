@@ -150,4 +150,7 @@ tests_acompare = do
 -- if match t1 t2 = Some p then swaps p t1 = t2
 
 main :: IO ()
-main = do_tests
+main = do
+  do_tests
+  putStrLn "Testing complete."
+       

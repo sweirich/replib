@@ -9,7 +9,8 @@ tested-with:    GHC == 7.0.4,
                 GHC == 7.4.1,
                 GHC == 7.6.1,
                 GHC == 7.8.1,
-                GHC == 7.8.3
+                GHC == 7.8.3,
+                GHC == 7.10.2
 author:         Stephanie Weirich
 maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       https://github.com/sweirich/replib
