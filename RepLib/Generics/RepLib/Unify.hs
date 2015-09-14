@@ -32,7 +32,7 @@ import Generics.RepLib.RepAux
 import Generics.RepLib.PreludeReps()
 import Control.Monad.State
 #if MIN_VERSION_transformers(0,4,0)
-import Control.Monad.Except
+import Control.Monad.Trans.Except(ExceptT(..),throwE,runExceptT)
 #else
 import Control.Monad.Error
 #endif
@@ -57,6 +57,8 @@ type UnifyError = String
 -- Error/State monad for unification. This version does not abstract the monad.
 #if MIN_VERSION_transformers(0,4,0)
 type UM n a b = ExceptT UnifyError (State (UnificationState n a)) b
+throwError :: UnifyError -> UM n a b
+throwError = throwE
 #else
 type UM n a b = ErrorT UnifyError (State (UnificationState n a)) b
 #endif
