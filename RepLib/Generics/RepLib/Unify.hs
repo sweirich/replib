@@ -61,6 +61,8 @@ throwError :: UnifyError -> UM n a b
 throwError = throwE
 #else
 type UM n a b = ErrorT UnifyError (State (UnificationState n a)) b
+runExceptT :: ErrorT e m a -> m (Either e a)
+runExceptT = runErrorT
 #endif
 
 
