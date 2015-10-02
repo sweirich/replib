@@ -18,11 +18,13 @@
 
 -- | A very simple example demonstration of the binding library
 -- based on the untyped lambda calculus.
-module LC where
+module Examples.LC where
 
 import Unbound.LocallyNameless
 import Control.Monad.Reader (Reader, runReader)
 import Data.Set as S
+
+import System.Exit (exitFailure)
 
 -- | A Simple datatype for the Lambda Calculus
 data Exp = Var (Name Exp)
@@ -74,8 +76,9 @@ red (App e1 e2) = do
   case e1' of
     -- look for a beta-reduction
     Lam bnd -> do
-        (x, e1'') <- unbind bnd
-        return $ subst x e2' e1''
+    --    (x, e1'') <- unbind bnd
+    --    return $ subst x e2' e1''
+      return $ substBind bnd e2'
     otherwise -> return $ App e1' e2'
 red (Lam bnd) = do
    (x, e) <- unbind bnd
@@ -92,12 +95,12 @@ red (Var x) = return $ (Var x)
 
 assert :: String -> Bool -> IO ()
 assert s True  = return ()
-assert s False = print ("Assertion " ++ s ++ " failed")
+assert s False = print ("Assertion " ++ s ++ " failed") >> exitFailure
 
 assertM :: String -> M Bool -> IO ()
 assertM s c =
   if (runFreshM c) then return ()
-  else print ("Assertion " ++ s ++ " failed")
+  else print ("Assertion " ++ s ++ " failed") >> exitFailure
 
 x :: Name Exp
 x = string2Name "x"

@@ -1,5 +1,5 @@
 name:           unbound
-version:        0.4.4
+version:        0.4.5
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -60,3 +60,19 @@ Library
                     TypeSynonymInstances
                     UndecidableInstances
   default-language: Haskell2010
+
+Test-Suite lambda-calculus
+    default-language: Haskell2010
+    build-depends: base >= 4.3 && < 5,
+                 RepLib >= 0.5.3 && < 0.6,
+                 mtl >= 2.0 && < 2.3,
+                 transformers >= 0.2.2.0 && < 0.5,
+                 containers >= 0.3 && < 0.6,
+                 binary >= 0.7 && < 0.8,
+                 unbound >= 0.4.5,
+                 template-haskell >= 2.10,
+                 parsec >= 3.1.9
+
+
+    type:       exitcode-stdio-1.0
+    main-is:    examples/Main.hs

@@ -13,7 +13,7 @@
 --
 -----------------------------------------------------------------------------
 
-module Basic where
+module Examples.Basic where
 
 import Generics.RepLib
 import Language.Haskell.TH

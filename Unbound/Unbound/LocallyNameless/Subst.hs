@@ -20,11 +20,15 @@ module Unbound.LocallyNameless.Subst where
 import Data.List (find)
 
 import Generics.RepLib
+
+import Unbound.DynR
 import Unbound.LocallyNameless.Types
 import Unbound.LocallyNameless.Alpha
 
+data Proxy a = Proxy
+
 ------------------------------------------------------------
--- Substitution
+-- Substitutionto
 ------------------------------------------------------------
 
 -- | See 'isvar'.
@@ -85,15 +89,35 @@ class (Rep1 (SubstD b) a) => Subst b a where
     | otherwise =
       error $ "Cannot substitute for bound variable in: " ++ show (map fst ss)
 
+
+  -- Pattern substitution (single variable)
+  substPat ::AlphaCtx -> b -> a -> a
+  substPat ctx u x = 
+     case (isvar x :: Maybe (SubstName a b)) of
+        Just (SubstName (Bn r j 0)) | level ctx == j -> u
+        _ -> substPatR1 rep1 ctx u x
+
+
+  substPats :: Proxy b -> AlphaCtx -> [ Dyn ] -> a -> a
+  substPats p ctx us x = 
+     case (isvar x :: Maybe (SubstName a b)) of
+        Just (SubstName (Bn r j i)) | level ctx == j && fromInteger i < length us ->
+          case fromDynR r (us !! fromInteger i) of
+            Just tm -> tm
+            Nothing -> error "internal error: sort mismatch"
+        _ -> substPatsR1 rep1 p ctx us x
+
 -- | Reified class dictionary for 'Subst'.
 data SubstD b a = SubstD {
   isvarD  :: a -> Maybe (SubstName a b),
   substD  ::  Name b -> b -> a -> a ,
-  substsD :: [(Name b, b)] -> a -> a
+  substsD :: [(Name b, b)] -> a -> a ,
+  substPatD :: AlphaCtx -> b -> a -> a ,
+  substPatsD :: Proxy b -> AlphaCtx -> [ Dyn ] -> a -> a
 }
 
 instance Subst b a => Sat (SubstD b a) where
-  dict = SubstD isvar subst substs
+  dict = SubstD isvar subst substs substPat substPats
 
 substDefault :: Rep1 (SubstD b) a => Name b -> b -> a -> a
 substDefault = substR1 rep1
@@ -113,6 +137,33 @@ substsR1 (Data1 _dt cons) = \ s d ->
       let z = map_l (\ w -> substsD w s) rec kids
       in (to c z)
 substsR1 _               = \ _ c -> c
+
+substPatsR1 :: R1 (SubstD b) a -> Proxy b -> AlphaCtx -> [ Dyn ] -> a -> a
+substPatsR1 (Data1 _dt cons) = \ p ct s d ->
+  case (findCon cons d) of
+  Val c rec kids ->
+      let z = map_l (\ w -> substPatsD w p ct s) rec kids
+      in (to c z)
+substPatsR1 _               = \ _ _ _ c -> c
+
+substPatR1 :: R1 (SubstD b) a -> AlphaCtx -> b -> a -> a
+substPatR1 (Data1 _dt cons) = \ ct s d ->
+  case (findCon cons d) of
+  Val c rec kids ->
+      let z = map_l (\ w -> substPatD w ct s) rec kids
+      in (to c z)
+substPatR1 _               = \ _ _ c -> c
+
+
+instance (Rep order, Rep card, Alpha p, Alpha t, Subst b p, Subst b t) => Subst b (GenBind order card p t) where
+   substPat c us (B p t) = B (substPat (pat c) us p) (substPat (incr c) us t)
+   substPats pr c us (B p t) = 
+        B (substPats pr (pat c) us p) (substPats pr (incr c) us t)
+  
+
+substBind :: Subst a b => Bind (Name a) b -> a -> b
+substBind (B _ t) u = substPat initial u t
+
 
 instance Subst b Int
 instance Subst b Bool
@@ -135,8 +186,8 @@ instance (Subst c a) => Subst c [a]
 instance (Subst c a) => Subst c (Maybe a)
 instance (Subst c a, Subst c b) => Subst c (Either a b)
 
-instance (Rep order, Rep card, Subst c b, Subst c a, Alpha a,Alpha b) =>
-    Subst c (GenBind order card a b)
+--- instance (Rep order, Rep card, Subst c b, Subst c a, Alpha a,Alpha b) =>
+--    Subst c (GenBind order card a b)
 instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
     Subst c (Rebind a b)
 

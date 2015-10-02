@@ -16,10 +16,10 @@
 
 module Main where
 
-import qualified Basic
-import qualified LC
-import qualified STLC
-import qualified Abstract
+import qualified Examples.Basic as Basic
+import qualified Examples.LC as LC
+import qualified Examples.STLC as STLC
+import qualified Examples.Abstract as Abstract
 
 
 main = do

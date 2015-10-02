@@ -21,7 +21,7 @@
 --
 -- Suppose we wish to include Source positions in our Abstract Syntax
 --
-module Abstract where
+module Examples.Abstract where
 
 import Generics.RepLib
 import Unbound.LocallyNameless

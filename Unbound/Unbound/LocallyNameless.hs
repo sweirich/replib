@@ -186,7 +186,7 @@ module Unbound.LocallyNameless
     -- ** Substitution
 
     -- | Capture-avoiding substitution.
-    Subst(..), SubstName(..),
+    Subst(..), SubstName(..),substBind,
 
     -- ** Permutations
 

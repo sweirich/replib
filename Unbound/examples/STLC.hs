@@ -16,7 +16,7 @@
 --
 -----------------------------------------------------------------------------
 
-module STLC where
+module Examples.STLC where
 
 import Unbound.LocallyNameless
 import Data.Set as S
