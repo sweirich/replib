@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ExistentialQuantification,
-    TypeOperators, GADTs, TypeSynonymInstances, FlexibleInstances,
+    RankNTypes, TypeOperators, GADTs, TypeSynonymInstances, FlexibleInstances,
     ScopedTypeVariables, CPP
  #-}
 -----------------------------------------------------------------------------
@@ -16,6 +16,8 @@
 -----------------------------------------------------------------------------
 
 module Generics.RepLib.R where
+
+import Unsafe.Coerce
 
 import Data.Type.Equality
 
@@ -82,6 +84,11 @@ infixr 7 :+:
 
 -- | A class of representable types
 class Rep a where rep :: R a
+
+-- | Use a concrete @'R' a@ for a @'Rep' a@ dictionary
+withRep :: R a -> (Rep a => r) -> r
+withRep = unsafeCoerce (flip ($) :: R a -> (R a -> r) -> r)
+-- I think there's some contraint machinery that could hide the unsafeness here
 
 ------ Showing representations  (rewrite this with showsPrec?)
 
