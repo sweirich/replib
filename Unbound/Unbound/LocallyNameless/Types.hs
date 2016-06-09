@@ -70,7 +70,7 @@ type SetPlusBind p t = GenBind RelaxedOrder RelaxedCard p t
 
 instance (Show a, Show b) => Show (GenBind order card a b) where
   showsPrec p (B a b) = showParen (p>0)
-      (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
+      (showString "bind " . showsPrec 11 a . showsPrec 11 b)
 
 -- Rebind
 --------------------------------------------------
@@ -84,7 +84,7 @@ data Rebind p1 p2 = R p1 p2
 
 instance (Show a, Show b) => Show (Rebind a b) where
   showsPrec p (R a b) = showParen (p>0)
-      (showString "<<" . showsPrec p a . showString ">> " . showsPrec 0 b)
+      (showString "rebind " . showsPrec 11 a . showsPrec 11 b)
 
 -- Rec
 --------------------------------------------------

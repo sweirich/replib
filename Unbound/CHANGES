@@ -88,3 +88,30 @@ Version 0.4.3: 29 January 2014
 Version 0.4.3.1: 8 May 2014
 
   * Allow transformers-0.4 and mtl-2.2
+
+Version 0.4.4: 18 May 2015
+
+  * Update to work with GHC 7.10
+  
+Version 0.4.5: 2 Oct 2015
+
+  * Test suite in cabal file
+  * New optimized function for immediately substitution w/o naming
+    Only works for patterns with a single variable:
+      substBind :: Subst a b => Bind (Name a) b -> a -> b
+
+Version 0.5: (planned)
+
+  * Migration to stack
+  * New function in Unbound.LocallyNameless.Ops
+      patUnbind :: (Alpha p, Alpha t) => p -> Bind p t -> t
+  * Remove Show superclass for Alpha
+  * More sensible Show instance for bind, shows as code that
+    can be directly parsed to Haskell.
+      old:  <a> (Var 0@0)
+		new:  (bind (string2Name "a") (Var (string2Name "a"))
+  * More correctness tests available		
+  * Performance testing (eventually vs. nominal, unbound-generics, bound)
+
+
+  

@@ -1,12 +1,12 @@
 name:           unbound
-version:        0.4.5
+version:        0.5.0
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
 tested-with:    GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1, GHC == 7.6.3, GHC == 7.8.3, GHC == 7.10
 author:         Stephanie Weirich, Brent Yorgey
-maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>, Brent Yorgey <byorgey@cis.upenn.edu> 
+maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       https://github.com/sweirich/replib
 category:       Language, Generics, Compilers/Interpreters
 extra-source-files: README,
@@ -43,7 +43,8 @@ Library
     Unbound.LocallyNameless.Subst,
     Unbound.LocallyNameless.Ops,
     Unbound.PermM,
-    Unbound.Util
+    Unbound.Util,
+    Unbound.DynR
   other-extensions: CPP
                     EmptyDataDecls
                     ExistentialQuantification
@@ -71,7 +72,9 @@ Test-Suite lambda-calculus
                  binary >= 0.7 && < 0.8,
                  unbound >= 0.4.5,
                  template-haskell >= 2.10,
-                 parsec >= 3.1.9
+                 parsec >= 3.1.9,
+                 pretty>= 1.1.2,
+                 quickcheck
 
 
     type:       exitcode-stdio-1.0

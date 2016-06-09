@@ -10,26 +10,24 @@ module Unbound.Nominal.Internal where
 
 import Generics.RepLib
 import Unbound.Nominal.Name
+
 import Unbound.PermM
 
 import qualified Data.List as List
 import qualified Text.Read as R
+
 import Data.Set (Set)
-import Data.Maybe
 import qualified Data.Set as S
+
+import Data.Maybe
+
 import Prelude hiding (or)
 import Data.Monoid
 import qualified Control.Monad as Monad
 import Control.Monad.Reader (Reader,ask,local,runReader)
 import System.IO.Unsafe (unsafePerformIO)
 
-(<>) :: Monoid m => m -> m -> m
-(<>) = mappend
-
 ---------------------------------------------------
-
-$(derive_abstract [''R])
--- The above only works with GHC 7.
 
 
 -- | Type of a binding.  Morally, the type a should be in the
@@ -40,7 +38,7 @@ $(derive_abstract [''R])
 -- can create "fresh" a objects, and Names can be
 -- swapped in "b" objects. Often "a" is Name
 -- but that need not be the case.
-data Bind a b = B a b
+data Bind a b = B a b (Set AnyName)
 
 -- | An annotation is a 'hole' in a pattern where variables
 -- can be used, but not bound. For example patterns may include
@@ -61,7 +59,7 @@ data Rebind a b = R a (Bind [AnyName] b)
 -- itself.  Useful for lectrec (and Agda's dot notation).
 data Rec a = Rec a
 
-$(derive [''Bind, ''Name, ''Embed, ''Rebind, ''Rec, ''Shift])
+$(derive [''Bind, ''Embed, ''Rebind, ''Rec, ''Shift])
 
 ----------------------------------------------------------
 -- Binding operations & instances
@@ -69,15 +67,15 @@ $(derive [''Bind, ''Name, ''Embed, ''Rebind, ''Rec, ''Shift])
 
 -- | Smart constructor for binders
 bind :: (Alpha b,Alpha c) => b -> c -> Bind b c
-bind a b = B a b
+bind a b = B a b (fv' initial b)
 
 -- | A destructor for binders that does not guarantee fresh
 -- names for the binders.
 unsafeUnbind :: Bind a b -> (a,b)
-unsafeUnbind (B a b) = (a,b)
+unsafeUnbind (B a b _) = (a,b)
 
 instance (Show a, Show b) => Show (Bind a b) where
-  showsPrec p (B a b) = showParen (p>0)
+  showsPrec p (B a b _) = showParen (p>0)
       (showString "<" . showsPrec p a . showString "> " . showsPrec 0 b)
 
 instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
@@ -99,7 +97,7 @@ rebind :: (Alpha a, Alpha b) => a -> b -> Rebind a b
 rebind a b = R a (bind (binders a) b)
 
 instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
-  showsPrec p (R a (B a' b)) =  showParen (p>0)
+  showsPrec p (R a (B a' b _)) =  showParen (p>0)
       (showString "<<" . showsPrec p a . sa' . showString ">> " . showsPrec 0 b)
    where sa' =  if binders' initial a == a' then showString ""
                   else showString "/" . showsPrec p a'
@@ -109,7 +107,7 @@ instance (Alpha a, Show a, Show b) => Show (Rebind a b) where
 -- been freshen'ed. We swap the internal names so that they use the
 -- external names
 reopen :: (Alpha a, Alpha b) => Rebind a b -> (a, b)
-reopen (R a1 (B names b)) = (a1, swaps p b) where
+reopen (R a1 (B names b _)) = (a1, swaps p b) where
    p = fromJust $ Monad.foldM join empty
           (zipWith single (binders' initial a1) names)
 
@@ -475,6 +473,16 @@ instance Alpha AnyName  where
                      (single (AnyName nm) (AnyName x)) }
      Pat  -> f (AnyName nm) empty
 
+instance Alpha a => Alpha (Set a) where
+  fv' ctx s = S.foldl (\x y -> (fv' ctx x) <> y) mempty s
+
+  binders' ctx s = List.nub $ concatMap (binders' ctx) (S.toList s)
+  
+  swapall' c perm s = S.map (swapall' c perm) s
+  swaps' ctx perm s = S.map (swaps' ctx perm) s
+  
+  aeq' c x y = x == y
+
 instance (Alpha a, Alpha b) => Alpha (Bind a b) where
     -- default definition of swapall
 
@@ -510,7 +518,7 @@ instance (Alpha a, Alpha b) => Alpha (Bind a b) where
         f (B x' y') (pm1 <> pm2)))
 
     -- this version of aeq seems to work
-    aeq' p (B x1 y1) (B x2 y2)
+    aeq' p (B x1 y1 _) (B x2 y2 _)
        -- if the binders match, compare the patterns & bodies
        | bx1 == bx2 = aeq' p x1 x2 && aeq' p y1 y2
        -- if any binders of the first appear freely in the
@@ -576,7 +584,7 @@ instance (Alpha a, Alpha b) => Alpha (Rebind a b) where
       (binders' p y List.\\ ns)
 
 
-   swaps' Term pm (R x (B ns y)) =
+   swaps' Term pm (R x (B ns y _)) =
       R (swaps' Term pm x) (B ns (swaps' Term pm' y)) where
             pm' = restrict pm ns
 
@@ -665,7 +673,7 @@ instance HasNext m => Fresh m where
 -- | Unbind is the destructor of a binding. It ensures that
 -- the names in the binding b are fresh.
 unbind  :: (Alpha b,Fresh m,Alpha c) => Bind b c -> m (b,c)
-unbind (B x y) = do
+unbind (B x y _) = do
     (x',perm) <- freshen x
     return(x', swaps perm y)
 
@@ -673,7 +681,7 @@ unbind (B x y) = do
 -- same list of fresh names
 unbind2  :: (Fresh m,Alpha b,Alpha c, Alpha d) =>
    Bind b c -> Bind b d -> m (Maybe (b,c,d))
-unbind2 (B x1 y1) (B x2 y2) = do
+unbind2 (B x1 y1 _) (B x2 y2 _) = do
    (x1', perm1) <- freshen x1
    case match x1' x2 of
       (Just perm2) ->
@@ -682,7 +690,7 @@ unbind2 (B x1 y1) (B x2 y2) = do
 
 unbind3  :: (Fresh m,Alpha b,Alpha c, Alpha d, Alpha e) =>
    Bind b c -> Bind b d -> Bind b e -> m (Maybe (b,c,d,e))
-unbind3 (B x1 y1) (B x2 y2) (B x3 y3) = do
+unbind3 (B x1 y1 _) (B x2 y2 _) (B x3 y3 _) = do
    (x1', perm1) <- freshen x1
    case (match x1' x2, match x1' x3) of
       (Just perm2, Just perm3) ->
@@ -710,13 +718,13 @@ instance LFresh (Reader Integer) where
 
 -- | Destruct a binding in the LFresh monad.
 lunbind :: (LFresh m, Alpha a, Alpha b) => Bind a b -> m (a, b)
-lunbind (B a b) =
+lunbind (B a b _) =
   avoid (S.elems $ fv' initial b) $ error "UNIMP"
 
 
 lunbind2  :: (LFresh m, Alpha b, Alpha c, Alpha d) =>
             Bind b c -> Bind b d -> m (Maybe (b,c,d))
-lunbind2 (B b1 c) (B b2 d) = do
+lunbind2 (B b1 c _) (B b2 d _) = do
       case match b1 b2 of
          Just _ -> do
            (b', c') <- lunbind (B b1 c)
@@ -725,7 +733,7 @@ lunbind2 (B b1 c) (B b2 d) = do
 
 lunbind3  :: (LFresh m, Alpha b, Alpha c, Alpha d, Alpha e) =>
             Bind b c -> Bind b d -> Bind b e ->  m (Maybe (b,c,d,e))
-lunbind3 (B b1 c) (B b2 d) (B b3 e) = do
+lunbind3 (B b1 c _) (B b2 d _) (B b3 e _) = do
       case (match b1 b2, match b1 b3) of
          (Just _, Just _) -> do
            (b', c') <- lunbind (B b1 c)
@@ -817,14 +825,14 @@ instance Rep a => Subst b (Name a) where
 
 instance (Subst c a, Alpha a, Subst c b, Alpha b) =>
     Subst c (Bind a b) where
-  lsubst n u (B a b) =
+  lsubst n u (B a b _) =
       lfreshen' Term a ( \ a' p -> do
          let b' = swapall' Term p b
          a'' <- lsubst n u a'
          b'' <- lsubst n u b'
          return (B a'' b''))
 
-  lsubsts n u (B a b) =
+  lsubsts n u (B a b _) =
       lfreshen' Term a ( \ a' p -> do
          a'' <- lsubsts n u a'
          let b' = swaps' Pat p (swaps' Term p b)

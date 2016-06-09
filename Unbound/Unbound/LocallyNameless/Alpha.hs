@@ -8,7 +8,7 @@
 -- |
 -- Module      :  Unbound.LocallyNameless.Alpha
 -- License     :  BSD-like (see LICENSE)
--- Maintainer  :  Brent Yorgey <byorgey@cis.upenn.edu>
+-- Maintainer  :  Stephanie Weirich <sweirich@cis.upenn.edu>
 -- Portability :  GHC only (-XKitchenSink)
 --
 ----------------------------------------------------------------------
@@ -106,7 +106,7 @@ import Data.Monoid
 --
 --   Note how the call to 'aeqR1' handles all the other cases generically.
 --
-class (Show a, Rep1 AlphaD a) => Alpha a where
+class (Rep1 AlphaD a) => Alpha a where
 
   -- | See 'swaps'.
   swaps' :: AlphaCtx -> Perm AnyName -> a -> a
@@ -215,7 +215,7 @@ data FindResult = Index Integer      -- ^ The (first) index of the name we
                 | NamesSeen Integer  -- ^ We haven't found the name
                                      --   (yet), but have seen this many
                                      --   others while looking for it
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord)
 
 -- | @FindResult@ forms a monoid which combines information from
 --   several 'findpatrec' operations.  @mappend@ takes the leftmost
@@ -272,7 +272,7 @@ nthpat :: Alpha a => a -> Integer -> AnyName
 nthpat x i = case runNthCont (nthpatrec x) i of
                  CurIndex j -> error
                    ("BUG: pattern index " ++ show i ++
-                    " out of bounds by " ++ show j ++ "in" ++ show x)
+                    " out of bounds by " ++ show j ++ "in")
                  Found nm   -> nm
 
 ------------------------------------------------------------
@@ -707,8 +707,8 @@ instance (Rep order, Rep card, Alpha p, Alpha t) => Alpha (GenBind order card p 
     acompare' c (B p1 t1) (B p2 t2) =
       mappend (acompare' (pat c) p1 p2) (acompare' (incr c) t1 t2)
 
-    findpatrec _ b = error $ "Binding " ++ show b ++ " used as a pattern"
-    nthpatrec    b = error $ "Binding " ++ show b ++ " used as a pattern"
+    findpatrec _ b = error $ "Binding used as a pattern"
+    nthpatrec    b = error $ "Binding used as a pattern"
 
 instance (Alpha p, Alpha q) => Alpha (Rebind p q) where
   isTerm _ = False

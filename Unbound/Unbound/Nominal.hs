@@ -14,9 +14,7 @@
 -- DISCLAIMER: this module almost certainly contains bugs and may be
 -- slower than "Unbound.LocallyNameless".  The documentation is also
 -- sparse and likely out of date.  At this point we recommend it only
--- for the curious or intrepid.  We are actively working on bringing
--- it up to speed as a viable alternative to
--- "Unbound.LocallyNameless".
+-- for the curious or intrepid.  
 --
 --------------------------------------------------------------------------
 module Unbound.Nominal

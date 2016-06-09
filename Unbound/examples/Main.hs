@@ -27,5 +27,6 @@ main = do
      LC.main
      STLC.main
      Abstract.main
+     F.main
      print "Tests completed"
      

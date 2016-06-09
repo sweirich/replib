@@ -28,7 +28,7 @@ import Unbound.LocallyNameless.Alpha
 data Proxy a = Proxy
 
 ------------------------------------------------------------
--- Substitutionto
+-- Substitution
 ------------------------------------------------------------
 
 -- | See 'isvar'.
@@ -97,7 +97,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
         Just (SubstName (Bn r j 0)) | level ctx == j -> u
         _ -> substPatR1 rep1 ctx u x
 
-
+  -- Pattern substitution (all variables in a single pattern)
   substPats :: Proxy b -> AlphaCtx -> [ Dyn ] -> a -> a
   substPats p ctx us x = 
      case (isvar x :: Maybe (SubstName a b)) of
@@ -155,14 +155,39 @@ substPatR1 (Data1 _dt cons) = \ ct s d ->
 substPatR1 _               = \ _ _ c -> c
 
 
-instance (Rep order, Rep card, Alpha p, Alpha t, Subst b p, Subst b t) => Subst b (GenBind order card p t) where
-   substPat c us (B p t) = B (substPat (pat c) us p) (substPat (incr c) us t)
-   substPats pr c us (B p t) = 
-        B (substPats pr (pat c) us p) (substPats pr (incr c) us t)
-  
+-- instances for types that change the de Bruijn levels of the context
 
+instance (Rep order, Rep card, Alpha p, Alpha t, Subst b p, Subst b t) => Subst b (GenBind order card p t) where
+   substPat c us (B p t) = 
+     B (substPat (pat c) us p) (substPat (incr c) us t)
+   substPats pr c us (B p t) = 
+     B (substPats pr (pat c) us p) (substPats pr (incr c) us t)
+  
+instance (Alpha p, Alpha q, Subst b p, Subst b q) => Subst b (Rebind p q) where
+   substPat     c us (R p q) = R (substPat     c us p) (substPat     (incr c) us q)
+   substPats pr c us  (R p q) = R (substPats pr c us p) (substPats pr (incr c) us q)
+   
+instance (Alpha p, Subst b p) => Subst b (Rec p) where
+   substPat     c us (Rec p) = Rec (substPat     (incr c) us p)
+   substPats pr c us (Rec p) = Rec (substPats pr (incr c) us p)
+
+instance (Alpha t, Subst b t) => Subst b (Embed t) where
+   substPat c us (Embed x) = case mode c of
+     Pat  -> Embed (substPat (term c) us x)
+     Term -> error "substPat on Embed"
+   substPats pr c us (Embed x) = case mode c of
+     Pat  -> Embed (substPats pr (term c) us x)
+     Term -> error "substPat on Embed"
+
+instance (Alpha a, Subst b a) => Subst b (Shift a) where
+  substPat      c us (Shift x) = Shift (substPat     (decr c) us x)
+  substPats pr  c us (Shift x) = Shift (substPats pr (decr c) us x)
+
+   
 substBind :: Subst a b => Bind (Name a) b -> a -> b
 substBind (B _ t) u = substPat initial u t
+
+
 
 
 instance Subst b Int
@@ -188,9 +213,9 @@ instance (Subst c a, Subst c b) => Subst c (Either a b)
 
 --- instance (Rep order, Rep card, Subst c b, Subst c a, Alpha a,Alpha b) =>
 --    Subst c (GenBind order card a b)
-instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
-    Subst c (Rebind a b)
+--instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
+--    Subst c (Rebind a b)
 
-instance (Subst c a) => Subst c (Shift a)
-instance (Subst c a) => Subst c (Embed a)
-instance (Alpha a, Subst c a) => Subst c (Rec a)
+--instance (Subst c a) => Subst c (Shift a)
+--instance (Subst c a) => Subst c (Embed a)
+--instance (Alpha a, Subst c a) => Subst c (Rec a)
