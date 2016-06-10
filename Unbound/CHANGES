@@ -102,7 +102,6 @@ Version 0.4.5: 2 Oct 2015
 
 Version 0.5: (planned)
 
-  * Migration to stack
   * New function in Unbound.LocallyNameless.Ops
       patUnbind :: (Alpha p, Alpha t) => p -> Bind p t -> t
   * Remove Show superclass for Alpha
@@ -111,7 +110,8 @@ Version 0.5: (planned)
       old:  <a> (Var 0@0)
 		new:  (bind (string2Name "a") (Var (string2Name "a"))
   * More correctness tests available		
-  * Performance testing (eventually vs. nominal, unbound-generics, bound)
+  * test with GHC-8.0.1
+  * Cache free variables at binders
 
 
   
