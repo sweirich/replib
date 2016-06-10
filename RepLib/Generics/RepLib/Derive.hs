@@ -636,12 +636,13 @@ typeInfo d = case d of
                                     in  c' { constrBinders = bdrs ++ constrBinders c'
                                            , constrCxt = cx ++ constrCxt c'
                                            }
+#if MIN_VERSION_template_haskell(2,11,0)                                        
     conA (GadtC [c] xs ty)        = (mkConstr c)
                                       { constrFields = map normalField xs }
 
     conA (RecGadtC [c] xs ty)     = (mkConstr c)
                                       { constrFields = map recField xs }
-
+#endif
 
     normalField x                 = FieldInfo
                                     { fieldName = Nothing
