@@ -9,7 +9,6 @@
 module F where
 
 import Unbound.LocallyNameless
-import Unbound.LocallyNameless.NameInstances
 
 import Control.Monad
 import Control.Monad.Trans.Error

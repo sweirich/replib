@@ -16,7 +16,7 @@
 module Examples.Basic where
 
 import Generics.RepLib
-import Language.Haskell.TH
+--import Language.Haskell.TH
 
 
 -- For each datatype that we define, we need to also create its representation.
@@ -48,9 +48,9 @@ $(derive
      ''Dept,
      ''CUnit,
      ''Employee,
- 	  ''Manager,
- 	  ''Person,
- 	  ''Salary])
+          ''Manager,
+          ''Person,
+          ''Salary])
 
 
 --

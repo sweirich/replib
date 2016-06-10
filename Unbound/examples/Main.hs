@@ -19,14 +19,14 @@ module Main where
 import qualified Examples.Basic as Basic
 import qualified Examples.LC as LC
 import qualified Examples.STLC as STLC
-import qualified Examples.Abstract as Abstract
+-- import qualified Examples.Abstract as Abstract
 
 
 main = do
      Basic.main
      LC.main
      STLC.main
-     Abstract.main
-     F.main
+     -- Abstract.main
+     -- F.main
      print "Tests completed"
      

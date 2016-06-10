@@ -48,6 +48,10 @@ import Control.Applicative ((<$>), Applicative)
 
 import Unsafe.Coerce
 
+#if MIN_VERSION_template_haskell(2,11,0)
+import Control.Monad.Fail ( MonadFail )
+#endif
+
 -- | Given a type, produce its representation.
 repty :: Type -> Exp
 repty ty = SigE (VarE (mkName "rep")) ((ConT ''R) `AppT` ty)
@@ -81,12 +85,14 @@ rName1 n =
 -- while generating constructor representations.
 
 newtype QN a = QN { unQN :: WriterT (S.Set Int) Q a }
-#if MIN_VERSION_template_haskell(2,7,0)
-  deriving (Applicative, Functor, Monad, MonadWriter (S.Set Int))
-#else
-  deriving (Functor, Monad, MonadWriter (S.Set Int))
+  deriving ( Monad, Functor, MonadWriter (S.Set Int)
+#if MIN_VERSION_template_haskell(2,11,0)
+           , MonadFail
 #endif
-
+#if MIN_VERSION_template_haskell(2,7,0)
+           , Applicative
+#endif
+           )
 
 liftQN :: Q a -> QN a
 liftQN = QN . lift
@@ -118,6 +124,12 @@ instance Quasi QN where
   qAddModFinalizer q    = liftQN $ qAddModFinalizer q
   qGetQ                 = liftQN $ qGetQ
   qPutQ a               = liftQN $ qPutQ a
+#endif
+#if MIN_VERSION_template_haskell(2,11,0)
+  qReifyFixity n        = liftQN $ qReifyFixity n
+  qReifyConStrictness n = liftQN $ qReifyConStrictness n
+  qIsExtEnabled e       = liftQN $ qIsExtEnabled e
+  qExtsEnabled          = liftQN $ qExtsEnabled
 #endif
 
 -- Generate the representation for a data constructor.
@@ -296,13 +308,15 @@ repr f n = do info' <- reify n
                                                           `AppT` ty))
                       rType :: Dec
                       rType = ValD (VarP rTypeName) (NormalB body) []
-                  let inst  = InstanceD ctx ((ConT (mkName "Rep")) `AppT` ty)
+                  let inst  = InstanceD
+#if MIN_VERSION_template_haskell(2,11,0)
+                                 Nothing
+#endif
+                                 ctx
+                                 ((ConT (mkName "Rep")) `AppT` ty)
                                  [ValD (VarP (mkName "rep")) (NormalB (VarE rTypeName)) []]
 
                   return $ ress ++ [rSig, rType, inst]
-
-reprs :: Flag -> [Name] -> Q [Dec]
-reprs f ns = concat <$> mapM (repr f) ns
 
 --------------------------------------------------------------------------------------------
 --- Generating the R1 representation
@@ -338,7 +352,7 @@ data CtxParam = CtxParam { cpName    :: Name            -- The argument name
                          , cpTyVars  :: [Name]          -- /All/ type variable arguments to the type
                                                         -- (not just ones requiring equality proofs);
                                                         -- needed when generating special Sat classes
-                         , cpPayload :: Type            -- What you get after supplying
+                         , _cpPayload :: Type            -- What you get after supplying
                                                         -- the proofs
                          , cpPayloadElts :: [Type]      -- individual elements in
                                                         -- the payload
@@ -425,6 +439,9 @@ genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
                        Nothing -> VarT a
 
       satInst  = InstanceD
+#if MIN_VERSION_template_haskell(2,11,0)
+                   Nothing
+#endif
 #if MIN_VERSION_template_haskell(2,10,0)
                    (map (\x -> AppT (ConT ''Sat) x) (cpPayloadElts ctxParam))
 #else
@@ -445,7 +462,11 @@ genSatClass ctxParam | null (cpEqs ctxParam) = return (ctxParam, [])
   nms <- replicateM (length tvs) (newName "a")
   err <- [| error "Impossible Sat instance!" |]
 
-  let defSatInst = InstanceD [] (foldl' AppT (ConT satNm) (map VarT (ctx : nms)))
+  let defSatInst = InstanceD
+#if MIN_VERSION_template_haskell(2,11,0)
+                     Nothing
+#endif
+                     [] (foldl' AppT (ConT satNm) (map VarT (ctx : nms)))
                      [ValD (VarP dictNm)
                            (NormalB (LamE (replicate (length eqs) (ConP 'Refl [])) err))
                            []
@@ -573,22 +594,34 @@ data FieldInfo = FieldInfo { fieldName :: Maybe Name
 
 typeInfo :: Dec -> TypeInfo
 typeInfo d = case d of
-    (DataD _ _ _ _ _) ->
+    (DataD {}) ->
       TypeInfo (getName d) (paramsA d) (consA d)
-    (NewtypeD _ _ _ _ _) ->
+    (NewtypeD {}) ->
       TypeInfo (getName d) (paramsA d) (consA d)
     _ -> error ("derive: not a data type declaration: " ++ show d)
 
   where
-    getName (DataD _ n _ _ _)     = n
-    getName (NewtypeD _ n _ _ _)  = n
-    getName x                     = error $ "Impossible! " ++ show x ++ " is neither data nor newtype"
+#if MIN_VERSION_template_haskell(2,11,0)
+    getName (DataD _ n _ _ _ _)    = n
+    getName (NewtypeD _ n _ _ _ _) = n
+    getName x                      = error $ "Impossible! " ++ show x ++ " is neither data nor newtype"
+
+    paramsA (DataD _ _ ps _ _ _)    = ps
+    paramsA (NewtypeD _ _ ps _ _ _) = ps
+
+    consA (DataD _ _ _ _ cs _)      = rememberOnly $ map conA cs
+    consA (NewtypeD _ _ _ _ c _)    = rememberOnly $ [ conA c ]
+#else
+    getName (DataD _ n _ _ _)      = n
+    getName (NewtypeD _ n _ _ _)   = n
+    getName x                      = error $ "Impossible! " ++ show x ++ " is neither data nor newtype"
 
     paramsA (DataD _ _ ps _ _)    = ps
     paramsA (NewtypeD _ _ ps _ _) = ps
 
     consA (DataD _ _ _ cs _)      = rememberOnly $ map conA cs
     consA (NewtypeD _ _ _ c _)    = rememberOnly $ [ conA c ]
+#endif
 
     conA (NormalC c xs)           = (mkConstr c)
                                       { constrFields  = map normalField xs }
@@ -603,6 +636,12 @@ typeInfo d = case d of
                                     in  c' { constrBinders = bdrs ++ constrBinders c'
                                            , constrCxt = cx ++ constrCxt c'
                                            }
+    conA (GadtC [c] xs ty)        = (mkConstr c)
+                                      { constrFields = map normalField xs }
+
+    conA (RecGadtC [c] xs ty)     = (mkConstr c)
+                                      { constrFields = map recField xs }
+
 
     normalField x                 = FieldInfo
                                     { fieldName = Nothing
@@ -669,6 +708,9 @@ deriveRes n = do
 deriveResData :: Int -> Name -> Name -> [Name] -> Dec
 deriveResData n c a bs =
   DataD [] (mkName $ "Res" ++ show n) (map PlainTV [c,a])
+#if MIN_VERSION_template_haskell(2,11,0)
+        Nothing
+#endif
         [deriveResultCon n c a bs, deriveNoResultCon n] []
 
 deriveResultCon :: Int -> Name -> Name -> [Name] -> TH.Con
@@ -681,8 +723,14 @@ deriveResultCon n c a bs =
       (map (ClassP ''Rep . (:[]) . VarT) bs)
 #endif
       (NormalC (mkName $ "Result" ++ show n)
-        [(NotStrict, deriveResultEq c a bs)]
+        [(notStrict, deriveResultEq c a bs)]
       )
+  where
+#if MIN_VERSION_template_haskell(2,11,0)
+    notStrict = Bang NoSourceUnpackedness NoSourceStrictness
+#else
+    notStrict = NotStrict
+#endif
 
 deriveResultEq :: Name     -- Tyvar representing the type to be deconstructed
                -> Name     -- Constructor tyvar
@@ -767,4 +815,3 @@ arr t1 t2 = AppT (AppT ArrowT t1) t2
 appsT :: Type -> [Name] -> Type
 appsT t []     = t
 appsT t (n:ns) = appsT (AppT t (VarT n)) ns
-

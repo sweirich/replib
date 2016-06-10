@@ -1,5 +1,5 @@
 name:           RepLib
-version:        0.5.3.5
+version:        0.5.4
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -10,7 +10,8 @@ tested-with:    GHC == 7.0.4,
                 GHC == 7.6.1,
                 GHC == 7.8.1,
                 GHC == 7.8.3,
-                GHC == 7.10.2
+                GHC == 7.10.2,
+                GHC == 8.0.1
 author:         Stephanie Weirich
 maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       https://github.com/sweirich/replib
@@ -26,7 +27,7 @@ Source-repository head
 
 Library
   build-depends: base >= 4.3 && < 5,
-                 template-haskell >= 2.4 && < 2.11,
+                 template-haskell >= 2.4 && < 2.12,
                  mtl >= 2.0 && < 2.3,
                  containers >= 0.4 && < 0.6,
                  transformers
