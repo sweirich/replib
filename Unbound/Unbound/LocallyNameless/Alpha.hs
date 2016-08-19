@@ -424,6 +424,7 @@ aeqR1 (Data1 _ cons) = loop cons where
 aeqR1 Int1     = \ _ x y ->  x == y
 aeqR1 Integer1 = \ _ x y -> x == y
 aeqR1 Char1    = \ _ x y -> x == y
+aeqR1 (Abstract1 _) = \ _ x y -> error "Must override aeq' for abstract types"
 aeqR1 _        = \ _ _ _ -> False
 
 aeq1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Bool
