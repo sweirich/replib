@@ -82,7 +82,7 @@ import qualified Control.Monad.Writer.Class as WC
 class Monad m => Fresh m where
 
   -- | Generate a new globally unique name based on the given one.
-  fresh :: Name a -> m (Name a)
+  fresh :: Rep a => Name a -> m (Name a)
 
 -- | The @FreshM@ monad transformer.  Keeps track of the lowest index
 --   still globally unused, and increments the index every time it is
