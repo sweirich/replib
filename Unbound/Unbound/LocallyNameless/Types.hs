@@ -45,27 +45,46 @@ import Control.Applicative (pure, (<$>), (<*>))
 ------------------------------------------------------------
 -- Basic types
 ------------------------------------------------------------
+-- Note: can't use DataKinds here because RepLib does not support
+-- representations of them.
 
+-- | Type level flag for binder that allows permutation
 data RelaxedOrder
+-- | Type level flag for binder that does not allow permutation
 data StrictOrder
 
+-- | Type level flag for binder that allows extra unused variables
 data RelaxedCard
+-- | Type level flag for binder that does not allow weakening
 data StrictCard
 
 --------------------------------------------------  
 -- Bind
 --------------------------------------------------
 
+-- | Generic binding combinator for a pattern @p@ within a term @t@.
+-- Flexible over the order and cardinality of the variables bound
+-- in the pattern
+data GenBind order card p t = B p t
+
+  
 -- | The most fundamental combinator for expressing binding structure
 --   is 'Bind'.  The /term type/ @Bind p t@ represents a pattern @p@
 --   paired with a term @t@, where names in @p@ are bound within @t@.
 --
 --   Like 'Name', 'Bind' is also abstract. You can create bindings
 --   using 'bind' and take them apart with 'unbind' and friends.
-data GenBind order card p t = B p t
-
 type Bind p t        = GenBind StrictOrder StrictCard p t
+
+
+
+-- | A variant of 'Bind' where alpha-equivalence allows multiple
+-- variables bound in the same pattern to be reordered
 type SetBind p t     = GenBind RelaxedOrder StrictCard p t
+-- | A variant of 'Bind' where alpha-equivalence allows multiple
+-- variables bound in the same pattern to be reordered, and
+-- allows the binding of unused variables
+-- For example,  \{ a b c } . a b `aeq` \ { b a } . a b
 type SetPlusBind p t = GenBind RelaxedOrder RelaxedCard p t
 
 instance (Show a, Show b) => Show (GenBind order card a b) where

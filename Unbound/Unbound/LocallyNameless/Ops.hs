@@ -61,6 +61,24 @@ instance (Alpha a, Alpha b, Read a, Read b) => Read (Bind a b) where
 -- Set Binding operations
 ----------------------------------------------------------
 
+
+-- | Given a list of names and a term, close the term with those names
+-- where the indices of the bound variables occur in sequential order
+-- and return the equivalent ordering of the names, dropping those
+-- that do not occur in the term at all
+-- For example:
+--    permClose [b,c]    (b,c)   =  ([b,c], (0,1))    -- standard close
+--    permClose [b,c]    (c,b)   =  ([c,b], (0,1))    -- vars reordered
+--    permClose [a,b,c]  (c,b)   =  ([c,b], (0,1))    -- var dropped
+--    permClose [a,b,c]  (c,b,c) =  ([c,b], (0,1,0))  -- additional occurrence ok
+permClose :: (Alpha a, Alpha t) => [Name a] -> t -> ([Name a],t)
+permClose ns t = (ns', closeT ns' t) where
+    ns' = map fst . sortBy (comparing snd) 
+        . catMaybes 
+        . map (strength . (\n -> (n, findpat t (AnyName n))))
+        $ ns
+
+-- | Variant of permClose for dynamically typed names
 permCloseAny :: (Alpha t) => [AnyName] -> t -> ([AnyName],t)
 permCloseAny ns t = (ns', closeT ns' t) where
     -- find where the names occur in the body of the term
@@ -72,22 +90,6 @@ permCloseAny ns t = (ns', closeT ns' t) where
 strength :: Functor f => (a, f b) -> f (a, b)
 strength (a, fb) = fmap ((,) a) fb
 
--- Given a list of names and a term, close the term with those names
--- where the indices of the bound variables occur in sequential order
--- and return the equivalent ordering of the names, dropping those
--- that do not occur in the term at all
--- For example:
---    permClose [b,c]    (b,c)   =  ([b,c], (0,1))    -- standard close
---    permClose [b,c]    (c,b)   =  ([c,b], (0,1))    -- vars reordered
---    permClose [a,b,c]  (c,b)   =  ([c,b], (0,1))    -- var dropped
---    permClose [a,b,c]  (c,b,c) =  ([c,b], (0,1,0))  -- additional occurrence ok
-
-permClose :: (Alpha a, Alpha t) => [Name a] -> t -> ([Name a],t)
-permClose ns t = (ns', closeT ns' t) where
-    ns' = map fst . sortBy (comparing snd) 
-        . catMaybes 
-        . map (strength . (\n -> (n, findpat t (AnyName n))))
-        $ ns
 
 -- | Bind the pattern in the term \"up to permutation\" of bound variables.
 --   For example, the following 4 terms are /all/ alpha-equivalent:
@@ -373,25 +375,30 @@ lunbind3 (B p1 t1) (B p2 t2) (B p3 t3) g =
 
 --  A few extra simultaneous l/unbinds, specialized to MonadPlus monads.
 
-
+-- | Unbind two binders with the same names, fail if the number of required
+-- names and their sorts does not match. See 'unbind2'
 unbind2Plus :: (MonadPlus m, Fresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2)
          => GenBind order card p1 t1
          -> GenBind order card p2 t2
          -> m (p1, t1, p2, t2)
 unbind2Plus bnd bnd' = maybe mzero return =<< unbind2 bnd bnd'
 
+-- | Unbind three binders with the same names, fail if the number of required
+-- names and their sorts does not match. See 'unbind3'
 unbind3Plus :: (MonadPlus m, Fresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
             GenBind order card p1 t1 -> GenBind order card p2 t2 
             -> GenBind order card p3 t3 ->  m (p1,t1,p2,t2,p3,t3)
 unbind3Plus b1 b2 b3 = maybe mzero return =<< unbind3 b1 b2 b3            
 
+-- | See 'lunbind2'
 lunbind2Plus :: (MonadPlus m, LFresh m, Alpha p1, Alpha p2, Alpha t1, Alpha t2)
          => GenBind order card p1 t1
          -> GenBind order card p2 t2
          -> ((p1, t1, p2, t2) -> m r) -> m r
 lunbind2Plus bnd bnd' k =          
   lunbind2 bnd bnd' $ maybe mzero k 
-  
+
+-- | See 'lunbind3'
 lunbind3Plus :: (MonadPlus m, LFresh m, Alpha p1, Alpha p2, Alpha p3, Alpha t1, Alpha t2, Alpha t3) =>
             GenBind order card p1 t1 -> GenBind order card p2 t2 -> GenBind order card p3 t3 ->
             ((p1,t1,p2,t2,p3,t3) -> m r) ->

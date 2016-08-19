@@ -103,7 +103,8 @@ Version 0.4.5: 2 Oct 2015
 Version 0.5: August 2016
 
   * Remove Show superclass for Alpha  (potentially breaking change)
-
+  * Remove permValid function from Unbound.PermM
+  
   * New function in Unbound.LocallyNameless.Ops
       patUnbind :: (Alpha p, Alpha t) => p -> Bind p t -> t		
   * More sensible Show instance for bind, shows as code that

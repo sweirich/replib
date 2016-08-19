@@ -300,21 +300,25 @@ nthpat x i = case runNthCont (nthpatrec x) i of
 -- the context on.
 data AlphaCtx = AC { mode :: Mode , level :: Integer }
 
+-- | Toplevel alpha-contexts
 initial :: AlphaCtx
 initial = AC Term 0
 
+-- | Call when going under a binder
 incr :: AlphaCtx -> AlphaCtx
 incr c = c { level = level c + 1 }
 
+-- | Call when going in an embedding
 decr :: AlphaCtx -> AlphaCtx
 decr c = -- if level c == 0 then error "Too many outers"
          -- else
          c { level = level c - 1 }
 
-
+-- | Call when entering a pattern
 pat  :: AlphaCtx -> AlphaCtx
 pat c  = c { mode = Pat }
 
+-- | Call when entering a term embedded in a pattern
 term  :: AlphaCtx -> AlphaCtx
 term c  = c { mode = Term }
 
@@ -368,6 +372,7 @@ instance Alpha a => Sat (AlphaD a) where
 -- that take representations end in 'R1'.)
 ----------------------------------------------------------------------
 
+-- | Generic version of close
 closeR1 :: Alpha b => R1 AlphaD a -> AlphaCtx -> b -> a -> a
 closeR1 (Data1 _ cons) = \i a d ->
    case (findCon cons d) of
@@ -375,7 +380,7 @@ closeR1 (Data1 _ cons) = \i a d ->
         to c (map_l (\z -> closeD z i a) rec kids)
 closeR1 _               = \_ _ d -> d
 
-
+-- | Generic version of open
 openR1 :: Alpha b => R1 AlphaD a -> AlphaCtx -> b -> a -> a
 openR1 (Data1 _ cons) = \i a d ->
    case (findCon cons d) of
@@ -383,24 +388,24 @@ openR1 (Data1 _ cons) = \i a d ->
         to c (map_l (\z -> openD z i a) rec kids)
 openR1 _               = \_ _ d -> d
 
-
+-- | Generic version of swaps
 swapsR1 :: R1 AlphaD a -> AlphaCtx -> Perm AnyName -> a -> a
 swapsR1 (Data1 _ cons)  = \ p x d ->
   case (findCon cons d) of
     Val c rec kids -> to c (map_l (\z -> swapsD z p x) rec kids)
 swapsR1 _               = \ _ _ d -> d
 
-
+-- | Generic version of fv
 fvR1 :: Collection f => R1 (AlphaD) a -> AlphaCtx -> a -> f AnyName
 fvR1 (Data1 _ cons) = \ p  d ->
   case (findCon cons d) of
-    Val _ rec kids -> fv1 rec p kids
+    Val _ rec kids -> fv1 rec p kids where
+          fv1 :: Collection f => MTup (AlphaD) l -> AlphaCtx -> l -> f AnyName
+          fv1 MNil _ Nil = emptyC
+          fv1 (r :+: rs) p (p1 :*: t1) =
+               fvD r p p1 `union` fv1 rs p t1
 fvR1 _ = \ _ _ -> emptyC
 
-fv1 :: Collection f => MTup (AlphaD) l -> AlphaCtx -> l -> f AnyName
-fv1 MNil _ Nil = emptyC
-fv1 (r :+: rs) p (p1 :*: t1) =
-   fvD r p p1 `union` fv1 rs p t1
 
 {-
 matchR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Maybe (Perm AnyName)
@@ -424,6 +429,7 @@ match1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   (l1 `join` l2)
 -}
 
+-- | Generic version of aeq
 aeqR1 :: R1 (AlphaD) a -> AlphaCtx -> a -> a -> Bool
 aeqR1 (Data1 _ cons) = loop cons where
    loop (Con emb reps : rest) p x y =
@@ -438,11 +444,13 @@ aeqR1 Char1    = \ _ x y -> x == y
 aeqR1 (Abstract1 _) = \ _ x y -> error "Must override aeq' for abstract types"
 aeqR1 _        = \ _ _ _ -> False
 
+-- | Generic list version of aeq
 aeq1 :: MTup (AlphaD) l -> AlphaCtx -> l -> l -> Bool
 aeq1 MNil _ Nil Nil = True
 aeq1 (r :+: rs) c (p1 :*: t1) (p2 :*: t2) = do
   aeqD r c p1 p2 && aeq1 rs c t1 t2
 
+-- | Generic version of freshen
 freshenR1 :: Fresh m => R1 (AlphaD) a -> AlphaCtx -> a -> m (a,Perm AnyName)
 freshenR1 (Data1 _ cons) = \ p d ->
    case findCon cons d of
@@ -451,6 +459,7 @@ freshenR1 (Data1 _ cons) = \ p d ->
        return (to c l, p')
 freshenR1 _ = \ _ n -> return (n, empty)
 
+-- | Generic list version of freshen
 freshenL :: Fresh m => MTup (AlphaD) l -> AlphaCtx -> l -> m (l, Perm AnyName)
 freshenL MNil _ Nil = return (Nil, empty)
 freshenL (r :+: rs) p (t :*: ts) = do

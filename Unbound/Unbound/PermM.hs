@@ -11,7 +11,7 @@
 ----------------------------------------------------------------------
 
 module Unbound.PermM (
-    Perm(..), permValid, single, compose, apply, support, isid, join, empty, restrict, mkPerm
+    Perm(..), single, compose, apply, support, isid, join, empty, restrict, mkPerm
   ) where
 
 import Data.Monoid
@@ -27,6 +27,7 @@ import Control.Monad ((>=>))
 --   form the basis for nominal approaches to binding, but can
 --   also be useful in general.
 newtype Perm a = Perm (Map a a)
+
 
 permValid :: Ord a => Perm a -> Bool
 permValid (Perm p) = all (\(_,v) -> M.member v p) (M.assocs p)

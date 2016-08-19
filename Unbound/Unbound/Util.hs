@@ -9,7 +9,6 @@
 --
 -- Various utilities for the Unbound library.
 ----------------------------------------------------------------------
-
 module Unbound.Util where
 
 import Data.Maybe (catMaybes)
@@ -99,6 +98,7 @@ instance Collection S.Set where
   union     = S.union
   cmap      = S.map
 
+-- | Determine whether two sets have an empty intersection
 disjoint :: Ord a => S.Set a -> S.Set a -> Bool
 disjoint s1 s2 = S.null( S.intersection s1 s2 )
 

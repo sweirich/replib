@@ -21,11 +21,11 @@ import Data.List (find)
 
 import Generics.RepLib
 
+import Data.Proxy
+
 import Unbound.DynR
 import Unbound.LocallyNameless.Types
 import Unbound.LocallyNameless.Alpha
-
-data Proxy a = Proxy
 
 ------------------------------------------------------------
 -- Substitution
@@ -38,6 +38,12 @@ data SubstName a b where
 -- | See 'isCoerceVar'  
 data SubstCoerce a b where  
   SubstCoerce :: Name b -> (b -> Maybe a) -> SubstCoerce a b
+
+-- | Immediately substitute for a (single) bound variable
+-- in a binder, without first naming that variable.
+substBind :: Subst a b => Bind (Name a) b -> a -> b
+substBind (B _ t) u = substPat initial u t
+
 
 -- | The @Subst@ class governs capture-avoiding substitution.  To
 --   derive this class, you only need to indicate where the variables
@@ -91,6 +97,7 @@ class (Rep1 (SubstD b) a) => Subst b a where
 
 
   -- Pattern substitution (single variable)
+  -- call this using the top level function (substBind)
   substPat ::AlphaCtx -> b -> a -> a
   substPat ctx u x = 
      case (isvar x :: Maybe (SubstName a b)) of
@@ -98,6 +105,9 @@ class (Rep1 (SubstD b) a) => Subst b a where
         _ -> substPatR1 rep1 ctx u x
 
   -- Pattern substitution (all variables in a single pattern)
+  -- TODO: make this return Maybe when the dynamic chack fails
+  -- i.e. when there aren't the right number/sort of arguments
+  -- for the pattern.  This function isn't yet exposed.
   substPats :: Proxy b -> AlphaCtx -> [ Dyn ] -> a -> a
   substPats p ctx us x = 
      case (isvar x :: Maybe (SubstName a b)) of
@@ -184,8 +194,6 @@ instance (Alpha a, Subst b a) => Subst b (Shift a) where
   substPats pr  c us (Shift x) = Shift (substPats pr (decr c) us x)
 
    
-substBind :: Subst a b => Bind (Name a) b -> a -> b
-substBind (B _ t) u = substPat initial u t
 
 
 
@@ -211,11 +219,5 @@ instance (Subst c a) => Subst c [a]
 instance (Subst c a) => Subst c (Maybe a)
 instance (Subst c a, Subst c b) => Subst c (Either a b)
 
---- instance (Rep order, Rep card, Subst c b, Subst c a, Alpha a,Alpha b) =>
---    Subst c (GenBind order card a b)
---instance (Subst c b, Subst c a, Alpha a, Alpha b) =>
---    Subst c (Rebind a b)
 
---instance (Subst c a) => Subst c (Shift a)
---instance (Subst c a) => Subst c (Embed a)
---instance (Alpha a, Subst c a) => Subst c (Rec a)
+
