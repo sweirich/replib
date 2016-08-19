@@ -112,6 +112,6 @@ Version 0.5: (planned)
   * More correctness tests available		
   * test with GHC-8.0.1
   * Cache free variables at binders
-
+  * Error message if don't override aeq' / acompare' for abstract types
 
   

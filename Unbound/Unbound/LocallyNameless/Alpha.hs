@@ -106,6 +106,17 @@ import Data.Monoid
 --
 --   Note how the call to 'aeqR1' handles all the other cases generically.
 --
+--   If you use "Abstract" types (i.e. those with representations derived via
+--   derive_abstract) then you must provide a definition of aeq' and
+--   acompare'.  In these cases, Unbound has no information about the
+--   structure of the type and cannot do anything sensible.
+
+--      swaps'    -- identity function
+--      fv'       -- const mempty
+--      freshen'  -- identity function
+--      lfreshen' -- identity function
+--      open/close -- treat like constants
+
 class (Rep1 AlphaD a) => Alpha a where
 
   -- | See 'swaps'.
@@ -516,8 +527,7 @@ acompareR1 (Data1 _ cons) c = \x y ->
                         (Nothing, Nothing) -> loop rest
                  loop [] = error "acompareR1 found no constructors! Please report this as a bug."
              in loop cons
-acompareR1 (Abstract1 _) _ = \_ _ -> EQ           
-acompareR1 r1 _ = error ("acompareR1 not supported for " ++ show r1)
+acompareR1 r1 _ = error ("acompare' not supported for " ++ show r1)
 
 compareTupM :: MTup AlphaD l -> AlphaCtx -> l -> l -> Ordering
 compareTupM MNil _ Nil Nil = EQ
