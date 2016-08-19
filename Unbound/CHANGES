@@ -100,18 +100,19 @@ Version 0.4.5: 2 Oct 2015
     Only works for patterns with a single variable:
       substBind :: Subst a b => Bind (Name a) b -> a -> b
 
-Version 0.5: (planned)
+Version 0.5: August 2016
+
+  * Remove Show superclass for Alpha  (potentially breaking change)
 
   * New function in Unbound.LocallyNameless.Ops
-      patUnbind :: (Alpha p, Alpha t) => p -> Bind p t -> t
-  * Remove Show superclass for Alpha
+      patUnbind :: (Alpha p, Alpha t) => p -> Bind p t -> t		
   * More sensible Show instance for bind, shows as code that
     can be directly parsed to Haskell.
       old:  <a> (Var 0@0)
 		new:  (bind (string2Name "a") (Var (string2Name "a"))
-  * More correctness tests available		
-  * test with GHC-8.0.1
-  * Cache free variables at binders
+  * works with GHC-8.0.1
   * Error message if don't override aeq' / acompare' for abstract types
-
+  * More correctness tests
   
+Planned extensions:
+  * Cache free variables at binders

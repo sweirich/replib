@@ -52,10 +52,10 @@ data StrictOrder
 data RelaxedCard
 data StrictCard
 
+--------------------------------------------------  
 -- Bind
 --------------------------------------------------
 
--- XXX update documentation
 -- | The most fundamental combinator for expressing binding structure
 --   is 'Bind'.  The /term type/ @Bind p t@ represents a pattern @p@
 --   paired with a term @t@, where names in @p@ are bound within @t@.
@@ -72,6 +72,7 @@ instance (Show a, Show b) => Show (GenBind order card a b) where
   showsPrec p (B a b) = showParen (p>0)
       (showString "bind " . showsPrec 11 a . showsPrec 11 b)
 
+--------------------------------------------------
 -- Rebind
 --------------------------------------------------
 
