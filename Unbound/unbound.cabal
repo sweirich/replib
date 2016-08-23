@@ -78,4 +78,8 @@ Test-Suite lambda-calculus
 
 
     type:       exitcode-stdio-1.0
-    main-is:    examples/Main.hs
+    main-is:    Examples/Main.hs
+    other-modules:
+        Examples.Basic
+        Examples.LC
+        Examples.STLC
