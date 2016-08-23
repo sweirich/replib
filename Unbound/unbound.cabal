@@ -74,7 +74,7 @@ Test-Suite lambda-calculus
                  template-haskell >= 2.11,
                  parsec >= 3.1.9 && < 3.2,
                  pretty>= 1.1.2 && < 1.2,
-                 QuickCheck>=2.8.2 && < 2.9
+                 QuickCheck>=2.8.2 && < 2.10
 
 
     type:       exitcode-stdio-1.0
