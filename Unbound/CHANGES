@@ -114,6 +114,9 @@ Version 0.5: August 2016
   * works with GHC-8.0.1
   * Error message if don't override aeq' / acompare' for abstract types
   * More correctness tests
-  
+
+Version 0.5.1: August 2016
+  * Fix testsuite compilation problem
+
 Planned extensions:
   * Cache free variables at binders
