@@ -14,55 +14,83 @@
 -- DISCLAIMER: this module almost certainly contains bugs and may be
 -- slower than "Unbound.LocallyNameless".  The documentation is also
 -- sparse and likely out of date.  At this point we recommend it only
--- for the curious or intrepid.  
+-- for the curious or intrepid.
 --
 --------------------------------------------------------------------------
 module Unbound.Nominal
-  (-- * Basic types
-    Name,  AnyName(..), Bind, Embed(..), Rebind, Rec, Shift,
+  ( -- * Names
+    Name, AnyName(..),
 
-    -- ** Utilities
-    integer2Name, string2Name, name2Integer, name2String, makeName,
-    name1,name2,name3,name4,name5,name6,name7,name8,name9,name10,
-    translate,
+    -- ** Constructing and destructing free names
+    string2Name, s2n,
 
-    -- * The 'Alpha' class
-    Alpha(..),
-    swaps, -- is a bit wonky
-    match,
-    binders, patfv, fv,
-    aeq,
+    -- ** Dealing with name sorts
+    toSortedName,
 
-    -- * Binding operations
-    bind, unsafeUnbind,
+    -- ** Bind
+    Bind,
 
-    -- * The 'Fresh' class
-    Fresh(..), freshen,
-    unbind, unbind2, unbind3,
+    -- *** Bind constructors
+    bind,
 
-    -- * The 'LFresh' class
-    HasNext(..), LFresh(..),
-    lfreshen,
-    lunbind, lunbind2, lunbind3,
+    -- *** Bind destructors
+    unbind,
 
-    -- * Rebinding operations
-    rebind, reopen,
+    -- ** Embed
+    Embed,
+    embed, unembed,
 
-    -- * Rec operations
+    -- ** Rebind
+    Rebind,
+    rebind, unrebind,
+
+    -- ** Rec
+    Rec,
     rec, unrec,
 
-    -- * Substitution
-    Subst(..),
+    -- ** Alpha-equivalence
+    aeq,
 
-   -- * Advanced
-   AlphaCtx, matchR1,
+    -- ** Variable calculations
+    fv,
 
-   -- * Pay no attention to the man behind the curtain
+    -- | Capture-avoiding substitution
+    Subst(..), SubstName(..), subst,
 
-   -- | These type representation objects are exported so they can be
-   --   referenced by auto-generated code.  Please pretend they do not
-   --   exist.
-   rName, rBind, rRebind, rEmbed, rRec, rShift) where
+    -- ** Permutations
+    Perm,
+
+    -- *** Working with permutations
+    single, compose, apply, support, isid, join, empty, restrict, mkPerm,
+
+    -- *** Permuting terms
+    swapall,
+
+    -- ** Global freshness
+    freshen,
+
+    -- *** The @Fresh@ class
+    Fresh(..),
+
+    -- *** The @FreshM@ monad
+    FreshM, runFreshM,
+    FreshMT, runFreshMT,
+
+    -- * The @Alpha@ class,
+    Alpha(..),
+
+    -- * Pay no attention to the man behind the curtain
+
+    -- | These type representation objects are exported so they can be
+    --   referenced by auto-generated code.  Please pretend they do not
+    --   exist.
+    rName, rBind, rRebind, rEmbed, rRec) where
 
 import Unbound.Nominal.Name
-import Unbound.Nominal.Internal
+import Unbound.Nominal.Alpha
+import Unbound.Nominal.Fresh
+import Unbound.Nominal.Ops
+import Unbound.Nominal.Subst
+import Unbound.Nominal.Types
+import Unbound.Util
+import Unbound.PermM
