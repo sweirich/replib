@@ -131,6 +131,9 @@ instance Quasi QN where
   qIsExtEnabled e       = liftQN $ qIsExtEnabled e
   qExtsEnabled          = liftQN $ qExtsEnabled
 #endif
+#if MIN_VERSION_template_haskell(2,12,0)
+  qAddForeignFile a b   = liftQN $ qAddForeignFile a b
+#endif
 
 -- Generate the representation for a data constructor.
 -- As our representation of data constructors evolves, so must this definition.
