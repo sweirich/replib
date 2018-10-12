@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP           #-}
 {-# LANGUAGE PatternGuards #-}
 ----------------------------------------------------------------------
 -- |
@@ -21,6 +22,8 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Arrow ((&&&))
 import Control.Monad ((>=>))
+import Data.Semigroup (Semigroup)
+import qualified Data.Semigroup as Semigroup
 
 -- | A /permutation/ is a bijective function from names to names
 --   which is the identity on all but a finite set of names.  They
@@ -64,9 +67,15 @@ compose (Perm b) (Perm a) =
          ++ [ (x, M.findWithDefault x x b) | x <- M.keys b, M.notMember x a]))
 
 -- | Permutations form a monoid under composition.
+instance Ord a => Semigroup (Perm a) where
+  (<>) = compose
+
+-- | Permutations form a monoid under composition.
 instance Ord a => Monoid (Perm a) where
   mempty  = empty
-  mappend = compose
+#if !MIN_VERSION_base(4,11,0)  
+  mappend = (Semigroup.<>)
+#endif
 
 -- | Is this the identity permutation?
 isid :: Ord a => Perm a -> Bool
@@ -79,7 +88,11 @@ isid (Perm p) =
 join :: Ord a => Perm a -> Perm a -> Maybe (Perm a)
 join (Perm p1) (Perm p2) =
      let overlap = M.intersectionWith (==) p1 p2 in
+#if MIN_VERSION_containers(0,5,0)     
+     if M.foldr (&&) True overlap then
+#else
      if M.fold (&&) True overlap then
+#endif
        Just (Perm (M.union p1 p2))
        else Nothing
 

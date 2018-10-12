@@ -4,7 +4,16 @@ license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
-tested-with:    GHC == 7.0.4, GHC == 7.2.1, GHC == 7.4.1, GHC == 7.6.3, GHC == 7.8.3, GHC == 7.10, GHC == 8.0.1
+tested-with:    GHC == 7.0.4,
+                GHC == 7.2.1,
+                GHC == 7.4.1,
+                GHC == 7.6.3,
+                GHC == 7.8.3,
+                GHC == 7.10,
+                GHC == 8.0.1,
+                GHC == 8.2.2,
+                GHC == 8.4.3,
+                GHC == 8.6.1
 author:         Stephanie Weirich, Brent Yorgey
 maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       https://github.com/sweirich/replib
@@ -34,6 +43,8 @@ Library
                  transformers >= 0.2.2.0 && < 0.6,
                  containers >= 0.3 && < 0.6,
                  binary >= 0.7 && < 0.9
+  if !impl(ghc >= 8.0)
+    build-depends: semigroups == 0.18.*
   exposed-modules:
     Unbound.LocallyNameless,
     Unbound.LocallyNameless.Name,
@@ -74,7 +85,7 @@ Test-Suite lambda-calculus
                  template-haskell >= 2.11,
                  parsec >= 3.1.9 && < 3.2,
                  pretty>= 1.1.2 && < 1.2,
-                 QuickCheck>=2.8.2 && < 2.10
+                 QuickCheck>=2.8.2 && < 2.13
 
 
     type:       exitcode-stdio-1.0
