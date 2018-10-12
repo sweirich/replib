@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes
+{-# LANGUAGE CPP
+           , RankNTypes
            , FlexibleContexts
            , GADTs
            , TypeFamilies
@@ -24,6 +25,8 @@ import Unbound.Util
 import Data.List (intersect)
 import Data.Maybe (isJust)
 
+import Data.Semigroup (Semigroup)
+import qualified Data.Semigroup as Semigroup
 import Data.Monoid
 
 ------------------------------------------------------------
@@ -228,15 +231,21 @@ data FindResult = Index Integer      -- ^ The (first) index of the name we
                                      --   others while looking for it
   deriving (Eq, Ord)
 
--- | @FindResult@ forms a monoid which combines information from
+
+instance Semigroup FindResult where
+  NamesSeen i <> NamesSeen j = NamesSeen (i + j)
+  NamesSeen i <> Index j     = Index (i + j)
+  Index j     <> _           = Index j
+
+ -- | @FindResult@ forms a monoid which combines information from
 --   several 'findpatrec' operations.  @mappend@ takes the leftmost
 --   'Index', and combines the number of names seen to the left of it
 --   so we can correctly compute its global index.
 instance Monoid FindResult where
   mempty = NamesSeen 0
-  NamesSeen i `mappend` NamesSeen j = NamesSeen (i + j)
-  NamesSeen i `mappend` Index j     = Index (i + j)
-  Index j     `mappend` _           = Index j
+#if !MIN_VERSION_base(4,11,0)
+  mappend = (Semigroup.<>)
+#endif
 
 -- | Find the (first) index of the name in the pattern, if it exists.
 findpat :: Alpha a => a -> AnyName -> Maybe Integer
@@ -259,14 +268,20 @@ data NthResult = Found AnyName    -- ^ The name found at the given
 --   if the end of the pattern was reached too soon.
 newtype NthCont = NthCont { runNthCont :: Integer -> NthResult }
 
+
+instance Semigroup NthCont where
+  (NthCont f) <> (NthCont g)
+    = NthCont $ \i -> case f i of
+        Found n     -> Found n
+        CurIndex i' -> g i'
+
 -- | @NthCont@ forms a monoid: function composition which
 --   short-circuits once a result is found.
 instance Monoid NthCont where
   mempty = NthCont $ \i -> CurIndex i
-  (NthCont f) `mappend` (NthCont g)
-    = NthCont $ \i -> case f i of
-                        Found n     -> Found n
-                        CurIndex i' -> g i'
+#if !MIN_VERSION_base(4,11,0)  
+  mappend = (Semigroup.<>)
+#endif
 
 -- | If we see a name, check whether the index is 0: if it is, we've
 --   found the name we're looking for, otherwise continue with a
