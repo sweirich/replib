@@ -52,6 +52,10 @@ import Unsafe.Coerce
 import Control.Monad.Fail ( MonadFail )
 #endif
 
+#if MIN_VERSION_template_haskell(2,13,0)
+import Control.Monad.IO.Class ( MonadIO )
+#endif
+
 -- | Given a type, produce its representation.
 repty :: Type -> Exp
 repty ty = SigE (VarE (mkName "rep")) ((ConT ''R) `AppT` ty)
@@ -89,6 +93,9 @@ newtype QN a = QN { unQN :: WriterT (S.Set Int) Q a }
 #if MIN_VERSION_template_haskell(2,11,0)
            , MonadFail
 #endif
+#if MIN_VERSION_template_haskell(2,13,0)
+           , MonadIO
+#endif
 #if MIN_VERSION_template_haskell(2,7,0)
            , Applicative
 #endif
@@ -101,38 +108,46 @@ runQN :: QN a -> Q (a, S.Set Int)
 runQN = runWriterT . unQN
 
 instance Quasi QN where
-  qNewName s            = liftQN $ qNewName s
-  qReport b s           = liftQN $ qReport b s
-  qRecover              = error "qRecover not implemented for QN"
-  qReify n              = liftQN $ qReify n
+  qNewName s              = liftQN $ qNewName s
+  qReport b s             = liftQN $ qReport b s
+  qRecover                = error "qRecover not implemented for QN"
+  qReify n                = liftQN $ qReify n
 #if MIN_VERSION_template_haskell(2,7,0)
-  qReifyInstances n tys = liftQN $ qReifyInstances n tys
+  qReifyInstances n tys   = liftQN $ qReifyInstances n tys
 #else
-  qClassInstances n tys = liftQN $ qClassInstances n tys
+  qClassInstances n tys   = liftQN $ qClassInstances n tys
 #endif
-  qLocation             = liftQN qLocation
-  qRunIO io             = liftQN $ qRunIO io
+  qLocation               = liftQN qLocation
+  qRunIO io               = liftQN $ qRunIO io
 #if MIN_VERSION_template_haskell(2,7,0)
-  qLookupName ns s      = liftQN $ qLookupName ns s
-  qAddDependentFile fp  = liftQN $ qAddDependentFile fp
+  qLookupName ns s        = liftQN $ qLookupName ns s
+  qAddDependentFile fp    = liftQN $ qAddDependentFile fp
 #endif
 #if MIN_VERSION_template_haskell(2,9,0)
-  qReifyRoles n         = liftQN $ qReifyRoles n
-  qReifyAnnotations al  = liftQN $ qReifyAnnotations al
-  qReifyModule m        = liftQN $ qReifyModule m
-  qAddTopDecls ds       = liftQN $ qAddTopDecls ds
-  qAddModFinalizer q    = liftQN $ qAddModFinalizer q
-  qGetQ                 = liftQN $ qGetQ
-  qPutQ a               = liftQN $ qPutQ a
+  qReifyRoles n           = liftQN $ qReifyRoles n
+  qReifyAnnotations al    = liftQN $ qReifyAnnotations al
+  qReifyModule m          = liftQN $ qReifyModule m
+  qAddTopDecls ds         = liftQN $ qAddTopDecls ds
+  qAddModFinalizer q      = liftQN $ qAddModFinalizer q
+  qGetQ                   = liftQN $ qGetQ
+  qPutQ a                 = liftQN $ qPutQ a
 #endif
 #if MIN_VERSION_template_haskell(2,11,0)
-  qReifyFixity n        = liftQN $ qReifyFixity n
-  qReifyConStrictness n = liftQN $ qReifyConStrictness n
-  qIsExtEnabled e       = liftQN $ qIsExtEnabled e
-  qExtsEnabled          = liftQN $ qExtsEnabled
+  qReifyFixity n          = liftQN $ qReifyFixity n
+  qReifyConStrictness n   = liftQN $ qReifyConStrictness n
+  qIsExtEnabled e         = liftQN $ qIsExtEnabled e
+  qExtsEnabled            = liftQN $ qExtsEnabled
 #endif
-#if MIN_VERSION_template_haskell(2,12,0)
-  qAddForeignFile a b   = liftQN $ qAddForeignFile a b
+#if MIN_VERSION_template_haskell(2,14,0)
+  qAddForeignFilePath a b = liftQN $ qAddForeignFilePath a b
+#elif MIN_VERSION_template_haskell(2,12,0)
+  qAddForeignFile a b     = liftQN $ qAddForeignFile a b
+#endif
+#if MIN_VERSION_template_haskell(2,13,0)
+  qAddCorePlugin s        = liftQN $ qAddCorePlugin s
+#endif
+#if MIN_VERSION_template_haskell(2,14,0)
+  qAddTempFile s          = liftQN $ qAddTempFile s
 #endif
 
 -- Generate the representation for a data constructor.
