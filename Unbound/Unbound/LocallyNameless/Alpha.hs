@@ -237,7 +237,7 @@ instance Semigroup FindResult where
   NamesSeen i <> Index j     = Index (i + j)
   Index j     <> _           = Index j
 
- -- | @FindResult@ forms a monoid which combines information from
+-- | @FindResult@ forms a monoid which combines information from
 --   several 'findpatrec' operations.  @mappend@ takes the leftmost
 --   'Index', and combines the number of names seen to the left of it
 --   so we can correctly compute its global index.

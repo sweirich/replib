@@ -118,5 +118,3 @@ Version 0.5: August 2016
 Version 0.5.1: August 2016
   * Fix testsuite compilation problem
 
-Planned extensions:
-  * Cache free variables at binders
