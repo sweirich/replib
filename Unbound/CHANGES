@@ -118,3 +118,5 @@ Version 0.5: August 2016
 Version 0.5.1: August 2016
   * Fix testsuite compilation problem
 
+Version 0.5.1.1: October 2016
+  * Update to newer GHC/TH
