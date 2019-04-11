@@ -41,7 +41,7 @@ Library
                  RepLib >= 0.5.3 && < 0.6,
                  mtl >= 2.0 && < 2.3,
                  transformers >= 0.2.2.0 && < 0.6,
-                 containers >= 0.3 && < 0.6,
+                 containers >= 0.3,
                  binary >= 0.7 && < 0.9
   if !impl(ghc >= 8.0)
     build-depends: semigroups == 0.18.*
@@ -79,7 +79,7 @@ Test-Suite lambda-calculus
                  RepLib >= 0.5.3 && < 0.6,
                  mtl >= 2.0 && < 2.3,
                  transformers >= 0.2.2.0 && < 0.6,
-                 containers >= 0.3 && < 0.6,
+                 containers >= 0.3,
                  binary >= 0.7 && < 0.9,
                  template-haskell >= 2.11,
                  parsec >= 3.1.9 && < 3.2,

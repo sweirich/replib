@@ -32,7 +32,7 @@ Library
   build-depends: base >= 4.3 && < 5,
                  template-haskell >= 2.4 && < 2.15,
                  mtl >= 2.0 && < 2.3,
-                 containers >= 0.4 && < 0.6,
+                 containers >= 0.4,
                  transformers
 
   if impl(ghc < 7.8)
