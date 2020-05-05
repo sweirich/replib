@@ -2,6 +2,7 @@ version:        0.5.4.x
         test with GHC 8.8.3
 	add DefaultSignatures to Lib operations
 	remove support for GHC < 7.2.1
-	
+	update GHC versions tested with 
+
 version:        0.5.4.1
 	start of changelog
