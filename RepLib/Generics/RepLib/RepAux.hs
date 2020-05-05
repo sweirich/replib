@@ -277,6 +277,7 @@ gmapT t =
 -- | SYB style query type
 type Query r = forall a. Rep a => a -> r
 
+-- | SYB query
 gmapQ :: forall a r. Rep a => Query r -> a -> [r]
 gmapQ q =
   case (rep :: R a) of
@@ -289,6 +290,7 @@ gmapQ q =
 -- | SYB style monadic map type
 type MapM m = forall a. Rep a => a -> m a
 
+-- | SYB monadic map
 gmapM   :: forall a m. (Rep a, Monad m) => MapM m -> a -> m a
 gmapM m = case (rep :: R a) of
    (Data _ cons) -> \x ->
@@ -300,7 +302,10 @@ gmapM m = case (rep :: R a) of
 
 -------------- Generalized  SYB ops ---------------------------
 
+-- | Generalized traversal
 type Traversal1 ctx = forall a. Rep a => ctx a -> a -> a
+
+-- | Generalization of gmapT
 gmapT1 :: forall a ctx. (Rep1 ctx a) => Traversal1 ctx -> a -> a
 gmapT1 t =
   case (rep1 :: R1 ctx a) of
@@ -309,7 +314,9 @@ gmapT1 t =
       Val emb recs kids -> to emb (map_l t recs kids)
    _ -> id
 
+-- | Generalized query
 type Query1 ctx r = forall a. Rep a => ctx a -> a -> r
+-- | Generalization of gmapQ
 gmapQ1 :: forall a ctx r. (Rep1 ctx a) => Query1 ctx r -> a -> [r]
 gmapQ1 q  =
   case (rep1 :: R1 ctx a) of
@@ -318,7 +325,9 @@ gmapQ1 q  =
        Val _ recs kids -> mapQ_l q recs kids
     _ -> const []
 
+-- | Generalized map
 type MapM1 ctx m = forall a. Rep a => ctx a -> a -> m a
+-- | Generalization of gmapM1
 gmapM1  :: forall a ctx m. (Rep1 ctx a, Monad m) => MapM1 ctx m -> a -> m a
 gmapM1 m = case (rep1 :: R1 ctx a) of
    (Data1 _ cons) -> \x ->
@@ -329,9 +338,11 @@ gmapM1 m = case (rep1 :: R1 ctx a) of
 
 -------------- Spine from SYB Reloaded ---------------------------
 
+-- | A value tagged with its rep
 data Typed a = a ::: R a
 infixr 7 :::
 
+-- | A "spine" view of a constructor application
 data Spine a where
   Constr :: a -> Spine a
   (:<>)  :: Spine (a -> b) -> Typed a -> Spine b
@@ -348,9 +359,11 @@ toSpineRl (ra :+: rs) (a :*: l) into =
   (toSpineRl rs l into') :<> (a ::: ra)
    where into' tl1 x1 = into (x1 :*: tl1)
 
+-- | Convert a value to its spine view
 toSpine :: Rep a => a -> Spine a
 toSpine = toSpineR rep
 
+-- | Recover the value from the spine
 fromSpine :: Spine a -> a
 fromSpine (Constr x) = x
 fromSpine (x :<> (y:::_)) = fromSpine x y

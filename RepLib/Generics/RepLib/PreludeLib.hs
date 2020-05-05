@@ -27,7 +27,7 @@
 -- datatype T and exposes all of its constructors, but, frustratingly,
 -- does not derive an instance of the Show class.
 --
---   You could define a Show instance of 'T' in your own module with the
+--   You could define a Show instance of "T" in your own module with the
 --   following code:
 --
 --   > import RepLib
@@ -63,6 +63,7 @@ import Generics.RepLib.RepAux
 
 --- Polymorphic equality -------------------------
 
+-- | reified dictionary for Eq class
 data EqD a = EqD { eqD :: a -> a -> Bool }
 instance Eq a => Sat (EqD a) where
     dict = EqD (==)
@@ -94,6 +95,7 @@ eqRL1 (r :+: rl) (p1 :*: t1) (p2 :*: t2) =
 -- compare :: a -> a -> Ordering is a minimal instance
 -- of the Ord class
 
+-- | reified dictionary for minimal Ord class
 data OrdD a = OrdD { compareD :: a -> a -> Ordering }
 
 instance Ord a => Sat (OrdD a) where
@@ -126,6 +128,7 @@ compareTup (x :+: xs) (y :*: ys) (z :*: zs) =
 
 ------------ Bounded ------------------------------
 
+-- | reified dictionary for Bounded class
 data BoundedD a = BoundedD { minBoundD :: a, maxBoundD :: a }
 
 instance Bounded a => Sat (BoundedD a) where
@@ -150,6 +153,7 @@ maxBoundR1 r1     = error ("maxBoundR1 not supported for " ++ show r1)
 -- Inspired by the Generic Haskell implementation
 -- Current version doesn't correctly handle fixity
 
+-- | reified dictionare for Show class
 data ShowD a = ShowD { showsPrecD :: Int -> a -> ShowS }
 
 instance Show a => Sat (ShowD a) where

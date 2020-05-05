@@ -1,11 +1,10 @@
 name:           RepLib
-version:        0.5.4.1
+version:        0.5.4.2
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
-tested-with:    GHC == 7.0.4,
-                GHC == 7.2.1,
+tested-with:    CHC == 7.2.1,
                 GHC == 7.4.1,
                 GHC == 7.6.1,
                 GHC == 7.8.1,
@@ -14,7 +13,8 @@ tested-with:    GHC == 7.0.4,
                 GHC == 8.0.1,
                 GHC == 8.2.2,
                 GHC == 8.4.3,
-                GHC == 8.6.1
+                GHC == 8.6.1,
+                GHC == 8.8.3
 author:         Stephanie Weirich
 maintainer:     Stephanie Weirich <sweirich@cis.upenn.edu>
 homepage:       https://github.com/sweirich/replib
@@ -30,7 +30,7 @@ Source-repository head
 
 Library
   build-depends: base >= 4.3 && < 5,
-                 template-haskell >= 2.4 && < 2.15,
+                 template-haskell >= 2.4 && < 2.16,
                  mtl >= 2.0 && < 2.3,
                  containers >= 0.4,
                  transformers
@@ -52,7 +52,9 @@ Library
     Generics.RepLib.Unify,
     Generics.RepLib.AbstractReps
   default-extensions: GADTs
-  other-extensions: ExistentialQuantification
+  other-extensions: DefaultSignatures
+                    ImpredicativeTypes
+                    ExistentialQuantification
                     IncoherentInstances
                     OverlappingInstances
                     RankNTypes
