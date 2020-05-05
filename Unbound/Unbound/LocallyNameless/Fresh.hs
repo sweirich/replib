@@ -60,7 +60,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.Error
 #endif
 import Control.Monad.Trans.Identity
-import Control.Monad.Trans.List
+
 import Control.Monad.Trans.Maybe
 import Control.Monad.Trans.State.Lazy as Lazy
 import Control.Monad.Trans.State.Strict as Strict
@@ -138,9 +138,6 @@ instance (Error e, Fresh m) => Fresh (ErrorT e m) where
 #endif
 
 instance Fresh m => Fresh (IdentityT m) where
-  fresh = lift . fresh
-
-instance Fresh m => Fresh (ListT m) where
   fresh = lift . fresh
 
 instance Fresh m => Fresh (MaybeT m) where
@@ -261,11 +258,6 @@ instance (Error e, LFresh m) => LFresh (ErrorT e m) where
 instance LFresh m => LFresh (IdentityT m) where
   lfresh = lift . lfresh
   avoid  = mapIdentityT . avoid
-  getAvoids = lift getAvoids
-
-instance LFresh m => LFresh (ListT m) where
-  lfresh = lift . lfresh
-  avoid  = mapListT . avoid
   getAvoids = lift getAvoids
 
 instance LFresh m => LFresh (MaybeT m) where
