@@ -56,7 +56,8 @@ data Emb l a  = Emb { to     :: l -> a,
                       name   :: String,
                       fixity :: Fixity
                      }
-
+                
+-- | Fixity and precedence for data constructors
 data Fixity =  Nonfix
                 | Infix      { prec      :: Int }
                 | Infixl     { prec      :: Int }
@@ -143,6 +144,7 @@ instance (Rep a, Rep b) => Rep (a :=: b) where rep = Equal rep rep
 
 -- Unit
 
+-- | Embedding for () constructor
 rUnitEmb :: Emb Nil ()
 rUnitEmb = Emb { to = \Nil -> (),
                  from = \() -> Just Nil,
@@ -150,6 +152,7 @@ rUnitEmb = Emb { to = \Nil -> (),
                  name = "()",
                  fixity = Nonfix }
 
+-- | Representation of Unit type
 rUnit :: R ()
 rUnit = Data (DT "()" MNil)
         [Con rUnitEmb MNil]
@@ -161,10 +164,12 @@ instance Rep () where rep = rUnit
 instance (Rep a, Rep b) => Rep (a,b) where
    rep = rTup2
 
+-- | Representation of tuple type
 rTup2 :: forall a b. (Rep a, Rep b) => R (a,b)
 rTup2 = let args =  ((rep :: R a) :+: (rep :: R b) :+: MNil) in
             Data (DT "(,)" args) [ Con rPairEmb args ]
 
+-- | Embedding for pair constructor
 rPairEmb :: Emb (a :*: b :*: Nil) (a,b)
 rPairEmb =
   Emb { to = \( t1 :*: t2 :*: Nil) -> (t1,t2),
@@ -175,10 +180,12 @@ rPairEmb =
       }
 
 -- Lists
+-- | Representation for list type
 rList :: forall a. Rep a => R [a]
 rList = Data (DT "[]" ((rep :: R a) :+: MNil))
              [ Con rNilEmb MNil, Con rConsEmb ((rep :: R a) :+: rList :+: MNil) ]
 
+-- | Embedding of [] constructor
 rNilEmb :: Emb Nil [a]
 rNilEmb = Emb {   to   = \Nil -> [],
                   from  = \x -> case x of
@@ -189,6 +196,7 @@ rNilEmb = Emb {   to   = \Nil -> [],
                   fixity = Nonfix
                  }
 
+-- | Embedding of (:) constructor
 rConsEmb :: Emb (a :*: [a] :*: Nil) [a]
 rConsEmb =
    Emb {

@@ -30,6 +30,7 @@ import Data.Type.Equality
 
 ---------- Basic infrastructure
 
+-- | Parameterized representations
 data R1 ctx a where
     Int1      :: R1 ctx Int
     Char1     :: R1 ctx Char
@@ -48,8 +49,11 @@ data R1 ctx a where
     Equal1    :: (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a :=: b)
 #endif
 
+-- | A first class type class. Can be replaced now using ConstraintKinds,
+-- but that would require significant update of the TemplateHaskell deriving
 class Sat a where dict :: a
 
+-- | A class for parameterized representations
 class Rep a => Rep1 ctx a where rep1 :: R1 ctx a
 
 instance Show (R1 c a) where
@@ -118,6 +122,7 @@ instance Rep1 ctx ()   where
         [Con rUnitEmb MNil]
 
 -- pairs
+-- | R1 for (,) type
 rTup2_1 :: forall a b ctx. (Rep a, Rep b) => ctx a -> ctx b -> R1 ctx (a,b)
 rTup2_1 ca cb =
   case (rep :: R (a,b)) of
@@ -129,6 +134,7 @@ instance (Rep a, Sat (ctx a), Rep b, Sat (ctx b)) => Rep1 ctx (a,b) where
 
 
 -- Lists
+-- | R1 for list type
 rList1 :: forall a ctx.
   Rep a => ctx a -> ctx [a] -> R1 ctx [a]
 rList1 ca cl = Data1 (DT "[]" ((rep :: R a) :+: MNil))
