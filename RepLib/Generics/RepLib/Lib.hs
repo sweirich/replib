@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ScopedTypeVariables,
     MultiParamTypeClasses, FlexibleContexts, FlexibleInstances,
-    TypeSynonymInstances, GADTs
+    TypeSynonymInstances, GADTs, DefaultSignatures
   #-}
 
 
@@ -107,10 +107,12 @@ deepSeqR _ = seq
 -- gsum ( 1 , True, ("a", Maybe 3, []) , Nothing)
 -- 4
 --
-class Rep1 GSumD a => GSum a where
+class GSum a where
    gsum :: a -> Int
+   default gsum :: (Rep1 GSumD a) => a -> Int
    gsum = gsumR1 rep1
 
+-- | reflected dict for GSum
 data GSumD a = GSumD { gsumD :: a -> Int }
 
 gsumR1 :: R1 GSumD a -> a -> Int
@@ -132,12 +134,12 @@ instance GSum ()
 instance GSum Integer
 instance GSum Char
 instance GSum Double
-instance (GSum a, GSum b) => GSum (a,b)
-instance (GSum a) => GSum [a]
+instance (GSum a, GSum b, Rep a, Rep b) => GSum (a,b)
+instance (GSum a, Rep a) => GSum [a]
 
-instance (Rep k, GSum a) => GSum (Map k a) where
+instance (Rep k, Rep a, GSum a) => GSum (Map k a) where
   gsum = gsum . Map.elems
-instance GSum a => GSum (Set a) where
+instance (Rep a, GSum a) => GSum (Set a) where
   gsum = gsum . Set.elems
 -------------------- Zero ------------------------------
 -- | Create a zero element of a type
@@ -145,10 +147,12 @@ instance GSum a => GSum (Set a) where
 -- ( zero  :: ((Int, Maybe Int), Float))
 -- ((0, Nothing), 0.0)
 -- @
-class (Rep1 ZeroD a) => Zero a where
+class Zero a where
     zero :: a
+    default zero :: (Rep1 ZeroD a) => a
     zero = zeroR1 rep1
 
+-- | reflected dict for GZero
 data ZeroD a = ZD { zeroD :: a }
 
 instance Zero a => Sat (ZeroD a) where
@@ -167,7 +171,7 @@ zeroR1 r1 = error ("No zero element of type: " ++ show r1)
 
 instance Zero Int
 instance Zero Char
-instance (Zero a, Zero b) => Zero (a -> b)
+instance (Zero a, Zero b, Rep a, Rep b) => Zero (a -> b)
 instance Zero Integer
 instance Zero Float
 instance Zero Double
@@ -175,8 +179,8 @@ instance Zero IOError
 
 instance Zero ()
 instance Zero Bool
-instance (Zero a, Zero b) => Zero (a,b)
-instance Zero a => Zero [a]
+instance (Zero a, Zero b, Rep a, Rep b) => Zero (a,b)
+instance (Zero a, Rep a) => Zero [a]
 
 instance (Rep k, Rep a) => Zero (Map k a) where
   zero = Map.empty
@@ -186,13 +190,15 @@ instance (Rep a) => Zero (Set a) where
 
 ---------- Generate ------------------------------
 
-data GenerateD a = GenerateD { generateD :: Int -> [a] }
-
 -- | Generate elements of a type up to a certain depth
 --
-class Rep1 GenerateD a => Generate a where
+class Generate a where
   generate :: Int -> [a]
+  default generate :: (Rep1 GenerateD a) => Int -> [a]
   generate = generateR1 rep1
+
+-- | reflected dict for GenerateD
+data GenerateD a = GenerateD { generateD :: Int -> [a] }  
 
 instance Generate a => Sat (GenerateD a) where
   dict = GenerateD generate
@@ -219,13 +225,13 @@ instance Generate Float
 instance Generate Double
 
 instance Generate ()
-instance (Generate a, Generate b) => Generate (a,b)
-instance Generate a => Generate [a]
+instance (Generate a, Generate b, Rep a, Rep b) => Generate (a,b)
+instance (Generate a, Rep a) => Generate [a]
 
-instance (Ord a, Generate a) => Generate (Set a) where
+instance (Ord a, Generate a, Rep a) => Generate (Set a) where
   generate i = map Set.fromList (generate i)
 
-instance (Ord k, Generate k, Generate a) => Generate (Map k a) where
+instance (Ord k, Generate k, Generate a, Rep k , Rep a) => Generate (Map k a) where
   generate 0 = []
   generate i = map Map.fromList
                  (inits [ (k, v) | k <- generate (i-1), v <- generate (i-1)])
@@ -233,14 +239,16 @@ instance (Ord k, Generate k, Generate a) => Generate (Map k a) where
 ------------ Enumerate -------------------------------
 -- note that this is not the same as the Enum class in the standard prelude
 
+-- | reflected dict for GEnumerate
 data EnumerateD a = EnumerateD { enumerateD :: [a] }
 
 instance Enumerate a => Sat (EnumerateD a) where
     dict = EnumerateD { enumerateD = enumerate }
 
 -- | enumerate the elements of a type, in DFS order.
-class Rep1 EnumerateD a => Enumerate a where
+class Enumerate a where
     enumerate :: [a]
+    default enumerate :: Rep1 EnumerateD a => [a]
     enumerate = enumerateR1 rep1
 
 enumerateR1 :: R1 EnumerateD a -> [a]
@@ -262,19 +270,20 @@ instance Enumerate Double
 instance Enumerate Bool
 
 instance Enumerate ()
-instance (Enumerate a, Enumerate b) => Enumerate (a,b)
+instance (Enumerate a, Enumerate b, Rep a, Rep b) => Enumerate (a,b)
 
 -- doesn't really work for infinite types.
-instance Enumerate a => Enumerate [a]
+instance (Enumerate a, Rep a) => Enumerate [a]
 
-instance (Ord a, Enumerate a) => Enumerate (Set a) where
+instance (Ord a, Enumerate a, Rep a) => Enumerate (Set a) where
    enumerate = map Set.fromList enumerate
-instance (Ord k, Enumerate k, Enumerate a) => Enumerate (Map k a) where
+instance (Ord k, Enumerate k, Enumerate a, Rep k, Rep a) => Enumerate (Map k a) where
    enumerate = map Map.fromList
                  (inits [ (k, v) | k <- enumerate, v <- enumerate])
 
 ----------------- Shrink (from SYB III) -------------------------------
 
+-- | reflected dict for GShrink
 data ShrinkD a = ShrinkD { shrinkD :: a -> [a] }
 
 instance Shrink a => Sat (ShrinkD a) where
@@ -282,8 +291,9 @@ instance Shrink a => Sat (ShrinkD a) where
 
 -- | Given an element, return smaller elements of the same type
 -- for example, to automatically find small counterexamples when testing
-class (Rep1 ShrinkD a) => Shrink a where
+class Shrink a where
     shrink :: a -> [a]
+    default shrink :: Rep1 ShrinkD a => a -> [a]
     shrink a = subtrees a ++ shrinkStep a
                where shrinkStep _t = let M _ ts = gmapM1 m a
                                      in ts
@@ -307,30 +317,34 @@ instance Monad M where
      rs2 = [r' | x' <- xs, let M r' _ = k x']
 
 instance Shrink Int
-instance Shrink a => Shrink [a]
+instance (Shrink a,Rep a) => Shrink [a]
 instance Shrink Char
 instance Shrink ()
-instance (Shrink a, Shrink b) => Shrink (a,b)
+instance (Shrink a, Shrink b, Rep a, Rep b) => Shrink (a,b)
 
-instance (Ord a, Shrink a) => Shrink (Set a) where
+instance (Ord a, Shrink a, Rep a) => Shrink (Set a) where
   shrink x = map Set.fromList (shrink (Set.toList x))
 
-instance (Ord k, Shrink k, Shrink a)  => Shrink (Map k a) where
+instance (Ord k, Shrink k, Shrink a, Rep k, Rep a)  => Shrink (Map k a) where
   shrink m = map Map.fromList (shrink (Map.toList m))
 
 ------------ Reduce -------------------------------
 
+-- | reflected dict for Rreduce
 data RreduceD b a = RreduceD { rreduceD :: a -> b -> b }
+-- | reflected dict for Lreduce
 data LreduceD b a = LreduceD { lreduceD :: b -> a -> b }
 
 -- | A general version of fold right, use for Fold class below
-class Rep1 (RreduceD b) a => Rreduce b a where
+class Rreduce b a where
     rreduce :: a -> b -> b
+    default rreduce :: Rep1 (RreduceD b) a => a -> b -> b
     rreduce = rreduceR1 rep1
 
 -- | A general version of fold left, use for Fold class below
-class Rep1 (LreduceD b) a => Lreduce b a where
+class Lreduce b a where
     lreduce :: b -> a -> b
+    default lreduce :: Rep1 (LreduceD b) a => b -> a -> b
     lreduce = lreduceR1 rep1
 
 -- For example
@@ -361,20 +375,20 @@ instance Lreduce b Int
 instance Lreduce b ()
 instance Lreduce b Char
 instance Lreduce b Bool
-instance (Lreduce c a, Lreduce c b) => Lreduce c (a,b)
-instance Lreduce c a => Lreduce c[a]
+instance (Lreduce c a, Rep a, Lreduce c b, Rep b) => Lreduce c (a,b)
+instance (Lreduce c a, Rep a) => Lreduce c[a]
 
-instance (Ord a, Lreduce b a) => Lreduce b (Set a) where
+instance (Ord a, Lreduce b a, Rep a) => Lreduce b (Set a) where
   lreduce b a =  (lreduce b (Set.toList a))
 
 instance Rreduce b Int
 instance Rreduce b ()
 instance Rreduce b Char
 instance Rreduce b Bool
-instance (Rreduce c a, Rreduce c b) => Rreduce c (a,b)
-instance Rreduce c a => Rreduce c[a]
+instance (Rreduce c a, Rep a, Rreduce c b, Rep b) => Rreduce c (a,b)
+instance (Rreduce c a, Rep a) => Rreduce c[a]
 
-instance (Ord a, Rreduce b a) => Rreduce b (Set a) where
+instance (Ord a, Rreduce b a, Rep a) => Rreduce b (Set a) where
   rreduce a b =  (rreduce (Set.toList a) b)
 
 -------------------- Fold -------------------------------
