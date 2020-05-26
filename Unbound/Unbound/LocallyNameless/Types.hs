@@ -42,6 +42,8 @@ import Unbound.LocallyNameless.Name
 import Data.Binary
 import Control.Applicative (pure, (<$>), (<*>))
 
+import qualified Control.DeepSeq as DS
+
 ------------------------------------------------------------
 -- Basic types
 ------------------------------------------------------------
@@ -91,6 +93,9 @@ instance (Show a, Show b) => Show (GenBind order card a b) where
   showsPrec p (B a b) = showParen (p>0)
       (showString "bind " . showsPrec 11 a . showString " " . showsPrec 11 b)
 
+instance (DS.NFData p, DS.NFData t) => DS.NFData (GenBind order card p t) where
+  rnf (B p t) = DS.rnf p `seq` DS.rnf t
+
 --------------------------------------------------
 -- Rebind
 --------------------------------------------------
@@ -106,6 +111,10 @@ instance (Show a, Show b) => Show (Rebind a b) where
   showsPrec p (R a b) = showParen (p>0)
       (showString "rebind " . showsPrec 11 a . showsPrec 11 b)
 
+instance (DS.NFData p, DS.NFData t) => DS.NFData (Rebind p t) where
+  rnf (R p t) = DS.rnf p `seq` DS.rnf t
+
+
 -- Rec
 --------------------------------------------------
 
@@ -117,6 +126,10 @@ data Rec p = Rec p
 
 instance Show a => Show (Rec a) where
   showsPrec _ (Rec a) = showString "[" . showsPrec 0 a . showString "]"
+
+instance (DS.NFData p) => DS.NFData (Rec p) where
+  rnf (Rec p) = DS.rnf p
+
 
 -- TRec
 --------------------------------------------------
@@ -133,6 +146,9 @@ newtype TRec p = TRec (Bind (Rec p) ())
 
 instance Show a => Show (TRec a) where
   showsPrec _ (TRec (B (Rec p) ())) = showString "[" . showsPrec 0 p . showString "]"
+
+instance (DS.NFData p) => DS.NFData (TRec p) where
+  rnf (TRec p) = DS.rnf p
 
 
 -- Embed
@@ -155,6 +171,10 @@ newtype Embed t = Embed t deriving Eq
 instance Show a => Show (Embed a) where
   showsPrec _ (Embed a) = showString "{" . showsPrec 0 a . showString "}"
 
+instance (DS.NFData p) => DS.NFData (Embed p) where
+  rnf (Embed p) = DS.rnf p
+
+
 -- Shift
 --------------------------------------------------
 
@@ -163,6 +183,10 @@ newtype Shift p = Shift p deriving Eq
 
 instance Show a => Show (Shift a) where
   showsPrec _ (Shift a) = showString "{" . showsPrec 0 a . showString "}"
+
+instance (DS.NFData p) => DS.NFData (Shift p) where
+  rnf (Shift p) = DS.rnf p
+
 
 -- Pay no attention...
 
@@ -175,16 +199,16 @@ $(derive [''RelaxedOrder, ''StrictOrder, ''RelaxedCard, ''StrictCard])
 ----------------------------------------------------
 
 instance Rep a => Binary (Name a) where
-  put (Nm _ (s,i)) = do put (0 :: Word8)
-                        put s
-                        put i
+  put (Nm _ s i) = do put (0 :: Word8)
+                      put s
+                      put i
   put (Bn _ i j)   = do put (1 :: Word8)
                         put i
                         put j
   
   get = do tag <- getWord8
            case tag of
-              0 -> Nm <$> pure rep <*> get
+              0 -> Nm <$> pure rep <*> get <*> get
               1 -> Bn <$> pure rep <*> get <*> get
 
 instance (Binary p, Binary t) => Binary (GenBind order card p t) where

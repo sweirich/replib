@@ -146,12 +146,6 @@ class (Rep1 AlphaD a) => Alpha a where
   acompare' :: AlphaCtx -> a -> a -> Ordering
   acompare' = acompareR1 rep1
 
-{-
-  -- | See 'match'.
-  match'   :: AlphaCtx -> a -> a -> Maybe (Perm AnyName)
-  match'   = matchR1 rep1
--}
-
   -- | Replace free names by bound names.
   close :: Alpha b => AlphaCtx -> b -> a -> a
   close = closeR1 rep1
@@ -224,11 +218,11 @@ class IsEmbed e where
 ------------------------------------------------------------
 
 -- | The result of a 'findpatrec' operation.
-data FindResult = Index Integer      -- ^ The (first) index of the name we
-                                     --   sought
-                | NamesSeen Integer  -- ^ We haven't found the name
-                                     --   (yet), but have seen this many
-                                     --   others while looking for it
+data FindResult = Index Int      -- ^ The (first) index of the name we
+                                 --   sought
+                | NamesSeen Int  -- ^ We haven't found the name
+                                 --   (yet), but have seen this many
+                                 --   others while looking for it
   deriving (Eq, Ord)
 
 
@@ -248,7 +242,7 @@ instance Monoid FindResult where
 #endif
 
 -- | Find the (first) index of the name in the pattern, if it exists.
-findpat :: Alpha a => a -> AnyName -> Maybe Integer
+findpat :: Alpha a => a -> AnyName -> Maybe Int
 findpat x n = case findpatrec x n of
                    Index i     -> Just i
                    NamesSeen _ -> Nothing
@@ -257,7 +251,7 @@ findpat x n = case findpatrec x n of
 -- | The result of an 'nthpatrec' operation.
 data NthResult = Found AnyName    -- ^ The name found at the given
                                   --   index.
-               | CurIndex Integer -- ^ We haven't yet reached the
+               | CurIndex Int     -- ^ We haven't yet reached the
                                   --   required index; this is the
                                   --   index into the remainder of the
                                   --   pattern (which decreases as we
@@ -266,7 +260,7 @@ data NthResult = Found AnyName    -- ^ The name found at the given
 -- | A continuation which takes the remaining index and searches for
 --   that location in a pattern, yielding a name or a remaining index
 --   if the end of the pattern was reached too soon.
-newtype NthCont = NthCont { runNthCont :: Integer -> NthResult }
+newtype NthCont = NthCont { runNthCont :: Int -> NthResult }
 
 
 instance Semigroup NthCont where
@@ -294,7 +288,7 @@ nthName nm = NthCont $ \i -> if i == 0
 -- | @'nthpat' b n@ looks up up the @n@th name in the pattern @b@
 -- (zero-indexed).  PRECONDITION: the number of names in the pattern
 -- must be at least @n@.
-nthpat :: Alpha a => a -> Integer -> AnyName
+nthpat :: Alpha a => a -> Int -> AnyName
 nthpat x i = case runNthCont (nthpatrec x) i of
                  CurIndex j -> error
                    ("BUG: pattern index " ++ show i ++
@@ -313,7 +307,15 @@ nthpat x i = case runNthCont (nthpatrec x) i of
 -- stored information about the iteration as it progresses. This type
 -- is abstract, as classes that override these operations should just pass
 -- the context on.
-data AlphaCtx = AC { mode :: Mode , level :: Integer }
+data AlphaCtx = AC { mode :: Mode , level :: Int }
+
+
+instance Semigroup AlphaCtx where
+  (AC m1 l1) <> (AC m2 l2) = AC m2 (l1 + l2)
+  
+instance Monoid AlphaCtx where
+  mempty = initial
+  
 
 -- | Toplevel alpha-contexts
 initial :: AlphaCtx
@@ -573,11 +575,11 @@ instance Rep a => Alpha (Name a) where
   isTerm _ = True
 
   -- Only free names are valid as patterns, which serve as binders.
-  isPat n@(Nm _ _) = Just [AnyName n]
-  isPat _          = Nothing
+  isPat n@(Nm _ _ _) = Just [AnyName n]
+  isPat _            = Nothing
 
-  fv' c n@(Nm _ _)  | mode c == Term = singleton (AnyName n)
-  fv' _ _                            = emptyC
+  fv' c n@(Nm _ _ _) | mode c == Term = singleton (AnyName n)
+  fv' _ _                             = emptyC
 
   swaps' c p x | mode c == Term =
                      case apply p (AnyName x) of
@@ -614,7 +616,7 @@ instance Rep a => Alpha (Name a) where
         Nothing  -> error "Internal error in open: sort mismatch"
   open _ _ n = n
 
-  close c a nm@(Nm r _) | mode c == Term && level c >= 0 =
+  close c a nm@(Nm r _ _) | mode c == Term && level c >= 0 =
       case findpat a (AnyName nm) of
         Just x  -> Bn r (level c) x
         Nothing -> nm
@@ -627,14 +629,14 @@ instance Rep a => Alpha (Name a) where
 
   nthpatrec = nthName . AnyName
 
-  acompare' c (Nm r1 n1)    (Nm r2 n2)
-    | mode c == Term = mconcat [compare r1 r2, compare n1 n2]
+  acompare' c (Nm r1 s1 n1)    (Nm r2 s2 n2)
+    | mode c == Term = mconcat [compare r1 r2, compare s1 s2, compare n1 n2]
 
   acompare' c (Bn r1 m1 n1) (Bn r2 m2 n2)
     | mode c == Term = mconcat [compare r1 r2, compare m1 m2, compare n1 n2]
 
-  acompare' c (Nm _ _)   (Bn _ _ _) | mode c == Term = LT
-  acompare' c (Bn _ _ _) (Nm _ _)   | mode c == Term = GT
+  acompare' c (Nm _ _ _) (Bn _ _ _) | mode c == Term = LT
+  acompare' c (Bn _ _ _) (Nm _ _ _) | mode c == Term = GT
 
   acompare' _ _          _                           = EQ
 
@@ -642,11 +644,11 @@ instance Alpha AnyName  where
 
   isTerm _ = True
 
-  isPat n@(AnyName (Nm _ _)) = Just [n]
-  isPat _                    = Nothing
+  isPat n@(AnyName (Nm _ _ _)) = Just [n]
+  isPat _                      = Nothing
 
-  fv' c n@(AnyName (Nm _ _))  | mode c == Term = singleton n
-  fv' _ _                                      = emptyC
+  fv' c n@(AnyName (Nm _ _ _))  | mode c == Term = singleton n
+  fv' _ _                                        = emptyC
 
   swaps' c p x = case mode c of
                    Term -> apply p x
@@ -690,7 +692,7 @@ instance Alpha AnyName  where
   open c a (AnyName (Bn _ j x)) | level c == j = nthpat a x
   open _ _ n = n
 
-  close c a nm@(AnyName (Nm r _)) =
+  close c a nm@(AnyName (Nm r _ _)) =
     case findpat a nm of
       Just x  -> AnyName (Bn r (level c) x)
       Nothing -> nm

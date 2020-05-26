@@ -48,6 +48,8 @@ module Unbound.LocallyNameless.Name
        ) where
 
 import Generics.RepLib
+import qualified Control.DeepSeq as DS
+
 
 $(derive_abstract [''R])
 -- The above only works with GHC 7.
@@ -61,8 +63,8 @@ $(derive_abstract [''R])
 --
 --   To hide the sort of a name, use 'AnyName'.
 data Name a
-  = Nm (R a) (String, Integer)   -- free names
-  | Bn (R a) Integer Integer     -- bound names / binding level + pattern index
+  = Nm !(R a) !String !Integer   -- free names
+  | Bn !(R a) !Int !Int          -- bound names / binding level + pattern index
    deriving (Eq, Ord)
 
 $(derive [''Name])
@@ -78,7 +80,7 @@ data AnyName = forall a. Rep a => AnyName (Name a)
 --   encounter a bound name when using the abstract interface provided
 --   by "Unbound.LocallyNameless".
 isBound :: Name a -> Bool
-isBound (Nm _ _) = False
+isBound (Nm _ _ _) = False
 isBound (Bn _ _ _) = True
 
 -- | Test whether a name is a free variable. Normal users of the
@@ -86,7 +88,7 @@ isBound (Bn _ _ _) = True
 --   encountered will be free variables when using the abstract
 --   interface provided by "Unbound.LocallyNameless".
 isFree :: Name a -> Bool
-isFree (Nm _ _) = True
+isFree (Nm _ _ _) = True
 isFree (Bn _ _ _) = False
 
 -- AnyName has an existential in it, so we cannot create a complete
@@ -115,23 +117,27 @@ instance Ord AnyName where
 -- Utilities
 ------------------------------------------------------------
 
+instance DS.NFData (Name a) where
+  rnf (Nm _ x y) = ()
+  rnf (Bn _ x y) = ()
+
 --instance Read Name where
 --  read s = error "FIXME"
 
 instance Show (Name a) where
-  show (Nm _ ("",n)) = "_" ++ (show n)
-  show (Nm _ (x,0))  = x
-  show (Nm _ (x,n))  = x ++ (show n)
+  show (Nm _ "" n) = "_" ++ (show n)
+  show (Nm _ x 0)  = x
+  show (Nm _ x n)  = x ++ (show n)
   show (Bn _ x y)    =  show x ++ "@" ++ show y
 
 -- | Get the integer index of a 'Name'.
 name2Integer :: Name a -> Integer
-name2Integer (Nm _ (_,x)) = x
+name2Integer (Nm _ _ x) = x
 name2Integer (Bn _ _ _)   = error "Internal Error: cannot call name2Integer for bound names"
 
 -- | Get the string part of a 'Name'.
 name2String :: Name a -> String
-name2String (Nm _ (s,_)) = s
+name2String (Nm _ s _) = s
 name2String (Bn _ _ _)   = error "Internal Error: cannot call name2Integer for bound names"
 
 -- | Get the integer index of an 'AnyName'.
@@ -161,14 +167,14 @@ s2n = string2Name
 
 -- | Create a free 'Name' from a @String@ and an @Integer@ index.
 makeName :: Rep a => String -> Integer -> Name a
-makeName s i = Nm rep (s,i)
+makeName s i = Nm rep s i
 
 -- | Determine the sort of a 'Name'.
 getR :: Name a -> R a
-getR (Nm r _)   = r
+getR (Nm r _ _)   = r
 getR (Bn r _ _) = r
 
 -- | Change the sort of a name.
 translate :: (Rep b) => Name a -> Name b
-translate (Nm _ x) = Nm rep x
+translate (Nm _ s i) = Nm rep s i
 translate (Bn _ x y) = Bn rep x y

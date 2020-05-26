@@ -111,8 +111,8 @@ class (Rep1 (SubstD b) a) => Subst b a where
   substPats :: Proxy b -> AlphaCtx -> [ Dyn ] -> a -> a
   substPats p ctx us x = 
      case (isvar x :: Maybe (SubstName a b)) of
-        Just (SubstName (Bn r j i)) | level ctx == j && fromInteger i < length us ->
-          case fromDynR r (us !! fromInteger i) of
+        Just (SubstName (Bn r j i)) | level ctx == j &&  i < length us ->
+          case fromDynR r (us !!  i) of
             Just tm -> tm
             Nothing -> error "internal error: sort mismatch"
         _ -> substPatsR1 rep1 p ctx us x

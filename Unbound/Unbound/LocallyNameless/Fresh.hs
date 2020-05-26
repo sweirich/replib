@@ -104,10 +104,10 @@ contFreshMT :: Monad m => FreshMT m a -> Integer -> m a
 contFreshMT (FreshMT m) = St.evalStateT m
 
 instance Monad m => Fresh (FreshMT m) where
-  fresh (Nm r (s,_)) = FreshMT $ do
+  fresh (Nm r  s _) = FreshMT $ do
     n <- St.get
     St.put (n+1)
-    return $ Nm r (s,n)
+    return $ Nm r s n
 
   fresh (Bn {}) = error "fresh encountered bound name! Please report this as a bug."
 
