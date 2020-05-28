@@ -1,3 +1,4 @@
+
 Version 0.2: 24 March 2011
 
   * Initial release to go along with submission of "Binders Unbound".
@@ -120,3 +121,7 @@ Version 0.5.1: August 2016
 
 Version 0.5.1.1: October 2016
   * Update to newer GHC/TH
+
+Version 0.5.2: June 2020
+  * Add NFData instances
+  * Strictness annotations / Integer -> Int
