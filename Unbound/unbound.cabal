@@ -20,7 +20,7 @@ homepage:       https://github.com/sweirich/replib
 category:       Language, Generics, Compilers/Interpreters
 extra-source-files: README,
                     CHANGES,
-                    examples/*.hs,
+                    Examples/*.hs,
                     tutorial/Makefile,
                     tutorial/Tutorial.lhs,
                     test/*.hs
