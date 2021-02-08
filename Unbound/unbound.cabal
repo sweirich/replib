@@ -56,7 +56,15 @@ Library
     Unbound.LocallyNameless.Ops,
     Unbound.PermM,
     Unbound.Util,
-    Unbound.DynR
+    Unbound.DynR,
+    Unbound.Nominal,
+    Unbound.Nominal.Name,
+    Unbound.Nominal.Fresh,
+    Unbound.Nominal.Types,
+    Unbound.Nominal.Alpha,
+    Unbound.Nominal.Subst,
+    Unbound.Nominal.Ops
+
   other-extensions: CPP
                     EmptyDataDecls
                     ExistentialQuantification
@@ -92,6 +100,43 @@ Test-Suite lambda-calculus
     type:       exitcode-stdio-1.0
     main-is:    Examples/Main.hs
     other-modules:
-        Examples.Basic
-        Examples.LC
-        Examples.STLC
+                  Examples.Basic
+                  Examples.LC
+                  Examples.STLC
+                  Unbound.DynR
+                  Unbound.LocallyNameless
+                  Unbound.LocallyNameless.Alpha
+                  Unbound.LocallyNameless.Fresh
+                  Unbound.LocallyNameless.Name
+                  Unbound.LocallyNameless.Ops
+                  Unbound.LocallyNameless.Subst
+                  Unbound.LocallyNameless.Types
+                  Unbound.PermM
+                  Unbound.Util
+
+Test-Suite nominal-test
+   default-language: Haskell2010
+   build-depends: base >= 4.3 && < 5,
+                 RepLib >= 0.5.3 && < 0.6,
+                 mtl >= 2.0 && < 2.3,
+                 transformers >= 0.2.2.0 && < 0.6,
+                 containers >= 0.3 && < 0.6,
+                 binary >= 0.7 && < 0.9,
+                 unbound >= 0.5,
+                 template-haskell >= 2.11,
+                 parsec >= 3.1.9 && < 3.2,
+                 pretty>= 1.1.2 && < 1.2,
+                 QuickCheck>=2.8.2 && < 2.10
+
+
+   type:       exitcode-stdio-1.0
+   main-is:    test/NominalTest.hs
+   ghc-options: -main-is NominalTest.main
+   other-modules:
+                 Unbound.Nominal.Alpha
+                 Unbound.Nominal.Fresh
+                 Unbound.Nominal.Name
+                 Unbound.Nominal.Ops
+                 Unbound.Nominal.Types
+                 Unbound.PermM
+                 Unbound.Util
