@@ -44,7 +44,7 @@ import Data.Type.Equality
 import Control.Monad (replicateM, zipWithM, liftM, liftM2, when)
 import Control.Monad.Writer (WriterT, MonadWriter(..), runWriterT, lift)
 import Control.Arrow ((***), second)
-import Control.Applicative ((<$>), Applicative)
+-- import Control.Applicative ((<$>), Applicative)
 
 import Unsafe.Coerce
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell, UndecidableInstances, ExistentialQuantification,
     RankNTypes, TypeOperators, GADTs, TypeSynonymInstances, FlexibleInstances,
-    ScopedTypeVariables, CPP
+    ScopedTypeVariables, CPP, ImpredicativeTypes
  #-}
 -----------------------------------------------------------------------------
 -- |
@@ -86,9 +86,15 @@ infixr 7 :+:
 -- | A class of representable types
 class Rep a where rep :: R a
 
+newtype IRep a r where IRep :: (Rep a => r) -> IRep a r
+
 -- | Use a concrete @'R' a@ for a @'Rep' a@ dictionary
-withRep :: R a -> (Rep a => r) -> r
-withRep = unsafeCoerce (flip ($) :: R a -> (R a -> r) -> r)
+withRep :: forall a r. R a -> (Rep a => r) -> r
+withRep = unsafeCoerce ((\a f -> f a) :: R a -> (R a -> r) -> r)
+
+---withRep :: forall a r. R a -> (Rep a => r) -> r
+---withRep rep c = withRep' rep (IRep c)
+
 -- I think there's some contraint machinery that could hide the unsafeness here
 
 ------ Showing representations  (rewrite this with showsPrec?)

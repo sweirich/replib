@@ -53,6 +53,7 @@ $(derive
           ''Salary])
 
 
+
 --
 -- Some sample data for these types
 --
@@ -103,7 +104,7 @@ instance (Rep a, Ord a) => Ord (Tree a)   where compare = compareR1 rep1
 
 -- Generate creates arbitrary elements of a type, up to a certain depth.
 instance Generate Day
-instance Generate a => Generate (Tree a)
+instance (Rep a, Generate a) => Generate (Tree a)
 instance Generate Company
 instance Generate Dept
 instance Generate Manager
@@ -114,7 +115,7 @@ instance Generate Salary
 
 
 -- Sum adds together all of the Ints in a datastructure
-instance GSum a => GSum (Tree a)
+instance (Rep a, GSum a) => GSum (Tree a)
 instance GSum Company
 instance GSum Dept
 instance GSum Manager
@@ -124,7 +125,7 @@ instance GSum Person
 instance GSum Salary
 
 -- Shrink creates smaller versions of a data structure.
-instance Shrink a => Shrink (Tree a)
+instance (Rep a, Shrink a) => Shrink (Tree a)
 
 --
 -- SYB Style operations

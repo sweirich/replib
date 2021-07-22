@@ -20,6 +20,7 @@
 
 module Unbound.LocallyNameless.Types
        ( GenBind(..), Bind, SetBind, SetPlusBind
+       , RelaxedOrder, StrictOrder, RelaxedCard, StrictCard
        , Rebind(..)
        , Rec(..)
        , TRec(..)
