@@ -95,3 +95,13 @@ Test-Suite lambda-calculus
         Examples.Basic
         Examples.LC
         Examples.STLC
+        Unbound.DynR
+        Unbound.LocallyNameless
+        Unbound.LocallyNameless.Alpha
+        Unbound.LocallyNameless.Fresh
+        Unbound.LocallyNameless.Name
+        Unbound.LocallyNameless.Ops
+        Unbound.LocallyNameless.Subst
+        Unbound.LocallyNameless.Types
+        Unbound.PermM
+        Unbound.Util

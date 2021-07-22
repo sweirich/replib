@@ -1,0 +1,22 @@
+resolver: lts-15.14
+
+packages:
+- RepLib
+- Unbound
+
+allow-newer: true
+
+# extra-deps: []
+
+# Override default flag values for local packages and extra-deps
+# flags: {}
+
+# Extra package databases containing global packages
+# extra-package-dbs: []
+
+# Control whether we use the GHC we find on the path
+# system-ghc: true
+#
+#
+# Allow a newer minor version of GHC than the snapshot specifies
+# compiler-check: newer-minor
